@@ -322,3 +322,36 @@ test "context: the view holds the used / size and the history of the compactions
     assert(crew_task_tool_json().to_str().contains("RULES"))
     assert(crew_task_list_tool_json().to_str().contains("RULES"))
 }
+
+test "auto extend: only an extension with the high confidence and a number is applied at once; the section is taken out by its exact text" {
+    ro high = proposal_new("extend", "T", "s", 3, []str.new(), "high")
+    assert(auto_extend_ok(high))
+    assert(auto_extend_ok(proposal_new("extend", "T", "s", 3, []str.new(), " High ")))
+    assert(!auto_extend_ok(proposal_new("extend", "T", "s", 3, []str.new(), "medium")))
+    assert(!auto_extend_ok(proposal_new("extend", "T", "s", 3, []str.new(), "")))
+    assert(!auto_extend_ok(proposal_new("extend", "T", "s", 0, []str.new(), "high")))
+    assert(!auto_extend_ok(proposal_new("new", "T", "s", 0, []str.new(), "high")))
+    assert(!auto_extend_ok(proposal_new("epic", "T", "s", 0, []str.new(), "high")))
+    ro one = crew_addition_text("ещё X", "ещё X", 60000)
+    ro file = "# Сообщение\n\nтекст\n${one}"
+    match text_without_last(file, one) {
+        Some(back) => assert(back == "# Сообщение\n\nтекст\n")
+        None => panic("the section is not found")
+    }
+    // two equal sections: the last one goes
+    match text_without_last("${file}${one}", one) {
+        Some(back) => assert(back == file)
+        None => panic("the section is not found")
+    }
+    assert(text_without_last("# Сообщение\n", one).is_none())
+    assert(text_without_last("abc", "").is_none())
+    ro rows = ext_view_extend("{}", [ExtRec { id: 1, task: 3, title: "Т", brief: "кратко", ms: 5, file: "f", added: "a", undone: true }])
+    ro o = cht_j(rows).object() ?? JsonObject.new()
+    ro list = (o.get("extensions") ?? JsonValue.null()).array() ?? []JsonValue.new()
+    assert(list.len() == 1)
+    ro first = list[0].object() ?? JsonObject.new()
+    assert(((first.get("task") ?? JsonValue.null()).int() ?? 0) == 3 && ((first.get("undone") ?? JsonValue.null()).bool() ?? false))
+    assert(crew_task_tool_json().to_str().contains("AT ONCE") && crew_task_list_tool_json().to_str().contains("applied by the hub at once"))
+    assert(ext_applied_note("003", "кратко", "doc/tasks/003-x/task").contains("Новое требование владельца"))
+    assert(ext_withdrawn_note("003", "кратко", "doc/tasks/003-x/task").contains("Требование отозвано"))
+}

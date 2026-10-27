@@ -43,7 +43,7 @@ fn Hub @ct_running_old(s Dialog) -> []RunSub {
 /// The state of the mode for the page with the cards and the numbers of the tasks in work (called from `route_state_text`).
 fn Hub @ct_view(at int, base str) -> str {
     ro s = @sessions[at]
-    hints_view_extend(@cs_view(at, crew_view_extend(base, s.rt.props, @ct_lines(s), @cs_active_all(), @settings.route_max_active, @settings.route_confirm_word, @settings.route_over_limit_word)), s.rt.hints, s.rt.ctx_used, s.rt.ctx_size, s.rt.ctx_hist)
+    ext_view_extend(hints_view_extend(@cs_view(at, crew_view_extend(base, s.rt.props, @ct_lines(s), @cs_active_all(), @settings.route_max_active, @settings.route_confirm_word, @settings.route_over_limit_word)), s.rt.hints, s.rt.ctx_used, s.rt.ctx_size, s.rt.ctx_hist), s.rt.exts)
 }
 
 // A service hint to the agent is remembered for the panel "Машины" (not in the feed, not in the journal).
@@ -119,13 +119,136 @@ fn Hub @ct_fix_kind(at int, p0 Proposal) -> Proposal {
     p
 }
 
+// ----- the addition applied at once (task 192.7; the owner, 2026-10-27: always on, there is no setting) -----
+
+// Is the task `found` near this session: the task of the session itself, its child, its epic, a sibling under the same epic, or any task of the same project (the list the agent is given is the list of the hub).
+fn Hub @ct_related(at int, found int) -> bool {
+    if found == at { return true }
+    ro s = @sessions[at]
+    ro c = @sessions[found]
+    if c.rt.parent.byte_len() > 0 && c.rt.parent == s.id { return true }
+    if s.rt.parent.byte_len() > 0 && (s.rt.parent == c.id || s.rt.parent == c.rt.parent) { return true }
+    c.project_id == s.project_id
+}
+
+// The index of the open task K that takes the addition at once, -1 - the addition goes to a card (K is merged, closed, done, not near this session, or the confidence is lower than the threshold).
+fn Hub @ct_auto_target(at int, p Proposal) -> int {
+    if !@settings.route_children || !auto_extend_ok(p) { return -1 }
+    ro found = @cs_find_number(p.extends)
+    if found < 0 { return -1 }
+    ro c = @sessions[found]
+    if c.rt.merged_c || c.rt.tstate == "done" || c.rt.task_dir.byte_len() == 0 { return -1 }
+    if !@ct_related(at, found) { return -1 }
+    found
+}
+
+// The addition is applied: the text goes to message.md of K with the date, the agent of K gets a service turn, the journal and the feed of the session `at` tell it. false - not applied (a card goes).
+fn Hub mut @ct_auto_extend(at int, p Proposal) Proc Detach Time -> bool {
+    ro found = @ct_auto_target(at, p)
+    if found < 0 { return false }
+    ro c = @sessions[found]
+    ro file = "${c.rt.task_dir}/${c.rt.msg_file(c.rt.last_sub())}"
+    ro added = crew_addition_text(p.summary, p.source, now_millis())
+    if !append_file(file, added) {
+        @say_log("the addition to ${file} cannot be written: a card goes")
+        return false
+    }
+    if c.rt.tstate != "active" { @rt_state(found, "active", "") }
+    ro me = @sessions[at]
+    mut id = 1
+    for x in me.rt.exts { if x.id >= id { id = x.id + 1 } }
+    mut o = JsonObject.new()
+    ji(o, "id", id)
+    ji(o, "task", cs_number_int(c.rt.number))
+    js(o, "title", c.rt.title)
+    js(o, "text", ext_brief(p))
+    ji(o, "at", now_millis())
+    js(o, "file", file)
+    js(o, "added", added)
+    @rt_journal(at, "task_extended", JsonValue.object(o).to_str())
+    @say_log("crew_task of ${me.id}: the addition to the task ${c.rt.number} is applied at once")
+    if found != at {
+        @rt_note(found, "▸ задача дополнена владельцем")
+        if !@ct_has_steps(c) { @ct_kick(found, c.rt.last_sub(), ext_applied_note(c.rt.number, ext_brief(p), c.rt.task_shown)) }
+    }
+    @route_broadcast(found, true)
+    @route_broadcast(at, true)
+    true
+}
+
+/// The button "Отменить" of the grey line: the added section goes out of message.md (a commit takes it back when it was committed already), the agent of the task is told, the journal gets `task_extend_undone`.
+fn Hub mut @ct_ext_undo(trace str, id int) Proc Detach Time -> () {
+    ro at = @find(trace)
+    if at < 0 { return }
+    ro s = @sessions[at]
+    mut rec = ExtRec { id: 0, task: 0, title: "", brief: "", ms: 0, file: "", added: "", undone: false }
+    for x in s.rt.exts { if x.id == id { rec = x } }
+    if rec.id == 0 || rec.undone { return }
+    match text_without_last(read_file(rec.file) ?? "", rec.added) {
+        None => {
+            @ct_note(at, "▸ дополнение не отменено: в ${rec.file} нет добавленного раздела (файл изменён)")
+            @route_broadcast(at, true)
+            return
+        }
+        Some(back) => {
+            if !write_file(rec.file, back) {
+                @ct_note(at, "▸ дополнение не отменено: файл ${rec.file} не записан")
+                @route_broadcast(at, true)
+                return
+            }
+        }
+    }
+    // the addition is in a commit already: the file is committed again without it
+    mut dir = rec.file
+    mut name = rec.file
+    ro cut = last_slash(rec.file)
+    if cut > 0 {
+        dir = rec.file[..cut]
+        name = rec.file[cut + 1..]
+    }
+    ro head = git_run(dir, ["show", "HEAD:./${name}"])
+    if head.ok && head.text.contains(rec.added.trim_ascii()) {
+        ro staged = git_run(dir, ["add", "--", name])
+        ro done = git_run(dir, ["commit", "-s", "-m", "${rec.task} Take back the addition to message.md", "-o", "--", name])
+        if !staged.ok || !done.ok { @ct_note(at, "▸ дополнение убрано из файла, но откатывающий коммит не сделан: ${cut_text(done.text, 200)}") }
+    }
+    mut o = JsonObject.new()
+    ji(o, "id", id)
+    ji(o, "task", rec.task)
+    ji(o, "at", now_millis())
+    @rt_journal(at, "task_extend_undone", JsonValue.object(o).to_str())
+    ro found = @cs_find_number(rec.task)
+    if found >= 0 && found != at {
+        ro c = @sessions[found]
+        @rt_note(found, "▸ требование владельца отозвано")
+        if !@ct_has_steps(c) { @ct_kick(found, c.rt.last_sub(), ext_withdrawn_note(c.rt.number, rec.brief, c.rt.task_shown)) }
+        @route_broadcast(found, true)
+    }
+    @route_broadcast(at, true)
+}
+
+// The position of the last "/" of a path, -1 - none.
+fn last_slash(path str) -> int {
+    mut at = -1
+    mut k = 0
+    while k < path.byte_len() {
+        if path[k..k + 1] == "/" { at = k }
+        k += 1
+    }
+    at
+}
+
 fn Hub mut @ct_offer(at int, p0 Proposal) Proc Detach Time -> str {
     mut p = proposal_copy(p0)
     ro s = @sessions[at]
+    p = @ct_fix_kind(at, p)
+    // an addition to an open task with a high confidence is applied at once, no card (in every mode)
+    p.source = s.rt.last_msg
+    ro own = p.extends > 0 && @cs_find_number(p.extends) == at
+    if @ct_auto_extend(at, p) { return if own { AUTO_EXTEND_OWN_TEXT } else { AUTO_EXTEND_TEXT } }
     if s.rt.route == "planning" { return NOT_NEEDED_TEXT }
     if was_refused(s.rt.dismissed, p.title) { return REFUSED_TEXT }
     if has_proposal(s.rt.props, p.title) { return SHOWN_TEXT }
-    p = @ct_fix_kind(at, p)
     mut me = @sessions[at]
     me.rt.prop_serial += 1
     p.id = me.rt.prop_serial
@@ -487,6 +610,12 @@ fn Hub mut @ct_list_offer(at int, items []Proposal) Proc Detach Time -> int {
         if was_refused(@sessions[at].rt.dismissed, p.title) { continue }
         if has_proposal(@sessions[at].rt.props, p.title) { continue }
         p = @ct_fix_kind(at, p)
+        p.source = cut_text(joined(@sessions[at].rt.recent, "\n\n---\n\n"), 3000)
+        // an addition to an open task with a high confidence is applied at once, no row
+        if @ct_auto_extend(at, p) {
+            added += 1
+            continue
+        }
         mut cur = @sessions[at]
         cur.rt.prop_serial += 1
         p.id = cur.rt.prop_serial

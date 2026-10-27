@@ -108,7 +108,7 @@ fn dropped_text(agent str, setting str, value str, used str) -> str {
 type McpPending { key str, call int, session str, questions JsonValue, reply ChanTx[str] }
 
 // The signals of the journal that carry the mode of work (task 192q, `routes_hub.nv`).
-fn route_signals() -> []str => ["route_set", "route_task", "route_step", "route_note", "route_review", "context_compacted"]
+fn route_signals() -> []str => ["route_set", "route_task", "route_step", "route_note", "route_review", "context_compacted", "task_extended", "task_extend_undone"]
 
 /// Hub: the sessions, the pages, the output not yet taken, the log.
 /// A choice of the owner (model, effort, mode) made while the agent of the session was not running: it waits until the agent is ready.
@@ -1514,6 +1514,8 @@ export fn Hub mut @handle(conn int, text str) Proc Detach Time -> () {
         @ct_answer(trace, jint(input, "id"), jtext(input, "action"), jtext(input, "agent"), jtext(input, "mode"), jint(input, "target"))
     } else if kind == "route_children_merge" {
         @cs_chain_signal(trace)
+    } else if kind == "route_ext_undo" {
+        @ct_ext_undo(trace, jint(input, "id"))
     } else if kind == "route_recognize" {
         @ct_recognize(trace)
     } else if kind == "route_apply" {

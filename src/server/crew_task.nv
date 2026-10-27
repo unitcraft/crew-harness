@@ -102,7 +102,7 @@ export fn is_code_word(text str, word str) -> bool {
 
 /// The description of the tool for `tools/list`.
 export fn crew_task_tool_json() -> JsonValue {
-    ro text = "{\"name\":\"crew_task\",\"description\":\"Call it when the message of the user is REAL WORK on the files of the project (code, documents, tests, settings): something is to be changed, written or built. Do NOT call it for a question, a talk, an explanation, a look at the code or a one-word answer. The hub then shows the user a card and the user confirms (new task) or refuses; do not touch the files until the hub tells the decision. If the work belongs to a task that is already in the list of the tasks of the session, say kind=extend and its number in extends. Call it once per piece of work, at the very beginning, before the first change of a file. RULES: never call it for a question or a talk; never call crew_task_list on your own; never create doc/tasks folders or message.md yourself - the hub does it after the owner answers the card.\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"kind\":{\"type\":\"string\",\"enum\":[\"new\",\"child\",\"epic\",\"extend\"],\"description\":\"new - a new task of its own (the default); child - the work is explicitly a child task of the epic in epic; epic - the work is a big one, an epic with child tasks; extend - the work belongs to an existing task of the list.\"},\"epic\":{\"type\":\"integer\",\"description\":\"For kind=child: the number of the epic (any open task of the list may be one).\"},\"title\":{\"type\":\"string\",\"description\":\"A short title of the work (up to 60 characters).\"},\"summary\":{\"type\":\"string\",\"description\":\"What is to be done, in a few lines: it becomes the text of message.md.\"},\"extends\":{\"type\":\"integer\",\"description\":\"For kind=extend: the number of the task of the list.\"},\"touches\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"description\":\"The files and folders the work will change (paths in the project).\"},\"confidence\":{\"type\":\"string\",\"enum\":[\"high\",\"medium\",\"low\"],\"description\":\"How sure you are that it is real work and not a talk.\"}},\"required\":[\"kind\",\"title\",\"summary\"]}}"
+    ro text = "{\"name\":\"crew_task\",\"description\":\"Call it when the message of the user is REAL WORK on the files of the project (code, documents, tests, settings): something is to be changed, written or built. Do NOT call it for a question, a talk, an explanation, a look at the code or a one-word answer. The hub then shows the user a card and the user confirms (new task) or refuses; do not touch the files until the hub tells the decision. If the work belongs to a task that is already in the list of the tasks of the session, say kind=extend and its number in extends: an addition to an OPEN task with confidence=high is applied by the hub AT ONCE, without a card (the owner can take it back with a button), so give confidence honestly and never use kind=extend for a question or a talk. Call it once per piece of work, at the very beginning, before the first change of a file. RULES: never call it for a question or a talk; never call crew_task_list on your own; never create doc/tasks folders or message.md yourself - the hub does it after the owner answers the card.\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"kind\":{\"type\":\"string\",\"enum\":[\"new\",\"child\",\"epic\",\"extend\"],\"description\":\"new - a new task of its own (the default); child - the work is explicitly a child task of the epic in epic; epic - the work is a big one, an epic with child tasks; extend - the work belongs to an existing task of the list.\"},\"epic\":{\"type\":\"integer\",\"description\":\"For kind=child: the number of the epic (any open task of the list may be one).\"},\"title\":{\"type\":\"string\",\"description\":\"A short title of the work (up to 60 characters).\"},\"summary\":{\"type\":\"string\",\"description\":\"What is to be done, in a few lines: it becomes the text of message.md.\"},\"extends\":{\"type\":\"integer\",\"description\":\"For kind=extend: the number of the task of the list.\"},\"touches\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"description\":\"The files and folders the work will change (paths in the project).\"},\"confidence\":{\"type\":\"string\",\"enum\":[\"high\",\"medium\",\"low\"],\"description\":\"How sure you are that it is real work and not a talk.\"}},\"required\":[\"kind\",\"title\",\"summary\"]}}"
     mparse(text)
 }
 
@@ -206,10 +206,80 @@ export fn proposal_of_marker(answer str) -> Option[Proposal] {
     None
 }
 
+// ----- the addition applied at once (task 192.7) -----
+
+/// The owner's word (2026-10-27): an addition to an OPEN task is applied at once, always; there is no setting. The agent must be sure: only this confidence (or higher) applies, the rest is a card.
+export const AUTO_EXTEND_CONFIDENCE = "high"
+
+/// Is the proposal an addition the hub applies without a card (the checks of the target task are the hub's)?
+export fn auto_extend_ok(p Proposal) -> bool => p.kind == "extend" && p.extends > 0 && word_key(p.confidence) == AUTO_EXTEND_CONFIDENCE
+
+/// The text without its LAST occurrence of `part`; None - `part` is not there (the file was changed by hand).
+export fn text_without_last(text str, part str) -> Option[str] {
+    if part.byte_len() == 0 { return None }
+    mut at = -1
+    mut from = 0
+    while from <= text.byte_len() {
+        match text[from..].find(part) {
+            Some(k) => {
+                at = from + k
+                from = at + 1
+                while from < text.byte_len() && !text.is_char_boundary(from) { from += 1 }
+            }
+            None => break
+        }
+    }
+    if at < 0 { return None }
+    Some("${text[..at]}${text[at + part.byte_len()..]}")
+}
+
+/// The short text of an addition for the grey line of the feed.
+export fn ext_brief(p Proposal) -> str {
+    ro text = if p.summary.trim_ascii().byte_len() > 0 { p.summary.trim_ascii() } else { p.title }
+    ro one = text.replace("\n", " ")
+    if one.byte_len() <= 140 { return one }
+    mut k = 140
+    while k > 0 && !one.is_char_boundary(k) { k -= 1 }
+    "${one[..k]}…"
+}
+
+/// The service turn to the agent of the task: a new requirement of the owner.
+export fn ext_applied_note(number str, brief str, shown str) -> str =>
+    "[crew] Новое требование владельца к твоей задаче ${number}: ${brief}; см. ${shown}/message.md, раздел «Дополнение». Учти его и продолжай в рабочем каталоге."
+
+/// The service turn to the agent of the task: the requirement is taken back.
+export fn ext_withdrawn_note(number str, brief str, shown str) -> str =>
+    "[crew] Требование отозвано: «${brief}» — раздел «Дополнение» убран из ${shown}/message.md; не учитывай его."
+
+/// The additions applied at once, for the page: `extensions` - the newest last, each `{id, task, title, text, at, undone}`.
+export fn ext_view_extend(base str, exts []ExtRec) -> str {
+    mut o = match Json.parse(base) {
+        Ok(v) => v.object() ?? JsonObject.new()
+        Err(e) => JsonObject.new()
+    }
+    mut rows = []JsonValue.new()
+    for x in exts {
+        mut r = JsonObject.new()
+        mput(r, "id", JsonValue.int(x.id))
+        mput(r, "task", JsonValue.int(x.task))
+        mput(r, "title", JsonValue.str(x.title))
+        mput(r, "text", JsonValue.str(x.brief))
+        mput(r, "at", JsonValue.int(x.ms))
+        mput(r, "undone", JsonValue.bool(x.undone))
+        rows.push(JsonValue.object(r))
+    }
+    mput(o, "extensions", JsonValue.array(rows))
+    JsonValue.object(o).to_str()
+}
+
 // ----- the rules -----
 
 /// The words the agent is given as the answer of the tool when the card is shown.
 export const SHOWN_TEXT = "Предложение задачи показано владельцу карточкой. Файлы проекта пока не меняй: закончи ход одной короткой строкой (что понял), решение владельца хаб пришлёт следующим сообщением и ты продолжишь."
+
+/// The answers of the tool when the addition is applied at once (task 192.7): to the agent of another task, and to the agent of the task itself.
+export const AUTO_EXTEND_TEXT = "Дополнение применено сразу, без карточки: записано в message.md задачи и передано её агенту (владелец может отменить). Файлы по нему не меняй, закончи ход одной короткой строкой."
+export const AUTO_EXTEND_OWN_TEXT = "Дополнение записано в message.md твоей задачи без карточки (владелец может отменить). Продолжай работу с учётом нового требования."
 
 /// The answer of the tool for a work the owner already refused.
 export const REFUSED_TEXT = "Владелец уже ответил, что это не задача: не предлагай её снова, отвечай как обычно."
@@ -302,7 +372,7 @@ export fn tasks_hint(task_shown str, lines []SubLine) -> str {
         ro state = if l.waits > 0 { "ждёт подзадачу ${l.waits}" } else { l.state }
         rows.push("${l.n}. «${l.title}» (${state}) — ${if l.file.byte_len() > 0 { l.file } else { "${task_shown}/message.${l.n}.md" }}")
     }
-    "[crew] Задачи в работе (в crew_task_list: kind=extend и extends=<номер>, если работа дополняет одну из них; kind=child и epic=<номер>, если она явно дочерняя задача такой задачи (любая открытая задача может быть эпиком); иначе kind=new — самостоятельная задача):\n${joined(rows, "\n")}"
+    "[crew] Задачи в работе (в crew_task / crew_task_list: kind=extend, extends=<номер> и честный confidence, если работа дополняет одну из них — при high дополнение открытой задачи применяется сразу, без карточки, не используй его для вопроса или обсуждения; kind=child и epic=<номер>, если она явно дочерняя задача такой задачи (любая открытая задача может быть эпиком); иначе kind=new — самостоятельная задача):\n${joined(rows, "\n")}"
 }
 
 /// The note for the agent after the owner answered the card.
