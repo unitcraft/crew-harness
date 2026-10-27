@@ -1,0 +1,118 @@
+// ext_kit.nv - task 192.7: the scenario of the addition to an open task that is applied at once (the owner, 2026-10-27: always on, no setting) over a hub with the fake ACP agent in a repository.
+// The helpers are in `child_kit.nv`, `routes_kit.nv`, `crew_task_kit.nv`.
+module crew_harness.server
+
+import std.encoding.json.{Json, JsonValue, JsonObject}
+
+// An item of `crew_task` / `crew_task_list` with the confidence the agent states.
+fn ek_item(kind str, title str, extends int, confidence str) -> JsonValue {
+    mut o = rk_item(kind, title, extends, []str.new()).object() ?? JsonObject.new()
+    jput(o, "confidence", JsonValue.str(confidence))
+    JsonValue.object(o)
+}
+
+// The additions of the session `trace` as the page sees them: `extensions` of its last state.
+fn ek_exts(rig Rig, trace str) -> []JsonValue => rk_array(ck_state(rig, 1, trace), "extensions")
+
+fn ek_undone(rig Rig, trace str, at int) -> bool {
+    ro list = ek_exts(rig, trace)
+    if at >= list.len() { return false }
+    ro o = list[at].object() ?? JsonObject.new()
+    (o.get("undone") ?? JsonValue.null()).bool() ?? false
+}
+
+// The text of the hidden service notes the hub gave to the agent of the session (the panel "Машины").
+fn ek_hints(rig Rig, trace str) -> str {
+    mut out = []str.new()
+    for h in rk_array(ck_state(rig, 1, trace), "hints") {
+        out.push(jtext(h.object() ?? JsonObject.new(), "text"))
+    }
+    joined(out, "\n")
+}
+
+// The agent of the talk calls `crew_task` once: the turn of the fake agent ends.
+fn ek_say(mut rig Rig, session str, turn str, item JsonValue) Proc Detach Time -> bool {
+    rig.run(1500)
+    rig.page(1, "user_message", session, rk_tasktool_page(turn, item))
+    ro done = rig.until(KIT_DONE, 20000)
+    rig.run(500)
+    done
+}
+
+/// The addition to an open task: with a high confidence it goes at once (message.md of the task with the date, a service turn to the agent of the task, a grey line with "Отменить", the events
+/// `task_extended` / `task_extend_undone`), the button takes it back; a lower confidence, a task that is not there and a new task are cards; the hub creates nothing by itself.
+export fn scenario_route_auto_extend(settings ServerSettings) Proc Detach Time Net Fs Os -> str {
+    mut c = kit_check()
+    mut rig = rig_open(settings)
+    rig.attach(1)
+    rig.page(1, "session_created", "s-e1", "{\"name\":\"Беседа\",\"agent\":\"opencode\"}")
+    c.expect(rig.until("\"kind\":\"session_created\"", 5000), "the session of the talk is shown")
+    c.expect(ck_list(rig, "s-e1", "t1", [ck_item("new", "Исходная работа", 0, 0, ["a.txt"])], "Исходная работа"), "the list is shown")
+    ck_apply(rig, "s-e1", [["Исходная работа", "work", "new", "0"]])
+    rig.run(4000)
+    ro p1 = ck_find(rig, 1, "Исходная работа")
+    c.expect(p1 != "", "the task is a session of its own: ${p1}")
+    c.expect(ck_idle(rig, p1, 60000), "its agent finishes the first turn")
+    ro file = "${ck_tree(rig, 1, p1)}/doc/tasks/${ck_task_id(rig, 1, p1)}/task/message.md"
+    c.expect(!rk_text(file).contains("## Дополнение"), "message.md has no addition yet")
+
+    // 1. a high confidence: applied at once, no card
+    c.expect(ek_say(rig, "s-e1", "t2", ek_item("extend", "Ещё одно требование", 1, "high")), "the agent says: an addition to the task 1")
+    c.expect(rk_card_id(ck_state(rig, 1, "s-e1"), "Ещё одно требование") == 0, "no card was shown")
+    ro text = rk_text(file)
+    c.expect(text.contains("## Дополнение") && text.contains("сделать: Ещё одно требование"), "the text is appended to message.md with the date: ${cut_text(text, 200)}")
+    c.expect(ek_exts(rig, "s-e1").len() == 1 && !ek_undone(rig, "s-e1", 0), "the page gets the addition for the grey line")
+    c.expect(ck_idle(rig, p1, 60000), "the agent of the task finishes the service turn")
+    c.expect(ek_hints(rig, p1).contains("Новое требование владельца"), "the agent of the task was told: ${cut_text(ek_hints(rig, p1), 200)}")
+    c.expect(rk_array(ck_state(rig, 1, "s-e1"), "proposals").len() == 0, "and no card is left")
+
+    // 2. the button "Отменить": the section goes out of message.md, the agent is told
+    rig.page(1, "route_ext_undo", "s-e1", "{\"id\":1}")
+    rig.run(800)
+    c.expect(!rk_text(file).contains("## Дополнение") && !rk_text(file).contains("Ещё одно требование"), "the undo takes the section out of message.md: ${cut_text(rk_text(file), 200)}")
+    c.expect(ek_undone(rig, "s-e1", 0), "the line says the addition is taken back")
+    c.expect(ck_idle(rig, p1, 60000), "the agent of the task finishes the next service turn")
+    c.expect(ek_hints(rig, p1).contains("Требование отозвано"), "the agent of the task was told that the requirement is withdrawn")
+    ro before = rk_text(file)
+    rig.page(1, "route_ext_undo", "s-e1", "{\"id\":1}")
+    rig.run(300)
+    c.expect(rk_text(file) == before, "a second press changes nothing")
+
+    // 2a. the addition already committed: the undo is a new commit that takes it back
+    c.expect(ek_say(rig, "s-e1", "t3", ek_item("extend", "Закоммиченное требование", 1, "high")), "a second addition")
+    c.expect(rk_text(file).contains("сделать: Закоммиченное требование"), "it is in message.md")
+    ro tree = ck_tree(rig, 1, p1)
+    c.expect(rk_git(tree, ["add", "--", file]) && rk_git(tree, ["commit", "-m", "task: the addition"]), "the agent commits the file")
+    rig.page(1, "route_ext_undo", "s-e1", "{\"id\":2}")
+    rig.run(1500)
+    c.expect(!rk_text(file).contains("Закоммиченное требование"), "the section is out of the file")
+    c.expect(git_run(tree, ["status", "--porcelain", "--", file]).text == "", "and the file is committed without it: nothing is left to commit")
+    c.expect(git_run(tree, ["log", "-1", "--format=%s"]).text.contains("Take back the addition"), "by a commit that takes it back: ${git_run(tree, ["log", "-1", "--format=%s"]).text}")
+    c.expect(ck_idle(rig, p1, 60000), "the agent of the task is free again")
+
+    // 3. a lower confidence: a card
+    c.expect(ek_say(rig, "s-e1", "t4", ek_item("extend", "Средняя уверенность", 1, "medium")), "a medium confidence")
+    c.expect(rk_card_state(ck_state(rig, 1, "s-e1"), "Средняя уверенность") == "open", "it is a card with the buttons")
+    c.expect(!rk_text(file).contains("Средняя уверенность"), "message.md is not touched")
+    // the confidence is not stated at all
+    c.expect(ek_say(rig, "s-e1", "t5", ek_item("extend", "Без уверенности", 1, "")), "no confidence")
+    c.expect(rk_card_state(ck_state(rig, 1, "s-e1"), "Без уверенности") == "open" && !rk_text(file).contains("Без уверенности"), "it is a card too")
+
+    // 4. a task that is not there: a card of a new task (nothing is made by itself)
+    c.expect(ek_say(rig, "s-e1", "t6", ek_item("extend", "К несуществующей", 77, "high")), "an addition to a task that is not there")
+    c.expect(rk_card_state(ck_state(rig, 1, "s-e1"), "К несуществующей") == "open", "it is a card")
+
+    // 5. a new task with a high confidence: a card, no session, no folder
+    c.expect(ek_say(rig, "s-e1", "t7", ek_item("new", "Новая работа автоматом", 0, "high")), "a new task with a high confidence")
+    c.expect(rk_card_state(ck_state(rig, 1, "s-e1"), "Новая работа автоматом") == "open", "it is a card")
+    c.expect(ck_find(rig, 1, "Новая работа автоматом") == "", "no session was made by itself")
+    c.expect(ek_exts(rig, "s-e1").len() == 2, "only the two additions are in the list")
+
+    // 6. the list of the agent: a high extend goes at once, a new one is a row
+    c.expect(ck_list(rig, "s-e1", "t8", [ek_item("extend", "Из списка дополнение", 1, "high"), ek_item("new", "Из списка новая", 0, "high")], "Из списка новая"), "the list is shown")
+    c.expect(rk_text(file).contains("сделать: Из списка дополнение"), "the extend of the list is applied at once")
+    c.expect(rk_card_id(ck_state(rig, 1, "s-e1"), "Из списка дополнение") == 0, "and has no row")
+    c.expect(rk_card_state(ck_state(rig, 1, "s-e1"), "Из списка новая") == "open", "the new work of the list is a row")
+    rig.shut()
+    c.report()
+}

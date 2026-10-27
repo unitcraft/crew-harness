@@ -1,0 +1,13 @@
+// ext_live_test.nv - the addition to an open task applied at once (task 192.7) over a hub with the fake ACP agent in a repository: the scenario `scenario_route_auto_extend` of crew_harness.server/ext_kit.nv.
+module crew_harness.server_ext_live
+
+import crew_harness.server.{kit_routes_children, scenario_route_auto_extend}
+
+fn ext_clean(report str) -> () {
+    if report.byte_len() > 0 { panic("NOT AS IT MUST BE: ${report}") }
+    assert(report == "")
+}
+
+test "files: an addition to an open task with a high confidence is applied at once and taken back by the button; a lower confidence, a task that is not there and a new task are cards" {
+    ext_clean(scenario_route_auto_extend(kit_routes_children("route-ext")))
+}
