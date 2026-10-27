@@ -247,6 +247,12 @@ fn Hub mut @cs_spawn(at int, p Proposal, how str, queued bool) Proc Detach Time 
         ptype = "epic"
     }
     if pat < 0 { ptype = "" }
+    // task 192.4: the first work of a session that has a wip branch is the task of this very session: the branch is renamed, no new session is made
+    if pat < 0 && cur.rt.wip_tree.byte_len() > 0 && cur.rt.kind != "child" && !cur.rt.task_open {
+        if @wip_take(at, p, how, queued) { return }
+    }
+    // a parent whose branch is still `wip/...` gets the branch of its task before a child is cut from it
+    if pat >= 0 { @wip_rename_task(pat) }
     if pat >= 0 && ptype == "epic" && !@sessions[pat].rt.epic {
         mut mark = JsonObject.new()
         ji(mark, "on", 1)

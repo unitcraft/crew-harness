@@ -1312,6 +1312,8 @@ fn Hub mut @delete(conn int, trace str, branch str) Proc Detach Time -> () {
             @say_log("the session ${trace} is deleted, the tree ${s.rt.worktree} and the branch ${s.rt.branch} stay (${count} commits not merged)")
         }
     }
+    // task 192.4: the tree `wip/<name>` of a work that was not a task (a session with a task of its own tree has none: the wip fields are cleared)
+    if s.rt.wip_tree.byte_len() > 0 { @wip_delete(at, branch) }
     ro removed = with Fs = real_fs() { delete_files(@settings.data_dir, trace) }
     if !removed {
         @tell_error(conn, trace, s.engine.step_number(), "", "the folder of the session cannot be removed")

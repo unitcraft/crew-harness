@@ -208,7 +208,11 @@ fn Hub mut @route_write_sub(at int, n int, text str) Proc Detach Time -> () {
 fn Hub mut @route_on_message(at int, text str) Proc Detach Time -> str {
     ro s0 = @sessions[at]
     // task 192.2: the mode "interactive" makes nothing by itself: a task appears when the owner confirms what the agent recognised (a button, the code word)
-    if s0.rt.route == "interactive" { return "" }
+    if s0.rt.route == "interactive" {
+        // task 192.4: the first message of a session with the switch "Worktree" makes the tree `wip/<name>` (no task, no number)
+        @wip_start(at)
+        return ""
+    }
     if !s0.rt.task_open || s0.rt.task_closed {
         ro made = @route_make_task(s0.id, s0.rt.route, text, s0.rt.use_tree)
         if !made.ok { return "" }
@@ -390,8 +394,8 @@ fn Hub mut @route_worktree(trace str, on bool) Proc Detach Time -> () {
     ro at = @find(trace)
     if at < 0 { return }
     ro s = @sessions[at]
-    if !on && s.rt.worktree.byte_len() > 0 {
-        @tell_error(0, trace, s.engine.step_number(), "", "у задачи уже есть дерево: выключить Worktree нельзя")
+    if !on && (s.rt.worktree.byte_len() > 0 || s.rt.wip_tree.byte_len() > 0) {
+        @tell_error(0, trace, s.engine.step_number(), "", "у работы уже есть дерево: выключить Worktree нельзя")
         return
     }
     mut o = JsonObject.new()
@@ -836,7 +840,11 @@ fn Hub @route_touches(s Dialog, n int) -> []str => tk_touches(read_file("${s.rt.
 
 fn Hub mut @route_observe(at int) Proc Detach Time -> () {
     mut s = @sessions[at]
-    if !s.rt.task_open { return }
+    if !s.rt.task_open {
+        // task 192.4: no task - the branch of the folder, or the state of the wip tree
+        if @wip_observe(at) { @route_broadcast(at, false) }
+        return
+    }
     if s.rt.worktree.byte_len() > 0 && now_millis() - s.rt.unmerged_at > UNMERGED_MS {
         s.rt.unmerged = tk_unmerged(s.rt.worktree)
         s.rt.diff = tk_diff(s.rt.worktree)
@@ -1122,6 +1130,11 @@ fn Hub mut @route_tree_drop(trace str, force bool) Proc Detach Time -> () {
     ro at = @find(trace)
     if at < 0 { return }
     ro s = @sessions[at]
+    // task 192.4: the tree of a work that is not a task yet
+    if !s.rt.task_open && s.rt.wip_tree.byte_len() > 0 {
+        @wip_drop(trace, force)
+        return
+    }
     if !s.rt.task_open || s.rt.worktree.byte_len() == 0 { return }
     if s.rt.running || s.rt.job.byte_len() > 0 {
         @tell_error(0, trace, s.engine.step_number(), "", "идёт другая работа: дождитесь её конца")

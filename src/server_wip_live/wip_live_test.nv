@@ -1,0 +1,18 @@
+// wip_live_test.nv - the work that is not a task yet (the branch `wip/<name>`, task 192.4) over a hub with the fake ACP agent in a repository with a bare origin:
+// the scenarios `scenario_wip_flow` and `scenario_wip_folder_and_delete` of crew_harness.server/wip_kit.nv.
+module crew_harness.server_wip_live
+
+import crew_harness.server.{kit_routes_wip, scenario_wip_flow, scenario_wip_folder_and_delete}
+
+fn wip_clean(report str) -> () {
+    if report.byte_len() > 0 { panic("NOT AS IT MUST BE: ${report}") }
+    assert(report == "")
+}
+
+test "files: wip: the first message makes the tree wip/<name> from a fresh origin/main, 'В работу' renames the branch and writes message.md in the same tree, the next work is a session of its own, a subtask renames a wip parent, the publication, a restart" {
+    wip_clean(scenario_wip_flow(kit_routes_wip("wip-flow")))
+}
+
+test "files: wip: Worktree off - the agent works in the folder of the project and the page is told the branch; the delete of an empty wip tree is silent, with work it stays; the drop by the card" {
+    wip_clean(scenario_wip_folder_and_delete(kit_routes_wip("wip-folder")))
+}
