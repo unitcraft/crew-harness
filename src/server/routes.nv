@@ -332,6 +332,16 @@ export type SubRec { n int, title str, branch str, worktree str, merged bool, do
 /// on a task). The text lives only in the process, in the panel "Машины" (the last 20 for a session); it is NEVER written to the feed or to the journal of the session, and it holds no secret.
 export type HintRec { ms int, kind str, text str }
 
+/// CtxRec: a compaction of the context of the agent seen by the hub (the `used` of `usage_update` fell by more than `context_drop_percent`): when, how much it was, how much it is.
+export type CtxRec { ms int, before int, after int }
+
+/// The short reminder before every message of the owner (2-3 lines of the main): the mode, the step now, where the task and the branch are, and when to call `crew_task` / `crew_task_list`.
+export fn route_reminder(route str, step_title str, task_shown str, branch str) -> str {
+    ro step = if step_title.byte_len() > 0 { step_title } else { "нет" }
+    ro place = if task_shown.byte_len() > 0 { "задача в ${task_shown}${if branch.byte_len() > 0 { ", ветка ${branch}" } else { "" }}" } else { "задачи ещё нет" }
+    "[crew] Напоминание: режим «${route}», шаг: ${step}; ${place}.\n[crew] crew_task — один раз в начале реальной работы над файлами, до первой правки; crew_task_list — только когда хаб попросил «Распознай задачи»; вопрос или беседа — не работа, файлы задачи сам не заводи."
+}
+
 /// DiffRec: a changed file of the tree of the task against its base.
 export type DiffRec { path str, added int, removed int }
 
@@ -416,7 +426,11 @@ export type RouteSession {
     wip_stale bool,
     wip_at int,
     where_branch str,
-    hints []HintRec
+    hints []HintRec,
+    ctx_used int,
+    ctx_size int,
+    ctx_scan int,
+    ctx_hist []CtxRec
 }
 
 export fn route_session_new() -> RouteSession => {
@@ -426,7 +440,7 @@ export fn route_session_new() -> RouteSession => {
     job: "", attempt: 0, use_tree: true, active_at: 0, extra: task_extra_none(), testing: false, dirty: false, ci_at: 0, diff: []DiffRec.new(), ov_n: 0, ov_with: 0, ov_files: []str.new(), ov_until: 0, asked: []int.new(), conflict_files: []str.new(),
     props: []Proposal.new(), prop_serial: 0, dismissed: []str.new(), last_msg: "", last_imgs: []str.new(), last_names: []str.new(), kicks: []str.new(), kick_ns: []int.new(), focus: 0, recent: []str.new(), marker_turn: "",
     kind: "", parent: "", parent_kind: "", parent_no: "", child_no: 0, ptree: "", pbranch: "", waits_sib: "", waits_k: 0, queued_c: false, touches: []str.new(), merged_c: false, epic: false, chain: false, tbl: "", epic_no: "",
-    wip_tree: "", wip_base: "", wip_unmerged: 0, wip_dirty: false, wip_idle: 0, wip_stale: false, wip_at: 0, where_branch: "", hints: []HintRec.new()
+    wip_tree: "", wip_base: "", wip_unmerged: 0, wip_dirty: false, wip_idle: 0, wip_stale: false, wip_at: 0, where_branch: "", hints: []HintRec.new(), ctx_used: 0, ctx_size: 0, ctx_scan: 0, ctx_hist: []CtxRec.new()
 }
 
 // The lines of a text (the files a subtask touches are kept one in a line).
@@ -595,6 +609,12 @@ export fn RouteSession mut @apply(name str, text str) -> () {
             @current = -1
             @awaiting = false
         }
+        return
+    }
+    if name == "context_compacted" {
+        ro ms = rj_int(o, "at")
+        @ctx_hist.push(CtxRec { ms, before: rj_int(o, "before"), after: rj_int(o, "after") })
+        while @ctx_hist.len() > 20 { @ctx_hist.remove(0) }
         return
     }
     if name == "route_step" {

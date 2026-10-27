@@ -30,6 +30,7 @@ export fn signals_given_by_code() -> []CodeSignal => [
     cs("route_set", "input", "src/server/routes_hub.nv: Hub.rt_journal (the mode of work of the session)", "route (JSON text)", false),
     cs("route_task", "input", "src/server/routes_hub.nv: Hub.rt_task_op (the task and its subtasks, trees, state)", "op and its fields (JSON text)", false),
     cs("route_step", "input", "src/server/routes_hub.nv: Hub.rt_step (the state of a step of the mode)", "n, state (JSON text)", false),
+    cs("context_compacted", "input", "src/server/crew_task_hub.nv: Hub.ctx_watch (the context of the agent was compacted)", "{before, after, at} (JSON text)", false),
     cs("route_note", "input", "src/server/routes_hub.nv: Hub.rt_note (a line of the hub in the feed)", "text (JSON text)", false),
     cs("route_review", "input", "src/server/routes_hub.nv: Hub.route_review_finish (the block of the independent review in the feed)", "family, step, text (JSON text)", false),
     cs("setting_chosen", "input", "src/server/hub.nv: Hub.watch_agent (the agent took a choice of the owner)", "agent, setting, value, at (JSON text)", false),

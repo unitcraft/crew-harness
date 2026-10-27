@@ -43,7 +43,7 @@ fn Hub @ct_running_old(s Dialog) -> []RunSub {
 /// The state of the mode for the page with the cards and the numbers of the tasks in work (called from `route_state_text`).
 fn Hub @ct_view(at int, base str) -> str {
     ro s = @sessions[at]
-    hints_view_extend(@cs_view(at, crew_view_extend(base, s.rt.props, @ct_lines(s), @cs_active_all(), @settings.route_max_active, @settings.route_confirm_word, @settings.route_over_limit_word)), s.rt.hints)
+    hints_view_extend(@cs_view(at, crew_view_extend(base, s.rt.props, @ct_lines(s), @cs_active_all(), @settings.route_max_active, @settings.route_confirm_word, @settings.route_over_limit_word)), s.rt.hints, s.rt.ctx_used, s.rt.ctx_size, s.rt.ctx_hist)
 }
 
 // A service hint to the agent is remembered for the panel "Машины" (not in the feed, not in the journal).
@@ -413,8 +413,39 @@ fn Hub mut @ct_queue(at int) Proc Detach Time -> () {
     }
 }
 
+// The context of the agent (task 192.5): see `ctx_scan` (crew_task.nv). A compaction: the instruction of the mode is told again in full with the next message, the feed gets a grey line,
+// the journal gets `context_compacted {before, after, at}`. The protocol has no event of the compaction; the fall of `used` is the sign.
+fn Hub mut @ctx_watch(at int) Proc Detach Time -> () {
+    ro s = @sessions[at]
+    ro from = if s.rt.ctx_scan > s.lines.len() { s.lines.len() } else { s.rt.ctx_scan }
+    if from == s.lines.len() { return }
+    mut fresh = []str.new()
+    mut i = from
+    while i < s.lines.len() {
+        fresh.push(s.lines[i])
+        i += 1
+    }
+    ro r = ctx_scan(fresh, s.rt.ctx_used, s.rt.ctx_size, @settings.context_drop_percent)
+    mut me = @sessions[at]
+    me.rt.ctx_scan = s.lines.len()
+    me.rt.ctx_used = r.used
+    me.rt.ctx_size = r.size
+    if r.before > 0 { me.rt.told = false }
+    @sessions[at] = me
+    if r.before > 0 {
+        mut o = JsonObject.new()
+        ji(o, "before", r.before)
+        ji(o, "after", r.after)
+        ji(o, "at", now_millis())
+        @rt_journal(at, "context_compacted", JsonValue.object(o).to_str())
+        @rt_note(at, "▸ Контекст агента сжат (было ${r.before}, стало ${r.after}), инструкция режима повторена")
+        @route_broadcast(at, true)
+    }
+}
+
 /// At every pump of the modes: the queue starts, the marker of an agent without tools is read, the note of the decision goes to the agent as a service turn when the agent is free.
 fn Hub mut @ct_pump(at int) Proc Detach Time -> () {
+    @ctx_watch(at)
     @ct_queue(at)
     ro s = @sessions[at]
     if s.rt.running || s.rt.awaiting || s.rt.reviewing || s.rt.job.byte_len() > 0 { return }

@@ -187,14 +187,15 @@ export fn scenario_wip_flow(settings ServerSettings) Proc Detach Time Net Fs Os 
 export fn scenario_wip_trees_dir(settings ServerSettings) Proc Detach Time Net Fs Os -> str {
     mut c = kit_check()
     ro repo = settings.workdir
-    ro body = "{\"name\":\"P\",\"folders\":[{\"path\":\"${repo}\"}],\"worktrees_dir\":\"worktrees\"}"
+    ro rp = repo.replace("\\", "/")
+    ro body = "{\"name\":\"P\",\"folders\":[{\"path\":\"${rp}\"}],\"worktrees_dir\":\"worktrees\"}"
     ro id = match projects_create(settings.data_dir, kit_json_object(body)) {
         Ok(x) => x
         Err(f) => panic("the project cannot be made: ${f.message}")
     }
     mut rig = rig_open(settings)
     rig.attach(1)
-    rig.page(1, "session_created", "s-t1", "{\"name\":\"В проекте\",\"agent\":\"opencode\",\"project_id\":\"${id}\",\"folder\":\"${repo}\"}")
+    rig.page(1, "session_created", "s-t1", "{\"name\":\"В проекте\",\"agent\":\"opencode\",\"project_id\":\"${id}\",\"folder\":\"${rp}\"}")
     c.expect(rig.until("\"kind\":\"session_created\"", 5000), "the session of the project is shown")
     rig.page(1, "user_message", "s-t1", "{\"turn\":\"t0\",\"text\":\"привет\"}")
     c.expect(rig.until(KIT_DONE, 20000), "the first message is answered")

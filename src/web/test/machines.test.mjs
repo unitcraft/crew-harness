@@ -232,3 +232,20 @@ test('«Служебные подсказки агенту» (192.5): вид и 
   assert.equal(box.querySelectorAll('.hint-text')[0].textContent, 'текст 21', 'полный текст по клику');
   assert.match(s.panel.signature(sessionWith({ state: 'idle', routeState }), []), /текст 21/);
 });
+
+test('«Контекст» (192.5): занятость used / size, история сжатий «было → стало» новейшая сверху, без сжатий — пояснение', () => {
+  const none = setup(sessionWith({ state: 'idle' }));
+  const emptyBox = none.paint();
+  assert.equal(emptyBox.querySelector('.mach-context .card-title').textContent, 'Контекст');
+  assert.match(emptyBox.querySelector('.mach-context').textContent, /Данных о контексте пока нет/);
+  assert.match(emptyBox.querySelector('.mach-context').textContent, /Сжатий контекста не было/);
+  const routeState = parseRouteState({ route: 'interactive', context: { used: 30000, size: 200000, compactions: [{ ms: 1_000_000, before: 100000, after: 30000 }, { ms: 2_000_000, before: 90000, after: 20000 }, { before: 0 }] } });
+  assert.equal(routeState.context.compactions.length, 2);
+  const s = setup(sessionWith({ state: 'idle', routeState }));
+  const box = s.paint();
+  assert.equal(box.querySelector('.ctx-now').textContent, 'Занято 30000 из 200000 токенов');
+  const rows = box.querySelectorAll('.ctx-row');
+  assert.equal(rows.length, 2);
+  assert.match(rows[0].textContent, /90000 → 20000/);
+  assert.match(rows[1].textContent, /100000 → 30000/);
+});

@@ -102,7 +102,7 @@ export fn is_code_word(text str, word str) -> bool {
 
 /// The description of the tool for `tools/list`.
 export fn crew_task_tool_json() -> JsonValue {
-    ro text = "{\"name\":\"crew_task\",\"description\":\"Call it when the message of the user is REAL WORK on the files of the project (code, documents, tests, settings): something is to be changed, written or built. Do NOT call it for a question, a talk, an explanation, a look at the code or a one-word answer. The hub then shows the user a card and the user confirms (new task) or refuses; do not touch the files until the hub tells the decision. If the work belongs to a task that is already in the list of the tasks of the session, say kind=extend and its number in extends. Call it once per piece of work, at the very beginning, before the first change of a file.\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"kind\":{\"type\":\"string\",\"enum\":[\"new\",\"child\",\"epic\",\"extend\"],\"description\":\"new - a new task of its own (the default); child - the work is explicitly a child task of the epic in epic; epic - the work is a big one, an epic with child tasks; extend - the work belongs to an existing task of the list.\"},\"epic\":{\"type\":\"integer\",\"description\":\"For kind=child: the number of the epic (any open task of the list may be one).\"},\"title\":{\"type\":\"string\",\"description\":\"A short title of the work (up to 60 characters).\"},\"summary\":{\"type\":\"string\",\"description\":\"What is to be done, in a few lines: it becomes the text of message.md.\"},\"extends\":{\"type\":\"integer\",\"description\":\"For kind=extend: the number of the task of the list.\"},\"touches\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"description\":\"The files and folders the work will change (paths in the project).\"},\"confidence\":{\"type\":\"string\",\"enum\":[\"high\",\"medium\",\"low\"],\"description\":\"How sure you are that it is real work and not a talk.\"}},\"required\":[\"kind\",\"title\",\"summary\"]}}"
+    ro text = "{\"name\":\"crew_task\",\"description\":\"Call it when the message of the user is REAL WORK on the files of the project (code, documents, tests, settings): something is to be changed, written or built. Do NOT call it for a question, a talk, an explanation, a look at the code or a one-word answer. The hub then shows the user a card and the user confirms (new task) or refuses; do not touch the files until the hub tells the decision. If the work belongs to a task that is already in the list of the tasks of the session, say kind=extend and its number in extends. Call it once per piece of work, at the very beginning, before the first change of a file. RULES: never call it for a question or a talk; never call crew_task_list on your own; never create doc/tasks folders or message.md yourself - the hub does it after the owner answers the card.\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"kind\":{\"type\":\"string\",\"enum\":[\"new\",\"child\",\"epic\",\"extend\"],\"description\":\"new - a new task of its own (the default); child - the work is explicitly a child task of the epic in epic; epic - the work is a big one, an epic with child tasks; extend - the work belongs to an existing task of the list.\"},\"epic\":{\"type\":\"integer\",\"description\":\"For kind=child: the number of the epic (any open task of the list may be one).\"},\"title\":{\"type\":\"string\",\"description\":\"A short title of the work (up to 60 characters).\"},\"summary\":{\"type\":\"string\",\"description\":\"What is to be done, in a few lines: it becomes the text of message.md.\"},\"extends\":{\"type\":\"integer\",\"description\":\"For kind=extend: the number of the task of the list.\"},\"touches\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"description\":\"The files and folders the work will change (paths in the project).\"},\"confidence\":{\"type\":\"string\",\"enum\":[\"high\",\"medium\",\"low\"],\"description\":\"How sure you are that it is real work and not a talk.\"}},\"required\":[\"kind\",\"title\",\"summary\"]}}"
     mparse(text)
 }
 
@@ -361,7 +361,7 @@ export fn crew_view_extend(base str, props []Proposal, subs []SubLine, active in
 }
 
 /// The service hints of the session for the panel "Машины" (task 192.5): `hints` - the newest last, each `{ms, kind, text}`.
-export fn hints_view_extend(base str, hints []HintRec) -> str {
+export fn hints_view_extend(base str, hints []HintRec, ctx_used int, ctx_size int, ctx_hist []CtxRec) -> str {
     mut o = match Json.parse(base) {
         Ok(v) => v.object() ?? JsonObject.new()
         Err(e) => JsonObject.new()
@@ -375,6 +375,19 @@ export fn hints_view_extend(base str, hints []HintRec) -> str {
         rows.push(JsonValue.object(r))
     }
     mput(o, "hints", JsonValue.array(rows))
+    mut cx = JsonObject.new()
+    mput(cx, "used", JsonValue.int(ctx_used))
+    mput(cx, "size", JsonValue.int(ctx_size))
+    mut hist = []JsonValue.new()
+    for c in ctx_hist {
+        mut r = JsonObject.new()
+        mput(r, "ms", JsonValue.int(c.ms))
+        mput(r, "before", JsonValue.int(c.before))
+        mput(r, "after", JsonValue.int(c.after))
+        hist.push(JsonValue.object(r))
+    }
+    mput(cx, "compactions", JsonValue.array(hist))
+    mput(o, "context", JsonValue.object(cx))
     JsonValue.object(o).to_str()
 }
 
@@ -387,4 +400,48 @@ export fn hints_added(hints []HintRec, ms int, kind str, text str) -> []HintRec 
     out.push(HintRec { ms, kind, text })
     while out.len() > HINTS_MAX { out.remove(0) }
     out
+}
+
+/// CtxScan: the result of `ctx_scan`: the last `used` and `size`, and `before` / `after` of the last compaction found (`before` 0 - none).
+export type CtxScan { used int, size int, before int, after int }
+
+fn ctx_num(line str, key str) -> int {
+    ro parsed = match Json.parse(line) {
+        Ok(v) => v.object() ?? JsonObject.new()
+        Err(e) => JsonObject.new()
+    }
+    ro input = (parsed.get("input") ?? JsonValue.null()).object() ?? JsonObject.new()
+    (input.get(key) ?? JsonValue.null()).int() ?? 0
+}
+
+fn ctx_kind(line str) -> str {
+    ro parsed = match Json.parse(line) {
+        Ok(v) => v.object() ?? JsonObject.new()
+        Err(e) => JsonObject.new()
+    }
+    (parsed.get("kind") ?? JsonValue.null()).str() ?? ""
+}
+
+/// Look through the new lines of the journal of a session: every `usage_update {used, size}` is compared with the one before it (`prev_used`, 0 - none yet); a fall by more than `drop_percent`
+/// percent is a compaction of the context of the agent. A change of the agent (`agent_switched`) or the start of the session forgets the old value, so it is not a compaction. `drop_percent` 0 - off.
+export fn ctx_scan(lines []str, prev_used int, prev_size int, drop_percent int) -> CtxScan {
+    mut prev = prev_used
+    mut size = prev_size
+    mut before = 0
+    mut after = 0
+    for line in lines {
+        ro kind = ctx_kind(line)
+        if kind == "agent_switched" || kind == "session_created" { prev = 0 }
+        if kind == "usage_update" {
+            ro used = ctx_num(line, "used")
+            ro sz = ctx_num(line, "size")
+            if sz > 0 { size = sz }
+            if drop_percent > 0 && prev > 0 && used * 100 < prev * (100 - drop_percent) {
+                before = prev
+                after = used
+            }
+            prev = used
+        }
+    }
+    CtxScan { used: prev, size, before, after }
 }

@@ -130,3 +130,37 @@ export fn scenario_route_recognize(settings ServerSettings) Proc Detach Time Net
     rig.shut()
     c.report()
 }
+
+/// A hook of the scenarios: the agent of the session reports its use of the context (`usage_update`), as the ACP agents do.
+export fn Hub mut @kit_usage(trace str, used int, size int) Proc Detach Time -> () {
+    ro at = @find(trace)
+    if at < 0 { return }
+    // the line of the journal as the agent's report is projected for the page
+    mut s = @sessions[at]
+    s.lines.push("{\"kind\":\"usage_update\",\"trace\":\"${trace}\",\"input\":{\"used\":${used},\"size\":${size}}}")
+    @sessions[at] = s
+}
+
+/// The compaction of the context of the agent (task 192.5): a fall of `used` by more than 40 % is told in the feed and put in the panel; a smaller fall is not.
+export fn scenario_context_compaction(settings ServerSettings) Proc Detach Time Net Fs Os -> str {
+    mut c = kit_check()
+    mut rig = rig_open(settings)
+    rig.attach(1)
+    rig.page(1, "session_created", "s-cx", "{\"name\":\"Контекст\",\"agent\":\"opencode\"}")
+    c.expect(rig.until("\"kind\":\"session_created\"", 5000), "the session is shown")
+    rig.hub.kit_usage("s-cx", 100000, 200000)
+    rig.run(2500)
+    rig.hub.kit_usage("s-cx", 70000, 200000)
+    rig.run(2500)
+    c.expect(kit_with(rig.all_lines_for(1), "Контекст агента сжат") == 0, "a fall by 30 % is not a compaction")
+    rig.hub.kit_usage("s-cx", 30000, 200000)
+    rig.run(2500)
+    c.expect(kit_with(rig.all_lines_for(1), "Контекст агента сжат (было 70000, стало 30000), инструкция режима повторена") >= 1, "a fall by more than 40 % is told in the feed")
+    ro cx = jchild(rk_state(rig), "context") ?? JsonObject.new()
+    c.expect(rk_number(cx, "used") == 30000 && rk_number(cx, "size") == 200000, "the panel gets used / size: ${rk_number(cx, "used")}")
+    c.expect(rk_array(cx, "compactions").len() == 1, "and one compaction in the history")
+    rig.run(2500)
+    c.expect(kit_with(rig.all_lines_for(1), "Контекст агента сжат") == 1, "one fall is told once")
+    rig.shut()
+    c.report()
+}

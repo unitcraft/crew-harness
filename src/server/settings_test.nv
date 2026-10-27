@@ -333,6 +333,7 @@ test "settings: the modes of work have defaults and can be set" {
     assert(plain.route_worktree_ask)
     assert(plain.route_overlap_seconds == 30)
     assert(plain.route_keep_days == 30)
+    assert(plain.context_drop_percent == 40)
     assert(plain.route_confirm_word == "задача" && plain.route_over_limit_word == "сверх" && plain.route_max_active == 3 && plain.route_tool && !plain.route_auto_propose)
     ro set = must_settings("{\"routes_dir\":\"my/routes\",\"route_reviewer_order\":[\"kimi\"],\"route_task_limit\":5,\"route_task_messages\":9,\"route_fix_attempts\":3,\"route_worktree_ask\":false,\"route_overlap_seconds\":10,\"route_keep_days\":0}")
     assert(set.routes_dir == "my/routes")

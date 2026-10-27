@@ -108,7 +108,7 @@ fn dropped_text(agent str, setting str, value str, used str) -> str {
 type McpPending { key str, call int, session str, questions JsonValue, reply ChanTx[str] }
 
 // The signals of the journal that carry the mode of work (task 192q, `routes_hub.nv`).
-fn route_signals() -> []str => ["route_set", "route_task", "route_step", "route_note", "route_review"]
+fn route_signals() -> []str => ["route_set", "route_task", "route_step", "route_note", "route_review", "context_compacted"]
 
 /// Hub: the sessions, the pages, the output not yet taken, the log.
 /// A choice of the owner (model, effort, mode) made while the agent of the session was not running: it waits until the agent is ready.

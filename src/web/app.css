@@ -1325,6 +1325,8 @@ input[aria-invalid="true"] { border-color: var(--danger); }
 .crew-kids-title { margin: 8px 0 2px; font-size: 12px; }
 .crew-parent { display: block; margin: 4px 0; }
 
+.ctx-list { list-style: none; margin: 4px 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.ctx-row { display: flex; gap: 8px; font-size: 13px; }
 /* задача 192.5: таблица кандидатов, «папка деревьев» проекта, служебные подсказки агенту */
 .crew-table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .crew-table th { text-align: left; font-weight: 600; color: var(--fg-muted); padding: 4px 8px 4px 0; white-space: nowrap; }

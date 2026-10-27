@@ -165,6 +165,20 @@ export function parseHints(src) {
   return list.filter(isObject).map((x) => ({ ms: num(x.ms), kind: str(x.kind), text: str(x.text) })).filter((x) => x.text !== '').slice(-20);
 }
 
+/**
+ * Задача 192.5: контекст агента. Хаб шлёт context { used, size, compactions: [{ ms, before, after }] }: занятость по последнему usage_update и история сжатий
+ * (в протоколе ACP события «компактификация» нет; признак — падение used больше чем на context_drop_percent между двумя usage_update).
+ */
+export function parseContext(src) {
+  const c = isObject(src && src.context) ? src.context : {};
+  const list = Array.isArray(c.compactions) ? c.compactions : [];
+  return {
+    used: num(c.used),
+    size: num(c.size),
+    compactions: list.filter(isObject).map((x) => ({ ms: num(x.ms), before: num(x.before), after: num(x.after) })).filter((x) => x.before > 0).slice(-20),
+  };
+}
+
 const KID_STATES = ['running', 'waits', 'ready', 'merged'];
 
 /**
@@ -241,13 +255,13 @@ export function parseRouteState(input) {
   const src = isObject(input) ? input : {};
   const route = normalizeRoute(src.route);
   const useTree = src.use_tree !== false;
-  if (!routeInfo(route).hasSteps) return { route, stepless: true, steps: [], running: false, useTree, task: parseTask(src.task), where: parseWhere(src.where), crew: parseCrewTask(src), kids: parseKids(src), hints: parseHints(src) };
+  if (!routeInfo(route).hasSteps) return { route, stepless: true, steps: [], running: false, useTree, task: parseTask(src.task), where: parseWhere(src.where), crew: parseCrewTask(src), kids: parseKids(src), hints: parseHints(src), context: parseContext(src) };
   const steps = (Array.isArray(src.steps) ? src.steps : []).filter(isObject).map((s, i) => ({
     n: Number.isInteger(s.n) ? s.n : i + 1,
     title: str(s.title),
     state: STEP_STATES.includes(s.state) ? s.state : 'pending',
   }));
-  return { route, stepless: false, steps, running: src.running === true, useTree, task: parseTask(src.task), where: parseWhere(src.where), crew: parseCrewTask(src), kids: parseKids(src), hints: parseHints(src) };
+  return { route, stepless: false, steps, running: src.running === true, useTree, task: parseTask(src.task), where: parseWhere(src.where), crew: parseCrewTask(src), kids: parseKids(src), hints: parseHints(src), context: parseContext(src) };
 }
 
 export const INTERACTIVE_STATE = Object.freeze(parseRouteState({ route: DEFAULT_ROUTE }));

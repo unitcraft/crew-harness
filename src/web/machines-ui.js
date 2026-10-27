@@ -180,6 +180,21 @@ export function createMachinesPanel(doc, deps) {
       rows.length === 0 ? false : h(doc, 'p', { class: 'muted hint-note', text: t('mach.hints_note', { n: rows.length }) }));
   }
 
+  // ---- контекст агента (задача 192.5) ----
+
+  function contextCard(session) {
+    const cx = (session.routeState && session.routeState.context) || { used: 0, size: 0, compactions: [] };
+    const usage = session.usage && session.usage.size > 0 ? session.usage : (cx.size > 0 ? cx : null);
+    const rows = cx.compactions.slice().reverse().map((x) => h(doc, 'li', { class: 'ctx-row' },
+      h(doc, 'span', { class: 'ctx-time muted', text: x.ms ? clock(x.ms) : '' }),
+      h(doc, 'span', { class: 'ctx-change', text: t('mach.context_row', { from: x.before, to: x.after }) })));
+    return h(doc, 'section', { class: 'card mach-context' },
+      h(doc, 'h3', { class: 'card-title', text: t('mach.context') }),
+      h(doc, 'p', { class: 'ctx-now', text: usage ? t('mach.context_now', { used: usage.used, size: usage.size }) : t('mach.context_unknown') }),
+      rows.length === 0 ? h(doc, 'p', { class: 'muted', text: t('mach.context_none') }) : h(doc, 'ul', { class: 'ctx-list' }, ...rows),
+      h(doc, 'p', { class: 'muted hint-note', text: t('mach.context_note', { pct: 40 }) }));
+  }
+
   function debugCard(session) {
     const opened = isOpen(session.id);
     const head = h(doc, 'button', { type: 'button', class: 'card-head mach-debug-head', 'aria-expanded': String(opened) },
@@ -199,7 +214,7 @@ export function createMachinesPanel(doc, deps) {
       return JSON.stringify([rev, session.machine, session.state, session.routeState, queued.length, isOpen(session.id), [...hintOpen]]);
     },
     render(session, queued) {
-      return [workCard(session, queued), hintsCard(session), debugCard(session)];
+      return [workCard(session, queued), contextCard(session), hintsCard(session), debugCard(session)];
     },
   };
 }

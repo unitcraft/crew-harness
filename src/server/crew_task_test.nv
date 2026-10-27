@@ -288,3 +288,37 @@ test "crew_task: the kinds are new, extend, child and epic; the old subtask and 
         Err(e) => panic(e)
     }
 }
+
+fn ctx_line(kind str, used int, size int) -> str => "{\"kind\":\"${kind}\",\"trace\":\"s\",\"input\":{\"used\":${used},\"size\":${size}}}"
+
+test "context: a fall of used by more than the percent is a compaction; a smaller fall, a rise, a change of the agent and the off switch are not" {
+    ro drop = ctx_scan([ctx_line("usage_update", 100000, 200000), ctx_line("usage_update", 30000, 200000)], 0, 0, 40)
+    assert(drop.before == 100000 && drop.after == 30000 && drop.used == 30000 && drop.size == 200000)
+    // the value of the earlier pass is remembered between two looks
+    ro second = ctx_scan([ctx_line("usage_update", 20000, 200000)], 100000, 200000, 40)
+    assert(second.before == 100000 && second.after == 20000)
+    ro mild = ctx_scan([ctx_line("usage_update", 100000, 200000), ctx_line("usage_update", 70000, 200000)], 0, 0, 40)
+    assert(mild.before == 0 && mild.used == 70000)
+    ro rise = ctx_scan([ctx_line("usage_update", 10000, 200000), ctx_line("usage_update", 90000, 200000)], 0, 0, 40)
+    assert(rise.before == 0)
+    ro switched = ctx_scan([ctx_line("usage_update", 100000, 200000), "{\"kind\":\"agent_switched\",\"input\":{}}", ctx_line("usage_update", 1000, 200000)], 0, 0, 40)
+    assert(switched.before == 0 && switched.used == 1000)
+    ro off = ctx_scan([ctx_line("usage_update", 100000, 200000), ctx_line("usage_update", 1000, 200000)], 0, 0, 0)
+    assert(off.before == 0)
+    ro first = ctx_scan([ctx_line("usage_update", 1000, 200000)], 0, 0, 40)
+    assert(first.before == 0 && first.used == 1000)
+    assert(ctx_scan([], 5, 9, 40).used == 5)
+}
+
+test "context: the view holds the used / size and the history of the compactions; the reminder names the mode, the step and the place; the rules are in the tools" {
+    ro text = hints_view_extend("{}", []HintRec.new(), 30000, 200000, [CtxRec { ms: 5, before: 100000, after: 30000 }])
+    ro o = cht_j(text).object() ?? JsonObject.new()
+    ro cx = (o.get("context") ?? JsonValue.null()).object() ?? JsonObject.new()
+    assert(((cx.get("used") ?? JsonValue.null()).int() ?? 0) == 30000 && ((cx.get("size") ?? JsonValue.null()).int() ?? 0) == 200000)
+    assert((((cx.get("compactions") ?? JsonValue.null()).array() ?? []JsonValue.new()).len()) == 1)
+    ro r = route_reminder("fast", "Тесты", "doc/tasks/007-x/task", "task/007-x")
+    assert(r.contains("«fast»") && r.contains("шаг: Тесты") && r.contains("task/007-x") && r.contains("crew_task_list"))
+    assert(route_reminder("interactive", "", "", "").contains("задачи ещё нет"))
+    assert(crew_task_tool_json().to_str().contains("RULES"))
+    assert(crew_task_list_tool_json().to_str().contains("RULES"))
+}
