@@ -16,8 +16,9 @@ import std.text
 /// Folder: a folder of a project; `branch` "" - none; `worktree` - the sessions work in a work tree of their own.
 export type Folder { path str, branch str, worktree bool }
 
-/// Project: the id is made by the server; `env` is the text of the `.env` format.
-export type Project { id str, name str, folders []Folder, env str }
+/// Project: the id is made by the server; `env` is the text of the `.env` format; `worktrees_dir` (task 192.5) is the folder of the work trees of the tasks: empty - beside the folder of the project,
+/// a relative name (`worktrees`) - a folder of that name beside it, an absolute path - that folder.
+export type Project { id str, name str, folders []Folder, env str, worktrees_dir str }
 
 /// StoreFail: why an operation was refused: the HTTP status (400 a wrong body, 404 no such project, 500 the file) and the text for the owner.
 export type StoreFail { status int, message str }
@@ -120,7 +121,31 @@ fn folder_of(v JsonValue) -> Result[Folder, str] {
     Ok(Folder { path, branch, worktree })
 }
 
-/// The project of a JSON object `{name, folders, env}` under the id `id`; the reason is a text for the owner.
+// The setting "папка деревьев": "" (beside the project), a name without `..`, or an absolute path (the form of the folders of the project); the reason is a text for the owner.
+fn worktrees_dir_of(o JsonObject) -> Result[str, str] {
+    ro raw = (jstr(o, "worktrees_dir") ?? "").trim_ascii()
+    if raw.byte_len() == 0 { return Ok("") }
+    if raw.byte_len() > PATH_MAX { return Err("папка деревьев длиннее ${PATH_MAX} байт") }
+    mut flat = []u8.new()
+    for b in raw.bytes() {
+        ro c = b as int
+        if c < 32 || c == 127 { return Err("в папке деревьев есть управляющий символ") }
+        flat.push(if c == 92 { 47 as u8 } else { b })
+    }
+    ro text = flat.to_str_lossy()
+    for part in text.split("/") {
+        if part == ".." { return Err("в папке деревьев есть «..»") }
+    }
+    ro first = flat[0] as int
+    ro drive = flat.len() >= 3 && ((first >= 65 && first <= 90) || (first >= 97 && first <= 122)) && (flat[1] as int) == 58 && (flat[2] as int) == 47
+    if drive || first == 47 { return normalize_folder_path(text) }
+    // a relative name: no trailing slash
+    mut end = flat.len()
+    while end > 1 && (flat[end - 1] as int) == 47 { end -= 1 }
+    Ok(flat[..end].to_str_lossy())
+}
+
+/// The project of a JSON object `{name, folders, env, worktrees_dir}` under the id `id`; the reason is a text for the owner.
 export fn project_from_json(o JsonObject, id str) -> Result[Project, str] {
     ro name = (jstr(o, "name") ?? "").trim_ascii()
     if name.byte_len() == 0 { return Err("у проекта нет имени") }
@@ -149,7 +174,8 @@ export fn project_from_json(o JsonObject, id str) -> Result[Project, str] {
     }
     // the text must parse: a mistake is told with the number of the line (and the value is not in the answer)
     ro parsed = parse_dotenv(env)?
-    Ok(Project { id, name, folders, env })
+    ro worktrees_dir = worktrees_dir_of(o)?
+    Ok(Project { id, name, folders, env, worktrees_dir })
 }
 
 fn folder_json(f Folder) -> JsonValue {
@@ -173,6 +199,7 @@ export fn project_json(p Project) -> JsonValue {
     jput(o, "name", JsonValue.str(p.name))
     jput(o, "folders", folders_json(p))
     jput(o, "env", JsonValue.str(p.env))
+    jput(o, "worktrees_dir", JsonValue.str(p.worktrees_dir))
     JsonValue.object(o)
 }
 
@@ -182,6 +209,7 @@ export fn project_summary_json(p Project) -> JsonValue {
     jput(o, "id", JsonValue.str(p.id))
     jput(o, "name", JsonValue.str(p.name))
     jput(o, "folders", folders_json(p))
+    jput(o, "worktrees_dir", JsonValue.str(p.worktrees_dir))
     mut keys = []JsonValue.new()
     for k in dotenv_keys(p.env) { keys.push(JsonValue.str(k)) }
     jput(o, "env_keys", JsonValue.array(keys))

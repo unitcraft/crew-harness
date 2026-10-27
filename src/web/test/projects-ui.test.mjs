@@ -247,3 +247,34 @@ test('выбор папки открывается без пути: сервер
   assert.match(ui, /state = \{ path: r\.path, parent: r\.parent/);
   assert.match(api, /last: typeof b\.last === 'string' \? normalizePath\(b\.last\) : ''/);
 });
+
+test('«Изменить проект»: «Папка деревьев» под списком папок — пусто, имя, путь; подпись, «..» не проходит, значение хранится', async () => {
+  const s = setup();
+  const done = s.ui.openEditor();
+  await settle();
+  await s.type(s.q('#project-name'), 'С деревьями');
+  const trees = s.q('#project-trees');
+  assert.ok(trees, 'поле есть');
+  assert.equal(trees.value, '');
+  assert.match(s.textOf(s.q('#project-trees-hint')), /рядом с папкой проекта/);
+  await s.type(trees, 'worktrees');
+  assert.match(s.textOf(s.q('#project-trees-hint')), /«worktrees» рядом с папкой проекта/);
+  await s.type(trees, 'C:/work/trees');
+  assert.match(s.textOf(s.q('#project-trees-hint')), /C:\/work\/trees/);
+  await s.type(trees, '../out');
+  await s.submit(s.q('form'));
+  assert.equal(s.q('#project-trees-error').hidden, false, '«..» не проходит');
+  assert.equal(s.log.changed, 0);
+  await s.type(trees, 'worktrees');
+  assert.equal(s.q('#project-trees-error').hidden, true);
+  await s.submit(s.q('form'));
+  const id = await done;
+  const full = await s.api.get(id);
+  assert.equal(full.project.worktreesDir, 'worktrees');
+  // правка: значение возвращается в поле
+  const again = s.ui.openEditor(id);
+  await settle();
+  assert.equal(s.q('#project-trees').value, 'worktrees');
+  s.doc.dispatchEvent(key('Escape'));
+  await again;
+});

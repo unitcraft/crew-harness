@@ -692,6 +692,7 @@ function mockProjects() {
   const clean = (body) => ({
     name: body.name.trim(),
     env: typeof body.env === 'string' ? body.env : '',
+    worktrees_dir: typeof body.worktrees_dir === 'string' ? body.worktrees_dir.trim() : '',
     folders: (Array.isArray(body.folders) ? body.folders : []).map((f) => {
       const out = { path: normalizePath(f.path), worktree: f.worktree === true };
       if (typeof f.branch === 'string' && f.branch) out.branch = f.branch;
@@ -705,7 +706,7 @@ function mockProjects() {
       projects.splice(0, projects.length, ...new Set([...named, ...rest]));
       return { status: 200, body: { ok: true } };
     },
-    summary: () => ({ projects: projects.map((p) => ({ id: p.id, name: p.name, folders: p.folders, env_keys: parseEnv(p.env).vars.map((v) => v.key) })) }),
+    summary: () => ({ projects: projects.map((p) => ({ id: p.id, name: p.name, folders: p.folders, worktrees_dir: p.worktrees_dir || '', env_keys: parseEnv(p.env).vars.map((v) => v.key) })) }),
     get: find,
     create(body) {
       const error = checked(body);

@@ -65,7 +65,8 @@ test('makeProject / parseProjects: пустое и мусор не ломают,
   const row = p.makeProject({ id: 'b', name: 'M', folders: [], env_keys: ['A', 'B'] });
   assert.deepEqual(row.envKeys, ['A', 'B']);
   assert.equal(row.env, '');
-  assert.deepEqual(p.makeProject(null), { id: '', name: '', folders: [], env: '', envKeys: [] });
+  assert.deepEqual(p.makeProject(null), { id: '', name: '', folders: [], env: '', worktreesDir: '', envKeys: [] });
+  assert.equal(p.makeProject({ id: 'c', name: 'C', worktrees_dir: ' worktrees ' }).worktreesDir, 'worktrees');
   const list = p.parseProjects({ projects: [{ id: 'a', name: 'x' }, { name: 'без id' }, null] });
   assert.deepEqual(list.map((x) => x.id), ['a']);
   assert.deepEqual(p.parseProjects(null), []);
@@ -80,7 +81,22 @@ test('validateProject и projectPayload', () => {
   assert.match(bad.errors.env, /^строка 1:/);
   assert.ok(p.validateProject({ name: 'x', folders: [{ path: 'D:/a' }], env: 'A=1' }).ok);
   assert.deepEqual(p.projectPayload({ name: ' x ', folders: [{ path: 'd:\\a', worktree: true }], env: 'A=1' }),
-    { name: 'x', folders: [{ path: 'D:/a', worktree: true }], env: 'A=1' });
+    { name: 'x', folders: [{ path: 'D:/a', worktree: true }], env: 'A=1', worktrees_dir: '' });
+  assert.equal(p.projectPayload({ name: 'x', folders: [], env: '', worktreesDir: '  worktrees ' }).worktrees_dir, 'worktrees');
+});
+
+test('папка деревьев проекта (192.5): пусто, имя, путь; «..» и управляющие символы не проходят; подпись под полем', () => {
+  assert.equal(p.worktreesDirProblem(''), '');
+  assert.equal(p.worktreesDirProblem('worktrees'), '');
+  assert.equal(p.worktreesDirProblem('D:/trees'), '');
+  assert.equal(p.worktreesDirProblem('../up'), 'dots');
+  assert.equal(p.worktreesDirProblem('a\\..\\b'), 'dots');
+  assert.equal(p.worktreesDirProblem('a\u0001b'), 'control');
+  assert.equal(p.validateProject({ name: 'x', folders: [], env: '', worktreesDir: '../x' }).errors.worktreesDir, 'dots');
+  assert.ok(p.validateProject({ name: 'x', folders: [], env: '', worktreesDir: 'worktrees' }).ok);
+  assert.deepEqual(p.worktreesDirHint(''), { kind: 'beside' });
+  assert.deepEqual(p.worktreesDirHint(' worktrees/ '), { kind: 'named', name: 'worktrees' });
+  assert.deepEqual(p.worktreesDirHint('D:\\trees\\'), { kind: 'absolute', path: 'D:/trees' });
 });
 
 test('папка новой сессии: единственная сама, из нескольких — запрошенная или первая', () => {

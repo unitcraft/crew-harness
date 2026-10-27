@@ -133,6 +133,7 @@ export function makeProject(raw) {
     name: typeof r.name === 'string' ? r.name : '',
     folders: Array.isArray(r.folders) ? r.folders.map(makeFolder).filter((f) => f.path !== '') : [],
     env: typeof r.env === 'string' ? r.env : '',
+    worktreesDir: typeof r.worktrees_dir === 'string' ? r.worktrees_dir.trim() : '',
     envKeys: keys,
   };
 }
@@ -157,7 +158,30 @@ export function validateProject(draft) {
   }
   const env = parseEnv(draft.env);
   if (env.errors.length > 0) errors.env = env.errors[0].message;
+  const trees = worktreesDirProblem(draft.worktreesDir);
+  if (trees) errors.worktreesDir = trees;
   return { ok: Object.keys(errors).length === 0, errors };
+}
+
+/**
+ * Задача 192.5: «папка деревьев» проекта. Пусто — деревья рядом с папкой проекта; имя (`worktrees`) — папка с этим именем рядом с проектом; абсолютный путь — эта папка.
+ * Возвращает 'dots' для «..», 'control' для управляющего символа, '' — если значение допустимо (что оно не внутри репозитория, проверяет сервер).
+ */
+export function worktreesDirProblem(value) {
+  const text = String(value ?? '').trim();
+  if (text === '') return '';
+  // eslint-disable-next-line no-control-regex
+  if (/[\u0000-\u001f\u007f]/.test(text)) return 'control';
+  if (text.split(/[\\/]/).some((part) => part === '..')) return 'dots';
+  return '';
+}
+
+/** Куда лягут деревья: подпись под полем («рядом с проектом», «папка worktrees рядом с проектом», «в D:/trees»). */
+export function worktreesDirHint(value) {
+  const text = String(value ?? '').trim().replace(/\\/g, '/');
+  if (text === '') return { kind: 'beside' };
+  if (isAbsolutePath(text)) return { kind: 'absolute', path: text.replace(/\/+$/, '') };
+  return { kind: 'named', name: text.replace(/\/+$/, '') };
 }
 
 /** Тело запроса POST/PUT /api/projects: только то, что принимает сервер. */
@@ -166,6 +190,7 @@ export function projectPayload(draft) {
     name: String(draft.name ?? '').trim(),
     folders: (draft.folders ?? []).map(makeFolder),
     env: String(draft.env ?? ''),
+    worktrees_dir: String(draft.worktreesDir ?? '').trim(),
   };
 }
 

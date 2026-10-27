@@ -7,7 +7,7 @@
 import { t } from './strings.js';
 import { h, icon } from './dom.js';
 import {
-  countEnv, folderName, joinPath, makeFolder, normalizePath, parseEnv, pluralRu, projectPayload, samePath, uniqueProjectName, validateProject,
+  countEnv, folderName, joinPath, makeFolder, normalizePath, parseEnv, pluralRu, projectPayload, samePath, uniqueProjectName, validateProject, worktreesDirHint,
 } from './projects.js';
 
 const FOCUSABLE = 'button:not(:disabled), input:not(:disabled), textarea:not(:disabled), select:not(:disabled), [tabindex]:not([tabindex="-1"])';
@@ -238,13 +238,13 @@ export function createProjectsUi(doc, deps) {
    * Результат: id сохранённого проекта или null.
    */
   async function openEditor(id) {
-    let project = { id: '', name: '', folders: [], env: '' };
+    let project = { id: '', name: '', folders: [], env: '', worktreesDir: '' };
     if (id) {
       const r = await api.get(id);
       if (!r.ok) { onNotice(t('projects.open_failed', { reason: r.error }), 'error'); return null; }
       project = r.project;
     }
-    const draft = { name: project.name, folders: project.folders.map(makeFolder), env: project.env };
+    const draft = { name: project.name, folders: project.folders.map(makeFolder), env: project.env, worktreesDir: project.worktreesDir || '' };
     const git = new Map(); // путь (нижний регистр) -> { isRepo, branch }
     const gitKey = (p) => normalizePath(p).toLowerCase();
 
@@ -256,6 +256,13 @@ export function createProjectsUi(doc, deps) {
     const addButton = h(doc, 'button', { type: 'button', class: 'add-folder', title: t('project.add_folder_title') }, icon(doc, 'i-plus'), h(doc, 'span', { text: t('project.add_folder') }));
     const folderList = h(doc, 'ul', { class: 'proj-folders' });
     const folderNote = h(doc, 'p', { class: 'muted proj-empty', text: t('project.folders_empty') });
+    // задача 192.5: «папка деревьев» проекта — под списком папок
+    const treesInput = h(doc, 'input', {
+      id: 'project-trees', type: 'text', class: 'mono', autocomplete: 'off', spellcheck: 'false', placeholder: t('project.trees_placeholder'), 'aria-describedby': 'project-trees-hint project-trees-error',
+    });
+    treesInput.value = draft.worktreesDir;
+    const treesHint = h(doc, 'p', { class: 'muted field-hint', id: 'project-trees-hint' });
+    const treesError = h(doc, 'p', { class: 'field-error', id: 'project-trees-error', hidden: true });
     const envValue = h(doc, 'span', { class: 'muted env-summary' });
     const envButton = h(doc, 'button', { type: 'button', class: 'proj-env' },
       icon(doc, 'i-terminal'), h(doc, 'span', { class: 'proj-env-label', text: t('project.env') }), envValue, icon(doc, 'i-chevron-right', 'chev'));
@@ -267,6 +274,7 @@ export function createProjectsUi(doc, deps) {
       h(doc, 'section', { class: 'proj-section', 'aria-labelledby': 'project-folders-title' },
         h(doc, 'div', { class: 'proj-section-head' }, h(doc, 'h4', { id: 'project-folders-title', text: t('project.folders') }), addButton),
         folderList, folderNote),
+      h(doc, 'label', { class: 'field proj-trees', for: 'project-trees' }, h(doc, 'span', { text: t('project.trees') }), treesInput, treesHint, treesError),
       envButton,
       plate,
       h(doc, 'div', { class: 'actions' }, cancel, submit));
@@ -313,6 +321,11 @@ export function createProjectsUi(doc, deps) {
 
     function paintEnv() { envValue.textContent = envSummary(countEnv(draft.env)); }
 
+    function paintTrees() {
+      const hint = worktreesDirHint(treesInput.value);
+      treesHint.textContent = hint.kind === 'beside' ? t('project.trees_beside') : hint.kind === 'absolute' ? t('project.trees_absolute', { path: hint.path }) : t('project.trees_named', { name: hint.name });
+    }
+
     async function addFolder() {
       const path = await pickFolder('');
       if (path === null) return;
@@ -334,11 +347,20 @@ export function createProjectsUi(doc, deps) {
     envButton.addEventListener('click', () => openEnv());
     cancel.addEventListener('click', () => layer.close());
     nameInput.addEventListener('input', () => { nameError.hidden = true; nameInput.removeAttribute('aria-invalid'); });
+    treesInput.addEventListener('input', () => { draft.worktreesDir = treesInput.value; treesError.hidden = true; treesInput.removeAttribute('aria-invalid'); paintTrees(); });
 
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
       draft.name = nameInput.value;
+      draft.worktreesDir = treesInput.value;
       const check = validateProject(draft);
+      treesError.hidden = !check.errors.worktreesDir;
+      if (check.errors.worktreesDir) {
+        treesError.textContent = t(check.errors.worktreesDir === 'dots' ? 'project.trees_dots' : 'project.trees_control');
+        treesInput.setAttribute('aria-invalid', 'true');
+        treesInput.focus();
+        return;
+      }
       nameError.hidden = !check.errors.name;
       if (check.errors.name) { nameInput.setAttribute('aria-invalid', 'true'); nameInput.focus(); return; }
       if (check.errors.folders) { showPlate(t('project.folder_dup')); return; }
@@ -361,6 +383,7 @@ export function createProjectsUi(doc, deps) {
 
     paintFolders();
     paintEnv();
+    paintTrees();
     for (const f of draft.folders) learnGit(f.path);
     nameInput.focus();
     return layer.promise;
