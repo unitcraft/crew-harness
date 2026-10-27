@@ -252,7 +252,7 @@ test "crew_task: the file of a subtask holds the summary and the message of the 
 }
 
 test "crew_task: the hint lists the tasks, the request names the candidates" {
-    ro hint = tasks_hint("doc/tasks/001-x", [SubLine { n: 1, title: "Кнопка", state: "идёт", waits: 0 }, SubLine { n: 2, title: "Тест", state: "ждёт", waits: 1 }])
+    ro hint = tasks_hint("doc/tasks/001-x", [SubLine { n: 1, title: "Кнопка", state: "идёт", waits: 0, file: "" }, SubLine { n: 2, title: "Тест", state: "ждёт", waits: 1, file: "" }])
     assert(hint.contains("1. «Кнопка» (идёт)"))
     assert(hint.contains("ждёт подзадачу 1"))
     assert(hint.contains("doc/tasks/001-x/message.2.md"))
@@ -271,7 +271,7 @@ test "crew_task: the view holds the cards, the numbers and the words" {
     q.id = 4
     q.listed = true
     q.choice = "discuss"
-    ro text = crew_view_extend("{\"route\":\"interactive\"}", [p, q], [SubLine { n: 1, title: "Кнопка", state: "идёт", waits: 0 }], 2, 3, "задача", "сверх")
+    ro text = crew_view_extend("{\"route\":\"interactive\"}", [p, q], [SubLine { n: 1, title: "Кнопка", state: "идёт", waits: 0, file: "" }], 2, 3, "задача", "сверх")
     ro v = ctj(text)
     assert(ct_get(v, "route").str() == Some("interactive"))
     assert(ct_get(v, "active").int() == Some(2))

@@ -105,7 +105,12 @@ fn tt_task(w TwWorld, nnn str, slug str) Proc Os Fs -> TaskTree {
 }
 
 fn tt_sub(tree TaskTree, nnn str, slug str, n int) Proc Os Fs -> SubtaskTree {
-    match subtask_tree_create(tree.path, nnn, slug, n) {
+    // a child task has a number of its own (flat): the number of the parent plus its order
+    ro own = match nnn.to_int() {
+        Ok(v) => v + n
+        Err(e) => panic("bad number ${nnn}")
+    }
+    match subtask_tree_create(tree.path, "${own}", slug, n) {
         Ok(t) => t
         Err(e) => panic("subtask_tree_create: ${e}")
     }
@@ -276,16 +281,16 @@ test "taskwt subtask: made from the head of the task, merged without a conflict,
     ro w = tt_world("sub")
     ro tree = tt_task(w, "192", "demo")
     ro s1 = tt_sub(tree, "192", "demo", 1)
-    assert(s1.branch == "task/192.1-demo")
-    assert(s1.path == "${tw_parent(tree.path)}/crew-harness-192.1-demo")
+    assert(s1.branch == "task/193-demo")
+    assert(s1.path == "${tw_parent(tree.path)}/crew-harness-193-demo")
     assert(s1.created)
     assert(!tt_sub(tree, "192", "demo", 1).created)
     tt_commit(s1.path, "one.txt", "one\n", "subtask work")
     assert(!tw_exists("${tree.path}/one.txt"))
-    match subtask_merge(tree.path, s1.branch, "192.1: first part") {
+    match subtask_merge(tree.path, s1.branch, "193 first part") {
         Merged { sha } => {
             assert(sha == tg(tree.path, ["rev-parse", "HEAD"]))
-            assert(tg(tree.path, ["log", "-1", "--format=%s"]) == "192.1: first part")
+            assert(tg(tree.path, ["log", "-1", "--format=%s"]) == "193 first part")
             assert(tw_split(tg(tree.path, ["rev-list", "--parents", "-n", "1", "HEAD"]), " ").len() == 3)
         }
         other => panic("expected Merged")
@@ -323,11 +328,11 @@ test "taskwt subtask: a conflict is left in progress, the agent resolves it, the
     ro s2 = tt_sub(tree, "192", "demo", 2)
     tt_commit(s1.path, "a.txt", "alpha\nbeta-one\ngamma\n", "s1 edit")
     tt_commit(s2.path, "a.txt", "alpha\nbeta-two\ngamma\n", "s2 edit")
-    match subtask_merge(tree.path, s1.branch, "192.1: first") {
+    match subtask_merge(tree.path, s1.branch, "193 first") {
         Merged { sha } => ()
         other => panic("the first merge is clean")
     }
-    match subtask_merge(tree.path, s2.branch, "192.2: second") {
+    match subtask_merge(tree.path, s2.branch, "194 second") {
         Conflict { files } => assert(files == ["a.txt"])
         other => panic("expected Conflict")
     }
@@ -370,7 +375,7 @@ test "taskwt subtask: a merge can be given up, the finish without a merge is a f
         other => panic("no merge: a failure")
     }
     match subtask_merge(tree.path, s1.branch, "") {
-        Merged { sha } => assert(tg(tree.path, ["log", "-1", "--format=%s"]) == "Merge task/192.1-demo")
+        Merged { sha } => assert(tg(tree.path, ["log", "-1", "--format=%s"]) == "Merge task/193-demo")
         other => panic("clean")
     }
     match subtask_merge(tree.path, s2.branch, "x") {
@@ -487,7 +492,7 @@ test "taskwt publish: the merges of the subtasks stay in the history" {
     ro tree = tt_task(w, "192", "demo")
     ro s1 = tt_sub(tree, "192", "demo", 1)
     tt_commit(s1.path, "one.txt", "one\n", "subtask work")
-    match subtask_merge(tree.path, s1.branch, "192.1: part") {
+    match subtask_merge(tree.path, s1.branch, "193 part") {
         Merged { sha } => ()
         other => panic("clean merge")
     }
@@ -627,8 +632,8 @@ test "taskwt: no push without publish - the log of git calls and the head of ori
     tt_commit(s1.path, "one.txt", "one\n", "s1")
     tt_commit(s2.path, "a.txt", "alpha\nbeta-two\ngamma\n", "s2")
     tt_commit(tree.path, "a.txt", "alpha\nbeta-tree\ngamma\n", "tree")
-    ro m1 = subtask_merge(tree.path, s1.branch, "192.1: x")
-    ro m2 = subtask_merge(tree.path, s2.branch, "192.2: y")
+    ro m1 = subtask_merge(tree.path, s1.branch, "193 x")
+    ro m2 = subtask_merge(tree.path, s2.branch, "194 y")
     ro ab = subtask_merge_abort(tree.path)
     ro removed = subtask_tree_remove(tree.path, s1.path, s1.branch)
     ro n = unmerged_count(tree.path)

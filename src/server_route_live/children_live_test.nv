@@ -1,0 +1,13 @@
+// children_live_test.nv - the child sessions over a hub with the fake ACP agent in a repository (task 192.3): the scenario `scenario_route_children` of crew_harness.server/child_kit.nv.
+module crew_harness.server_route_live
+
+import crew_harness.server.{kit_routes_children, scenario_route_children}
+
+fn children_clean(report str) -> () {
+    if report.byte_len() > 0 { panic("NOT AS IT MUST BE: ${report}") }
+    assert(report == "")
+}
+
+test "files: the child sessions: a task of its own by default, a subtask under its parent, a task of an epic, a wait for a clash, the merge into the branch of the parent, the hold of the parent, the chain, a restart" {
+    children_clean(scenario_route_children(kit_routes_children("route-children")))
+}

@@ -259,7 +259,7 @@ test "routes: a subtask that was extended shows merged_into; a subtask of its ow
     assert(rt.merged_into == 1)
     rt.apply("route_task", "{\"op\":\"subtask\",\"n\":2,\"title\":\"Вторая\"}")
     assert(rt.merged_into == 0)
-    rt.apply("route_task", "{\"op\":\"sub_worktree\",\"n\":2,\"branch\":\"task/007.2-sdelay\",\"worktree\":\"/w/r-007.2-sdelay\"}")
+    rt.apply("route_task", "{\"op\":\"sub_worktree\",\"n\":2,\"branch\":\"task/008-sdelay\",\"worktree\":\"/w/r-008-sdelay\"}")
     ro p = parse_progress("- [ ] Постановка\n")
     ro text = route_view_text(rt, ["Постановка"], [p, p], false, 0, task_extra_none())
     ro task = jchild(rt_obj(text), "task") ?? JsonObject.new()
@@ -268,8 +268,8 @@ test "routes: a subtask that was extended shows merged_into; a subtask of its ow
     ro b = subs[1].object() ?? JsonObject.new()
     assert(jtext(a, "state") == "planned")
     assert(jtext(b, "state") == "running")
-    assert(jtext(b, "branch") == "task/007.2-sdelay")
-    assert(jtext(b, "worktree") == "/w/r-007.2-sdelay")
+    assert(jtext(b, "branch") == "task/008-sdelay")
+    assert(jtext(b, "worktree") == "/w/r-008-sdelay")
     match b.get("merged") {
         Some(v) => assert((v.bool() ?? true) == false)
         None => panic("no merged")
@@ -293,7 +293,7 @@ test "routes: a subtask that was extended shows merged_into; a subtask of its ow
 
 test "routes: a merged subtask is done and its tree is gone; a conflict keeps it unmerged with the text" {
     mut rt = rt_sample()
-    rt.apply("route_task", "{\"op\":\"sub_worktree\",\"n\":1,\"branch\":\"task/007.1-sdelay\",\"worktree\":\"/w/r-007.1-sdelay\"}")
+    rt.apply("route_task", "{\"op\":\"sub_worktree\",\"n\":1,\"branch\":\"task/008-sdelay\",\"worktree\":\"/w/r-008-sdelay\"}")
     rt.apply("route_task", "{\"op\":\"sub_conflict\",\"n\":1,\"text\":\"CONFLICT in a.txt\"}")
     ro p = parse_progress("- [ ] Постановка\n")
     ro after = jchild(rt_obj(route_view_text(rt, ["Постановка"], [p], false, 0, task_extra_none())), "task") ?? JsonObject.new()
@@ -336,8 +336,8 @@ test "routes: the working folder of the agent is the tree of the subtask, else t
     rt = rt_sample()
     assert(rt.agent_dir("/repo") == "/w/r-007-sdelay")
     rt.apply("route_task", "{\"op\":\"subtask\",\"n\":2,\"title\":\"B\"}")
-    rt.apply("route_task", "{\"op\":\"sub_worktree\",\"n\":2,\"branch\":\"b\",\"worktree\":\"/w/r-007.2-sdelay\"}")
-    assert(rt.agent_dir("/repo") == "/w/r-007.2-sdelay")
+    rt.apply("route_task", "{\"op\":\"sub_worktree\",\"n\":2,\"branch\":\"b\",\"worktree\":\"/w/r-008-sdelay\"}")
+    assert(rt.agent_dir("/repo") == "/w/r-008-sdelay")
     rt.apply("route_task", "{\"op\":\"sub_merged\",\"n\":2}")
     assert(rt.agent_dir("/repo") == "/w/r-007-sdelay")
 }
