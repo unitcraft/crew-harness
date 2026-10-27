@@ -16,7 +16,7 @@ export const RETRY_STEPS = Object.freeze([2, 5, 10, 30]);
 // Сигналы режимов работы (задача 192p): любой из них снимает идущий прогон шагов заглушки и ставит свой ответ.
 const ROUTE_SIGNALS = ['session_route', 'route_run', 'route_skip', 'route_stop', 'route_subtask_new', 'route_subtask_same', 'route_subtask_worktree', 'route_subtask_done', 'route_new_task',
   'route_merge', 'route_tests_run', 'route_tree_drop', 'session_worktree', 'route_subtask_parallel', 'route_subtask_choose',
-  'route_prop', 'route_recognize', 'route_apply'];
+  'route_prop', 'route_recognize', 'route_apply', 'route_ext_undo'];
 
 /** Выбор режима по адресу страницы. Чистая функция, чтобы проверяться без браузера. */
 export function chooseMode(search, protocol, host) {

@@ -1341,6 +1341,13 @@ export function createView(doc, refs, deps) {
         node.replaceChildren(...lines.map((text) => h(doc, 'div', { text })));
         break;
       }
+      case 'autoext': {
+        const label = t(item.undone ? 'route.ext_undone' : 'route.ext_line', { task: item.task, title: item.title, text: item.text });
+        const undo = item.undone ? false : h(doc, 'button', { type: 'button', class: 'link-btn', text: t('route.ext_undo') });
+        if (undo) undo.addEventListener('click', () => { if (currentTrace) handlers.onExtUndo(currentTrace, item.id); });
+        node.replaceChildren(h(doc, 'span', { text: label }), ...(undo ? [undo] : []));
+        break;
+      }
       case 'routenote':
         node.replaceChildren(h(doc, 'span', { text: t(NOTE_KEY[item.action], { n: item.n }) }));
         break;

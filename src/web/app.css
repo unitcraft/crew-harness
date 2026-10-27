@@ -1180,6 +1180,8 @@ input[aria-invalid="true"] { border-color: var(--danger); }
 .rsub-more:hover, .rsub-more[aria-expanded="true"] { color: var(--fg); }
 .rsub-menu { position: absolute; top: 30px; right: 0; z-index: 30; min-width: 220px; padding: 6px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); box-shadow: 0 8px 28px color-mix(in srgb, var(--fg) 14%, transparent); font-size: 14px; }
 .item-routenote { font-size: 12px; color: var(--fg-muted); }
+.item-autoext { font-size: 12px; color: var(--fg-muted); }
+.item-autoext .link-btn { margin-left: 8px; }
 
 /* ---- расход токенов хода (задача 192): приглушённая моноширинная строка под ответом агента ---- */
 .item-usage { margin: -4px 0 6px; color: var(--fg-muted); font-family: var(--font-mono); font-size: 12px; line-height: 1.5; }

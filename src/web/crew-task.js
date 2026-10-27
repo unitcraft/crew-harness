@@ -51,6 +51,8 @@ export function parseCrewTask(input) {
     confirmWord: str(src.confirm_word),
     overWord: str(src.over_word),
     candidates: num(src.candidates),
+    // дополнения открытых задач, применённые сразу (задача 192.7): серые строки ленты с кнопкой «Отменить»
+    extensions: (Array.isArray(src.extensions) ? src.extensions : []).filter(isObject).map((x) => ({ id: num(x.id), task: num(x.task), title: str(x.title), text: str(x.text), at: num(x.at), undone: x.undone === true })).filter((x) => x.id > 0),
     // открытые задачи, к которым можно отнести работу: дочерняя задача эпика K (любая открытая задача становится эпиком с первой дочерней) или «Дополнить K»
     targets: (Array.isArray(src.targets) ? src.targets : []).filter(isObject).map((x) => ({ number: num(x.number), title: str(x.title), session: str(x.session), epic: x.epic === true })).filter((x) => x.number > 0),
   };
@@ -63,6 +65,8 @@ export const crewSignal = Object.freeze({
   // opts: { mode: 'new' | 'child' | 'epic' | 'extend', target: номер задачи, agent: семья агента сессии новой задачи }
   prop: (id, action, opts = {}) => ({ kind: 'route_prop', input: { id, action: String(action), ...(opts.mode ? { mode: opts.mode, target: opts.target || 0 } : {}), ...(opts.agent ? { agent: opts.agent } : {}) } }),
   recognize: () => ({ kind: 'route_recognize', input: {} }),
+  // «Отменить» у серой строки «Дополнено в задачу K»: убрать раздел из message.md и отозвать требование у агента задачи
+  extUndo: (id) => ({ kind: 'route_ext_undo', input: { id } }),
   childrenMerge: () => ({ kind: 'route_children_merge', input: {} }),
   // items: [{ id, action: 'work' | 'discuss' | 'forget', mode?, target?, agent? }] — вся таблица кандидатов одним сигналом
   apply: (items) => ({ kind: 'route_apply', input: { items: items.map((x) => ({ id: x.id, action: x.action, ...(x.action === 'work' ? { mode: x.mode || 'new', target: x.target || 0 } : {}), ...(x.action === 'work' && x.agent ? { agent: x.agent } : {}) })) } }),

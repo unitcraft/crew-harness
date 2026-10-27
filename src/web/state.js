@@ -229,7 +229,13 @@ function apply(session, event) {
       // строки ленты «подзадача N: новая / дополнена» — по смене состояния задачи (routes.js, subtaskNotes)
       const notes = subtaskNotes(session.routeState.task, routeState.task, routeState.stepless)
         .map((x) => ({ role: 'route_note', key: `rn:${event.id}:${x.n}`, n: x.n, action: x.action }));
-      return { ...session, route: routeState.route, routeState, routeStep: event.step, messages: notes.length ? [...session.messages, ...notes] : session.messages };
+      // серые строки «Дополнено в задачу K» — по одной на каждое применённое сразу дополнение (задача 192.7); отмена меняет только флаг в routeState
+      const known = new Set(session.messages.map((m) => m.key));
+      const exts = routeState.crew.extensions
+        .filter((x) => !known.has(`ae:${x.id}`))
+        .map((x) => ({ role: 'auto_extend', key: `ae:${x.id}`, id: x.id }));
+      const added = [...notes, ...exts];
+      return { ...session, route: routeState.route, routeState, routeStep: event.step, messages: added.length ? [...session.messages, ...added] : session.messages };
     }
     case 'session_renamed': {
       // владелец переименовал сессию в заголовке (задача 192): последнее имя журнала и есть имя
