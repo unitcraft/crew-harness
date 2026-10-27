@@ -140,3 +140,19 @@ test('без списка и карточек остаётся только по
   const withCands = { id: 's3', routeState: parseRouteState({ route: 'interactive', candidates: 2, max_active: 3, active: 1 }) };
   assert.match(ui.panel(withCands).textContent, /Кандидаты: 2/);
 });
+
+test('панель: подзадачи из списка агента видны и в интерактивном режиме; старый журнал сообщений остаётся счётчиком', async () => {
+  const { showSubtasks } = await import('../routes.js');
+  const subs = [{ n: 1, title: 'А', state: 'running', done: 0, total: 0, touches: ['a.txt'] }, { n: 2, title: 'Б', state: 'waits', waits_for: 1, done: 0, total: 0 }];
+  const crewTask = { id: '001-x', number: '001', title: 'А', subtasks: subs, crew: true };
+  const made = parseRouteState({ route: 'interactive', task: crewTask });
+  assert.equal(showSubtasks(made), true);
+  assert.equal(made.task.subtasks[1].state, 'waits');
+  assert.equal(made.task.subtasks[1].waitsFor, 1);
+  assert.deepEqual(made.task.subtasks[0].touches, ['a.txt']);
+  assert.equal(showSubtasks(parseRouteState({ route: 'interactive', task: { ...crewTask, crew: false } })), false);
+  const { subWaitsText } = await import('../crew-task.js');
+  assert.equal(subWaitsText(made.task.subtasks[1]), 'ждёт задачу 1');
+  assert.equal(subWaitsText({ state: 'waits', waitsFor: 0 }), 'ждёт места под лимитом');
+  assert.equal(subWaitsText(made.task.subtasks[0]), '');
+});

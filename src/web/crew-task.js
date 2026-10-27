@@ -122,5 +122,11 @@ export function wordHint(p, crew) {
   return t('crewtask.word', { word: crew.confirmWord });
 }
 
+/** Что стоит в строке подзадачи, которая ждёт: другую подзадачу или место под лимитом (иначе пусто). */
+export function subWaitsText(sub) {
+  if (sub.state !== 'waits') return '';
+  return sub.waitsFor > 0 ? t('crewtask.waits_for', { n: sub.waitsFor }) : t('crewtask.waits_queue');
+}
+
 /** Видна ли кнопка «Распознать задачи»: в сессии, не в черновике. */
 export const recognizeShown = (session) => Boolean(session) && !session.draft;

@@ -394,6 +394,9 @@ export const S = Object.freeze({
   'route.sub_planned': 'в плане',
   'route.sub_running': 'в работе',
   'route.sub_done': 'готова',
+  'route.sub_waits': 'ждёт',
+  'crewtask.waits_for': 'ждёт задачу {n}',
+  'crewtask.waits_queue': 'ждёт места под лимитом',
   'route.sub_items_empty': 'Чекбоксов в прогрессе пока нет',
 
   // ---- диалог разрешения

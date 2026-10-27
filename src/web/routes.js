@@ -22,14 +22,14 @@ export const ROUTES = Object.freeze([
 ]);
 
 export const STEP_STATES = Object.freeze(['pending', 'running', 'done', 'skipped']);
-export const SUBTASK_STATES = Object.freeze(['planned', 'running', 'done']);
+export const SUBTASK_STATES = Object.freeze(['planned', 'running', 'done', 'waits']);
 export const TASK_STATES = Object.freeze(['active', 'finishing', 'ready', 'done']);
 
 export const STEP_STATE_KEY = Object.freeze({
   pending: 'route.step_pending', running: 'route.step_running', done: 'route.step_done', skipped: 'route.step_skipped',
 });
 export const SUBTASK_STATE_KEY = Object.freeze({
-  planned: 'route.sub_planned', running: 'route.sub_running', done: 'route.sub_done',
+  planned: 'route.sub_planned', running: 'route.sub_running', done: 'route.sub_done', waits: 'route.sub_waits',
 });
 
 /** Значки шагов из встроенного спрайта: ⏳ ожидает, ▶ выполняется, ✓ готово, ⊘ пропущен. */
@@ -81,6 +81,10 @@ function parseSubtask(raw, index) {
     merged: raw.merged === true,
     mergedInto: refText(raw.merged_into),
     parallel: raw.parallel === true,
+    // задача 192.2: подзадача ждёт другую (waitsFor) или место под лимитом (queued); файлы, которые она затронет
+    waitsFor: num(raw.waits_for),
+    queued: raw.queued === true,
+    touches: Array.isArray(raw.touches) ? raw.touches.filter((x) => typeof x === 'string') : [],
     // конфликт слияния решает агент (merging); needs_owner — true или текст: без решения владельца дальше не идти
     merging: raw.merging === true || raw.state === 'merging',
     needsOwner: raw.needs_owner === true || (typeof raw.needs_owner === 'string' && raw.needs_owner.length > 0),
@@ -141,6 +145,8 @@ function parseTask(raw) {
     state: TASK_STATES.includes(raw.state) ? raw.state : 'active',
     unmergedCommits: num(raw.unmerged_commits),
     finish: Boolean(raw.finish),
+    // задача 192.2: подзадачи завёл владелец по списку агента (у каждой свой message.N.md), а не журнал сообщений
+    crew: raw.crew === true,
     stale: raw.stale === true,
     idleDays: num(raw.idle_days),
     tests: parseTests(raw.tests),
@@ -200,7 +206,7 @@ export function stripActions(state) {
 }
 
 /** В режиме без шагов подзадач нет: сообщения владельца — журнал сообщений задачи, а не подзадачи с чек-листом. */
-export const showSubtasks = (state) => Boolean(state) && state.stepless !== true;
+export const showSubtasks = (state) => Boolean(state) && (state.stepless !== true || Boolean(state.task && state.task.crew));
 
 /** Доля подзадачи в процентах (0–100). */
 export function subtaskPercent(sub) {

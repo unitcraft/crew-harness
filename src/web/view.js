@@ -26,6 +26,7 @@ import { createAttachUi } from './attach-ui.js';
 import { createViewer } from './viewer-ui.js';
 import { createMachinesPanel } from './machines-ui.js';
 import { createCrewTaskUi } from './crew-task-ui.js';
+import { subWaitsText } from './crew-task.js';
 import { labelOf } from './labels-ru.js';
 import {
   createForm, selectOption, setOtherText, setCursor, moveCursor, setActive, isAnswered, nextUnanswered, canSubmit,
@@ -1693,7 +1694,7 @@ export function createView(doc, refs, deps) {
       h(doc, 'span', { class: 'rsub-title', text: t('route.sub_title', { n: sub.n, title: sub.title }) }),
       sub.merged ? h(doc, 'span', { class: 'rsub-merged', text: t('route.sub_merged') }) : false,
       sub.merging ? h(doc, 'span', { class: 'rsub-merging', text: t('route.sub_merging') }) : false,
-      h(doc, 'span', { class: 'rsub-count', text: subtaskProgressText(sub) }));
+      h(doc, 'span', { class: 'rsub-count', text: subWaitsText(sub) || subtaskProgressText(sub) }));
     const items = sub.items.length === 0
       ? [h(doc, 'li', { class: 'rsub-item muted', text: t('route.sub_items_empty') })]
       : sub.items.map((x) => h(doc, 'li', { class: 'rsub-item', 'data-done': String(x.done) },

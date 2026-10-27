@@ -55,7 +55,7 @@ test('parseRouteState: чистит payload; у interactive шагов нет, �
   assert.deepEqual(rs.task.subtasks[0].items, [{ text: 'x', done: true }]);
   assert.deepEqual(rs.task.subtasks[1], {
     n: 2, title: 'p', state: 'planned', done: 0, total: 0, items: [], branch: '', worktree: '', merged: false, mergedInto: '',
-    parallel: false, merging: false, needsOwner: false, ownerText: '',
+    parallel: false, waitsFor: 0, queued: false, touches: [], merging: false, needsOwner: false, ownerText: '',
   });
 });
 
