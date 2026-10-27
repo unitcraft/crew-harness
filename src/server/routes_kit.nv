@@ -352,7 +352,7 @@ fn rk_git(dir str, args []str) Proc -> bool {
     git_run(dir, all).ok
 }
 
-/// A repository for the scenarios: `<root>/repo` on `main` with one commit and the folder `doc/tasks`; the trees of the tasks go to `<root>/worktrees`.
+/// A repository for the scenarios: `<root>/repo` on `main` with one commit and the folder `doc/tasks`; the trees of the tasks go beside it, to `<root>` (the setting "папка деревьев" of a project is empty).
 fn rk_repo(root str) Proc -> str {
     ro repo = "${root}/repo"
     ro made = write_file("${repo}/doc/tasks/.keep", "")
@@ -393,14 +393,14 @@ export fn scenario_route_tree(settings ServerSettings) Proc Detach Time Net Fs O
     c.expect(id.starts_with("001-"), "the first task of the repository is 001: ${id}")
     c.expect(jtext(task, "branch") == "task/${id}", "the branch of the task: ${jtext(task, "branch")}")
     c.expect(tree.byte_len() > 0 && dir_there(tree), "the tree of the task is made: ${tree}")
-    c.expect(tree.contains("/worktrees/repo-${id}"), "the tree is next to the repository, in worktrees: ${tree}")
+    c.expect(tree.contains("/repo-${id}"), "the tree is next to the repository: ${tree}")
     c.expect(path_there("${tree}/doc/tasks/${id}/task/message.1.md"), "the files of the task are in the tree")
     c.expect(!path_there("${settings.workdir}/doc/tasks/${id}"), "the repository itself has no folder of the task")
     c.expect(jtext(task, "state") == "active", "the task is active")
     c.expect(!((task.get("finish") ?? JsonValue.null()).bool() ?? false), "a tree with no work is not offered to finish (task 192)")
     ro lines = rig.lines_for(1)
     ro answer = answer_of(lines, rk_last_turn(lines)).replace("\\", "/")
-    c.expect(answer.contains("/worktrees/repo-${id}"), "the agent works in the tree: ${answer}")
+    c.expect(answer.contains("/repo-${id}"), "the agent works in the tree: ${answer}")
     c.expect(rk_git(settings.workdir, ["diff", "--quiet"]) && git_run(settings.workdir, ["status", "--porcelain"]).text.byte_len() == 0, "the repository is clean")
 
     // nothing was done in the tree: closing the task removes the tree

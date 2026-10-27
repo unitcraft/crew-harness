@@ -43,7 +43,14 @@ fn Hub @ct_running_old(s Dialog) -> []RunSub {
 /// The state of the mode for the page with the cards and the numbers of the tasks in work (called from `route_state_text`).
 fn Hub @ct_view(at int, base str) -> str {
     ro s = @sessions[at]
-    @cs_view(at, crew_view_extend(base, s.rt.props, @ct_lines(s), @cs_active_all(), @settings.route_max_active, @settings.route_confirm_word, @settings.route_over_limit_word))
+    hints_view_extend(@cs_view(at, crew_view_extend(base, s.rt.props, @ct_lines(s), @cs_active_all(), @settings.route_max_active, @settings.route_confirm_word, @settings.route_over_limit_word)), s.rt.hints)
+}
+
+// A service hint to the agent is remembered for the panel "Машины" (not in the feed, not in the journal).
+fn Hub mut @hint_add(at int, kind str, text str) -> () {
+    mut s = @sessions[at]
+    s.rt.hints = hints_added(s.rt.hints, now_millis(), kind, text)
+    @sessions[at] = s
 }
 
 // The message of the owner and its pictures, kept for the card that the agent may propose in this turn.
@@ -95,7 +102,7 @@ fn Hub mut @ct_kick(at int, n int, note str) -> () {
 
 // ----- the call of the tool -----
 
-// A proposal whose target is not there (the task to extend, the parent, the epic) is a task of its own.
+// A proposal whose target is not there (the task to extend, the epic of a child) is a task of its own.
 fn Hub @ct_fix_kind(at int, p0 Proposal) -> Proposal {
     mut p = proposal_copy(p0)
     ro s = @sessions[at]
@@ -107,8 +114,8 @@ fn Hub @ct_fix_kind(at int, p0 Proposal) -> Proposal {
             p.extends = 0
         }
     }
-    if p.kind == "subtask" && !(@settings.route_children && @cs_find_number(p.parent) >= 0) { p.kind = "new" }
-    if p.kind == "epic_task" && !(@settings.route_children && @cs_find_number(p.epic) >= 0) { p.kind = "new" }
+    if p.kind == "child" && !(@settings.route_children && @cs_find_number(p.epic) >= 0) { p.kind = "new" }
+    if p.kind == "epic" && !@settings.route_children { p.kind = "new" }
     p
 }
 
@@ -337,12 +344,12 @@ fn Hub mut @ct_answer(trace str, id int, action str, agent str, mode str, target
     mut p = proposal_copy(@sessions[at].rt.props[k])
     // the family for the child session chosen on the card (an unknown one is ignored)
     if agent.byte_len() > 0 && @agent_ids().contains(agent) { p.agent = agent }
-    // the way chosen on the card: a task of its own, a subtask of the task `target`, a task of the epic `target`, an addition to the task `target`
-    if mode == "new" || mode == "subtask" || mode == "epic_task" || mode == "extend" {
-        p.kind = mode
-        if mode == "subtask" { p.parent = target }
-        if mode == "epic_task" { p.epic = target }
-        if mode == "extend" { p.extends = target }
+    // the way chosen on the card: a task of its own, a child task of the epic `target`, an epic, an addition to the task `target` (the old words subtask / epic_task are a child)
+    ro way = if mode == "subtask" || mode == "epic_task" { "child" } else { mode }
+    if way == "new" || way == "child" || way == "epic" || way == "extend" {
+        p.kind = way
+        if way == "child" { p.epic = target }
+        if way == "extend" { p.extends = target }
         p = @ct_fix_kind(at, p)
         @ct_store(at, p)
     }
@@ -425,6 +432,7 @@ fn Hub mut @ct_pump(at int) Proc Detach Time -> () {
     @sessions[at] = d
     ro prelude = @route_message_prelude(at)
     ro text = if prelude.byte_len() > 0 { "${prelude}\n\n${note}" } else { note }
+    @hint_add(at, "решение по задаче", note)
     ro reason = @route_agent_turn(at, if n > 0 { "Решение по задаче (подзадача ${n})" } else { "Решение по задаче" }, text)
     if reason.byte_len() > 0 {
         @tell_error(0, me.id, me.engine.step_number(), "", "решение по задаче не передано агенту: ${reason}")
@@ -494,31 +502,28 @@ fn Hub mut @ct_recognize(trace str) Proc Detach Time -> () {
         if p.listed && p.choice == "discuss" { cands.push("- «${p.title}»") }
     }
     ro request = recognize_request(tasks_hint(s.rt.task_dir, @ct_lines(s)), cands)
+    @hint_add(at, "Распознать задачи", request)
     ro reason = @route_agent_turn(at, "Распознать задачи", request)
     if reason.byte_len() > 0 { @tell_error(0, trace, s.engine.step_number(), "", "распознавание не начато: ${reason}") }
 }
 
-/// The quick answer of the owner to the list ("1, 2, 4 — в работу; 3 — обсудить; 5 — забыть").
-fn Hub mut @ct_quick(trace str, text str) Proc Detach Time -> () {
+/// The button "Применить" of the table of the candidates (task 192.5): the answer of the owner to every row of the list at once. `items` are the rows
+/// `{id, action: "work" | "discuss" | "forget", mode: "new" | "child" | "epic" | "extend", target, agent}`; a row that is not there any more is skipped, the rows go one after another.
+fn Hub mut @ct_apply(trace str, items []JsonValue) Proc Detach Time -> () {
     ro at = @find(trace)
     if at < 0 { return }
-    mut ids = []int.new()
-    for p in @sessions[at].rt.props { if p.listed { ids.push(p.id) } }
-    match parse_quick(text, ids.len()) {
-        Err(reason) => {
-            @ct_note(at, "▸ ${reason}")
-        }
-        Ok(choices) => {
-            for c in choices {
-                ro k = proposal_at(@sessions[at].rt.props, ids[c.n - 1])
-                if k >= 0 {
-                    ro p = @sessions[at].rt.props[k]
-                    mut action = "discuss"
-                    if c.action == "work" { action = if p.kind == "extend" && p.extends > 0 { "extend" } else { "start" } }
-                    if c.action == "forget" { action = "forget" }
-                    @ct_do(at, p, action)
-                }
-            }
+    for v in items {
+        ro o = v.object() ?? JsonObject.new()
+        ro id = jint(o, "id")
+        ro word = jtext(o, "action")
+        ro k = proposal_at(@sessions[at].rt.props, id)
+        if k < 0 { continue }
+        if word == "work" {
+            @ct_answer(trace, id, "start", jtext(o, "agent"), jtext(o, "mode"), jint(o, "target"))
+        } else if word == "forget" {
+            @ct_answer(trace, id, "forget", "", "", 0)
+        } else {
+            @ct_answer(trace, id, "discuss", "", "", 0)
         }
     }
 }

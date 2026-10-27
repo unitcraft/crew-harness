@@ -1,4 +1,4 @@
-// crew_task_test.nv - task 192.2: the pure part of `crew_task`: the code word, the arguments of the tools, the quick answer to the list, the clash of the files, the limit,
+// crew_task_test.nv - task 192.2: the pure part of `crew_task`: the code word, the arguments of the tools, the clash of the files, the limit,
 // the files of a subtask, the view for the page, and the tool calls over `mcp_handle_for`.
 module crew_harness.server
 
@@ -146,61 +146,6 @@ test "crew_task_list: the call gives the items, an empty list is allowed, a wron
     }
 }
 
-fn ct_quick_ok(text str, count int) -> []Choice {
-    match parse_quick(text, count) {
-        Ok(c) => c
-        Err(e) => panic("not understood: ${text}: ${e}")
-    }
-}
-
-fn ct_action_of(choices []Choice, n int) -> str {
-    for c in choices { if c.n == n { return c.action } }
-    "none"
-}
-
-test "quick answer: the example of the owner" {
-    ro c = ct_quick_ok("1, 2, 4 — в работу, 3 — продолжить обсуждение, 5 — забыть", 5)
-    assert(c.len() == 5)
-    assert(ct_action_of(c, 1) == "work")
-    assert(ct_action_of(c, 2) == "work")
-    assert(ct_action_of(c, 4) == "work")
-    assert(ct_action_of(c, 3) == "discuss")
-    assert(ct_action_of(c, 5) == "forget")
-}
-
-test "quick answer: semicolons, ranges, English words, other order" {
-    ro c = ct_quick_ok("1-3 work; 4 discuss; 5 forget", 5)
-    assert(ct_action_of(c, 1) == "work")
-    assert(ct_action_of(c, 3) == "work")
-    assert(ct_action_of(c, 4) == "discuss")
-    assert(ct_action_of(c, 5) == "forget")
-    ro d = ct_quick_ok("1 и 2 в работу\n3 забыть", 3)
-    assert(d.len() == 3)
-    assert(ct_action_of(d, 3) == "forget")
-    ro e = ct_quick_ok("2 – обсудить дальше", 3)
-    assert(e.len() == 1)
-    assert(ct_action_of(e, 2) == "discuss")
-}
-
-test "quick answer: what is not understood applies nothing and says the format" {
-    match parse_quick("1, 2 что-нибудь", 3) {
-        Ok(c) => panic("understood a nonsense")
-        Err(e) => assert(e.contains("Формат"))
-    }
-    match parse_quick("7 в работу", 3) {
-        Ok(c) => panic("an item that is not there")
-        Err(e) => assert(e.contains("7"))
-    }
-    match parse_quick("1, 2", 3) {
-        Ok(c) => panic("numbers without a decision")
-        Err(e) => assert(e.contains("Формат"))
-    }
-    match parse_quick("", 3) {
-        Ok(c) => panic("an empty answer")
-        Err(e) => assert(e.contains("Формат"))
-    }
-}
-
 test "crew_task: files of two works overlap by file and by folder; no files while something runs is unknown; no clash with nothing running" {
     ro running = [RunSub { n: 1, touches: ["src/web/view.js"] }, RunSub { n: 2, touches: ["doc/"] }]
     ro none = clash_of(["src/server/hub.nv"], running)
@@ -319,4 +264,27 @@ test "crew_task: the agent works in the tree of the subtask it was told about, e
     assert(ct_get(ct_get(view, "task"), "crew").bool() == Some(true))
     rt.apply("route_task", "{\"op\":\"new\"}")
     assert(!rt.by_crew)
+}
+
+test "crew_task: the kinds are new, extend, child and epic; the old subtask and epic_task are read as a child of the epic" {
+    match proposal_of_text("{\"kind\":\"child\",\"epic\":232,\"title\":\"A\"}") {
+        Ok(p) => assert(p.kind == "child" && p.epic == 232)
+        Err(e) => panic(e)
+    }
+    match proposal_of_text("{\"kind\":\"subtask\",\"parent\":7,\"title\":\"A\"}") {
+        Ok(p) => assert(p.kind == "child" && p.epic == 7)
+        Err(e) => panic(e)
+    }
+    match proposal_of_text("{\"kind\":\"epic_task\",\"epic\":9,\"title\":\"A\"}") {
+        Ok(p) => assert(p.kind == "child" && p.epic == 9)
+        Err(e) => panic(e)
+    }
+    match proposal_of_text("{\"kind\":\"epic\",\"title\":\"Big\"}") {
+        Ok(p) => assert(p.kind == "epic" && p.epic == 0)
+        Err(e) => panic(e)
+    }
+    match proposal_of_text("{\"kind\":\"whatever\",\"title\":\"A\"}") {
+        Ok(p) => assert(p.kind == "new")
+        Err(e) => panic(e)
+    }
 }

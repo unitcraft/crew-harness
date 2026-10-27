@@ -36,7 +36,7 @@ fn rk_sub_state(st JsonObject, at int) -> str => jtext(rk_sub(st, at), "state")
 
 fn rk_state(rig Rig) -> JsonObject => rk_last(rig.all_lines_for(1), "route_state")
 
-/// The agent recognises the works by the button, the owner answers with the buttons, the quick answer and the code words: a task is made only then; a work that touches the files of a running one
+/// The agent recognises the works by the button, the owner answers with the table of the candidates (one button "Применить") and the code words: a task is made only then; a work that touches the files of a running one
 /// waits for it; over the limit the word "сверх" or the queue; "Забыть" is remembered; a work that extends a task is added to its file.
 export fn scenario_route_recognize(settings ServerSettings) Proc Detach Time Net Fs Os -> str {
     mut c = kit_check()
@@ -57,8 +57,8 @@ export fn scenario_route_recognize(settings ServerSettings) Proc Detach Time Net
     c.expect(rig.list_tasks("s-r7", "t1", [rk_item("new", "Работа А", 0, ["src/a.js"]), rk_item("new", "Работа Б", 0, ["src/b.js"]), rk_item("new", "Работа В", 0, ["doc/"])], "Работа А"), "the list of the agent is shown as cards")
     ro st1 = rk_state(rig)
     c.expect(rk_cards(st1).len() == 3 && rk_task_is_null(st1), "three rows and no task before the answer")
-    // the quick answer: 1 into work, 3 to be discussed
-    rig.page(1, "route_quick", "s-r7", "{\"text\":\"1 в работу; 3 обсудить дальше\"}")
+    // the table of the candidates, the button "Применить": А into work, В to be discussed
+    rig.page(1, "route_apply", "s-r7", "{\"items\":[{\"id\":${rk_card_id(st1, "Работа А")},\"action\":\"work\",\"mode\":\"new\"},{\"id\":${rk_card_id(st1, "Работа В")},\"action\":\"discuss\"}]}")
     rig.run(2500)
     ro st2 = rk_state(rig)
     ro id = jtext(rk_task(st2), "id")
@@ -69,16 +69,11 @@ export fn scenario_route_recognize(settings ServerSettings) Proc Detach Time Net
     c.expect(rk_number(st2, "candidates") == 1 && rk_cards(st2).len() == 2, "one candidate and one open row")
     c.expect(kit_with(rig.lines_for(1), "Решение по задаче") >= 1, "the agent is told the decision by a service turn")
     // forget: the work goes and is not offered again
-    rig.page(1, "route_quick", "s-r7", "{\"text\":\"1 забыть\"}")
+    rig.page(1, "route_apply", "s-r7", "{\"items\":[{\"id\":${rk_card_id(rk_state(rig), "Работа Б")},\"action\":\"forget\"}]}")
     rig.run(300)
     c.expect(rk_card_state(rk_state(rig), "Работа Б") == "none", "the forgotten work is gone")
     ro again = rig.list_tasks("s-r7", "t2", [rk_item("new", "Работа Б", 0, ["src/b.js"])], "Работа Б")
     c.expect(!again, "a forgotten work is not offered again")
-    // a quick answer that is not understood applies nothing
-    rig.page(1, "route_quick", "s-r7", "{\"text\":\"сделай что-нибудь\"}")
-    c.expect(rig.until("Формат", 5000), "a quick answer that is not understood is answered with the format")
-    c.expect(rk_array(rk_task(rk_state(rig)), "subtasks").len() == 1, "and nothing is applied")
-
     // the single proposal and the code word: the word answers the card and is not sent to the agent
     rig.page(1, "user_message", "s-r7", rk_tasktool_page("t3", rk_item("new", "Кодовое", 0, ["z.txt"])))
     c.expect(rig.until(KIT_DONE, 20000), "the agent proposes a work by crew_task")

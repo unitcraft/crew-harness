@@ -1,8 +1,8 @@
 // crew_task_list.nv - task 192.2: the recognition of the tasks by the button "Распознать задачи" (the main way); the pure part.
 //
 // The owner talks with the agent, then presses the button. The hub asks the agent (a hidden note) to look through the talk and list the real works that were discussed and are not in the tasks yet:
-// the agent calls `crew_task_list`. The list becomes one card in the feed: a row for each work with the buttons "В работу", "Обсудить дальше", "Забыть", and a field for a quick answer
-// ("1, 2, 4 — в работу; 3 — обсудить дальше; 5 — забыть"). This file: the tool, the arguments, the parser of the quick answer, the text of the request to the agent.
+// the agent calls `crew_task_list`. The list becomes one card in the feed: a table of the candidates, a switch "В работу / Обсудить / Забыть" and the way ("Способ") in each row and one button "Применить"
+// (task 192.5; the quick text answer is gone). This file: the tool, the arguments, the text of the request to the agent.
 module crew_harness.server
 
 import std.encoding.json.{Json, JsonValue, JsonObject}
@@ -12,7 +12,7 @@ export const CREW_TASK_LIST_TOOL = "crew_task_list"
 
 /// The description of the tool for `tools/list`.
 export fn crew_task_list_tool_json() -> JsonValue {
-    ro text = "{\"name\":\"crew_task_list\",\"description\":\"Call it ONLY when the hub asked you to recognise the tasks (a note that starts with [crew] Распознай задачи). Give the list of the real works on the files of the project (code, documents, tests, settings) that were discussed in this conversation and are not in the tasks of the session yet. A question, a talk or an explanation is not a work. One item for one work; by default a work is a task of its own (kind=new); if it adds to a task in work, kind=extend and its number in extends; only if it is explicitly a part of a task, kind=subtask and the number in parent; a task of an epic - kind=epic_task and the number of the epic in epic. An empty list is allowed: nothing was found.\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"tasks\":{\"type\":\"array\",\"description\":\"The recognised works.\",\"items\":{\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"integer\",\"description\":\"The number in this list, from 1.\"},\"kind\":{\"type\":\"string\",\"enum\":[\"new\",\"subtask\",\"epic_task\",\"extend\"],\"description\":\"new (the default) - a task of its own; subtask - explicitly a part of the task in parent; epic_task - a task of the epic in epic; extend - adds to the task in extends.\"},\"parent\":{\"type\":\"integer\",\"description\":\"For kind=subtask: the number of the task it is a part of.\"},\"epic\":{\"type\":\"integer\",\"description\":\"For kind=epic_task: the number of the epic.\"},\"title\":{\"type\":\"string\",\"description\":\"A short title (up to 60 characters).\"},\"summary\":{\"type\":\"string\",\"description\":\"What is to be done, in a few lines: it becomes the text of message.md of the task.\"},\"extends\":{\"type\":\"integer\",\"description\":\"For kind=extend: the number of the task.\"},\"touches\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"description\":\"The files and folders the work will change.\"},\"note\":{\"type\":\"string\",\"description\":\"One line: why it is a work, or what is still unclear.\"}},\"required\":[\"title\",\"summary\"]}}},\"required\":[\"tasks\"]}}"
+    ro text = "{\"name\":\"crew_task_list\",\"description\":\"Call it ONLY when the hub asked you to recognise the tasks (a note that starts with [crew] Распознай задачи). Give the list of the real works on the files of the project (code, documents, tests, settings) that were discussed in this conversation and are not in the tasks of the session yet. A question, a talk or an explanation is not a work. One item for one work; by default a work is a task of its own (kind=new); if it adds to a task in work, kind=extend and its number in extends; if it is explicitly a child task of an epic (any open task of the list may be an epic), kind=child and the number of the epic in epic; a big work that will have child tasks - kind=epic. An empty list is allowed: nothing was found.\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"tasks\":{\"type\":\"array\",\"description\":\"The recognised works.\",\"items\":{\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"integer\",\"description\":\"The number in this list, from 1.\"},\"kind\":{\"type\":\"string\",\"enum\":[\"new\",\"child\",\"epic\",\"extend\"],\"description\":\"new (the default) - a task of its own; child - a child task of the epic in epic; epic - a big work with child tasks; extend - adds to the task in extends.\"},\"epic\":{\"type\":\"integer\",\"description\":\"For kind=child: the number of the epic.\"},\"title\":{\"type\":\"string\",\"description\":\"A short title (up to 60 characters).\"},\"summary\":{\"type\":\"string\",\"description\":\"What is to be done, in a few lines: it becomes the text of message.md of the task.\"},\"extends\":{\"type\":\"integer\",\"description\":\"For kind=extend: the number of the task.\"},\"touches\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"description\":\"The files and folders the work will change.\"},\"note\":{\"type\":\"string\",\"description\":\"One line: why it is a work, or what is still unclear.\"}},\"required\":[\"title\",\"summary\"]}}},\"required\":[\"tasks\"]}}"
     mparse(text)
 }
 
@@ -81,98 +81,8 @@ export fn proposals_of_marker(answer str) -> Option[[]Proposal] {
 /// The hidden note with which the hub asks the agent to recognise the tasks. `candidates` are the lines of the works that are being discussed already (not to be repeated), `known` the tasks of the session.
 export fn recognize_request(known str, candidates []str) -> str {
     mut parts = []str.new()
-    parts.push("[crew] Распознай задачи. Просмотри весь этот разговор и перечисли реальные работы над файлами проекта (код, документы, тесты, настройки), которые обсуждались и ещё не оформлены задачами. Вызови инструмент crew_task_list (сервер crew) один раз со списком: у каждой работы title, summary (что сделать, для message.md), touches (файлы и папки), note (одна строка). Вопросы, беседа и объяснения — не работы. По умолчанию работа — самостоятельная задача (kind=new). Если она дополняет задачу в работе — kind=extend и её номер в extends; если явно часть такой задачи — kind=subtask и parent=<номер>; если это задача эпика — kind=epic_task и epic=<номер эпика>. Файлы проекта не меняй. Если инструмента нет, напиши в конце ответа одну строку [[crew_task_list]] {\"tasks\":[...]} с теми же полями.")
+    parts.push("[crew] Распознай задачи. Просмотри весь этот разговор и перечисли реальные работы над файлами проекта (код, документы, тесты, настройки), которые обсуждались и ещё не оформлены задачами. Вызови инструмент crew_task_list (сервер crew) один раз со списком: у каждой работы title, summary (что сделать, для message.md), touches (файлы и папки), note (одна строка). Вопросы, беседа и объяснения — не работы. По умолчанию работа — самостоятельная задача (kind=new). Если она дополняет задачу в работе — kind=extend и её номер в extends; если явно дочерняя задача какой-то открытой задачи (любая открытая задача может быть эпиком) — kind=child и epic=<номер>; если работа большая и сама разобьётся на дочерние задачи — kind=epic. Файлы проекта не меняй. Если инструмента нет, напиши в конце ответа одну строку [[crew_task_list]] {\"tasks\":[...]} с теми же полями.")
     if known.byte_len() > 0 { parts.push(known) }
     if candidates.len() > 0 { parts.push("[crew] Эти работы уже в списке кандидатов (не повторяй их):\n${joined(candidates, "\n")}") }
     joined(parts, "\n\n")
-}
-
-// ----- the quick answer -----
-
-/// Choice: what the owner said of item `n` of the list: `work` (в работу), `discuss` (обсудить дальше), `forget` (забыть).
-export type Choice { n int, action str }
-
-fn ql_action(word str) -> str {
-    for w in ["работу", "работа", "работе", "делай", "делать", "начать", "старт", "go", "do", "work", "start", "yes", "да"] { if word == w { return "work" } }
-    for w in ["обсудить", "обсуждение", "обсуждать", "дальше", "позже", "потом", "discuss", "later", "keep", "talk"] { if word == w { return "discuss" } }
-    for w in ["забыть", "забудь", "забыто", "нет", "не", "forget", "drop", "skip", "no", "remove"] { if word == w { return "forget" } }
-    ""
-}
-
-fn ql_skip(word str) -> bool {
-    for w in ["в", "и", "to", "on", "in", "as", "and", "the", "это", "пункт", "пункты", "задачу", "item", "items", "продолжить", "continue"] { if word == w { return true } }
-    word.byte_len() == 0
-}
-
-// The numbers of a token: "3", "1-3" (a range), [] - it is not a number.
-fn ql_numbers(token str) -> []int {
-    mut out = []int.new()
-    mut cut = -1
-    mut at = 0
-    for c in token.chars() {
-        ro s = "${c}"
-        if (s == "-" || s == "–") && at > 0 { cut = at }
-        at += 1
-    }
-    if cut < 0 {
-        match token.to_int() {
-            Ok(n) => out.push(n)
-            Err(e) => ()
-        }
-        return out
-    }
-    ro dash = if token.contains("–") { "–" } else { "-" }
-    ro left = token.until(dash)
-    ro right = token.after(dash)
-    match left.to_int() {
-        Ok(a) => match right.to_int() {
-            Ok(b) => {
-                if b >= a && b - a < 50 {
-                    mut k = a
-                    while k <= b {
-                        out.push(k)
-                        k += 1
-                    }
-                }
-            }
-            Err(e) => ()
-        }
-        Err(e) => ()
-    }
-    out
-}
-
-/// The format of the quick answer, for the hint on a mistake.
-export const QUICK_FORMAT = "Формат: «1, 2, 4 — в работу; 3 — обсудить дальше; 5 — забыть» (номера через запятую или диапазоном 1-3; слова: в работу / обсудить / забыть, по-английски work / discuss / forget)."
-
-/// The quick answer ("1, 2, 4 — в работу, 3 — продолжить обсуждение, 5 — забыть") as the choices; or the reason it was not understood (then nothing is applied). `count` is the number of items in the list.
-export fn parse_quick(text str, count int) -> Result[[]Choice, str] {
-    mut out = []Choice.new()
-    mut pending = []int.new()
-    ro cleaned = text.replace(",", " ").replace(";", " ").replace(".", " ").replace("\n", " ")
-    for raw in cleaned.split_ascii_whitespace() {
-        ro word = word_key(raw)
-        if word.byte_len() == 0 { continue }
-        ro nums = ql_numbers(word)
-        if nums.len() > 0 {
-            for n in nums {
-                if n < 1 || n > count { return Err("В списке нет пункта ${n}. ${QUICK_FORMAT}") }
-                pending.push(n)
-            }
-            continue
-        }
-        ro action = ql_action(word)
-        if action.byte_len() > 0 {
-            if pending.len() > 0 {
-                for n in pending { out.push(Choice { n, action }) }
-                pending = []int.new()
-            }
-            continue
-        }
-        if ql_skip(word) { continue }
-        return Err("Не понял «${raw}». ${QUICK_FORMAT}")
-    }
-    if pending.len() > 0 { return Err("Для пункта ${pending[0]} не сказано, что делать. ${QUICK_FORMAT}") }
-    if out.len() == 0 { return Err("Нет ни одного номера с решением. ${QUICK_FORMAT}") }
-    Ok(out)
 }

@@ -8,6 +8,7 @@ module crew_harness.server
 
 import alula.engine.{Incoming, EventKind, Link}
 import crew_harness.acp.{AcpClient, AcpConfig, open_client_traced, acp_link}
+import crew_harness.projects.{projects_get}
 import std.encoding.json.{Json, JsonValue, JsonObject}
 
 const REVIEW_LIMIT_MS = 1200000
@@ -166,6 +167,16 @@ fn Hub @route_repo_dir(session str) -> str {
     @cwd_of(@sessions[at].folder)
 }
 
+// The folder of the trees of the project of the session (task 192.5, the setting "папка деревьев" of the project): "" - beside the main copy; a session with no project has no setting.
+fn Hub @route_trees(session str) -> str {
+    ro at = @find(session)
+    if at < 0 || @sessions[at].project_id.byte_len() == 0 { return "" }
+    match projects_get(@settings.data_dir, @sessions[at].project_id) {
+        Ok(p) => p.worktrees_dir
+        Err(f) => ""
+    }
+}
+
 fn Hub @route_make_task(session str, route str, text str, use_tree bool) Proc -> TaskMade {
     ro base = @route_repo_dir(session)
     ro repo = tk_is_repo(base)
@@ -185,7 +196,7 @@ fn Hub @route_make_task(session str, route str, text str, use_tree bool) Proc ->
     ro folder = "${number}-${slug}"
     mut tree = TkTree { ok: false, branch: "", worktree: "", base: "", text: "" }
     if want_tree {
-        tree = tk_task_tree(base, number, slug)
+        tree = tk_task_tree(base, number, slug, @route_trees(session))
         if !tree.ok { @say_log("the tree of the task ${folder} cannot be made: ${tree.text}") }
     }
     if tree.ok && tasks_here {
@@ -209,7 +220,7 @@ fn Hub mut @route_on_message(at int, text str) Proc Detach Time -> str {
     ro s0 = @sessions[at]
     // task 192.2: the mode "interactive" makes nothing by itself: a task appears when the owner confirms what the agent recognised (a button, the code word)
     if s0.rt.route == "interactive" {
-        // task 192.4: the first message of a session with the switch "Worktree" makes the tree `wip/<name>` (no task, no number)
+        // task 192.4: the first message of a session with the switch "Worktree" makes a tree on a detached head (no branch, no task, no number)
         @wip_start(at)
         return ""
     }
@@ -277,9 +288,15 @@ fn Hub mut @route_message_prelude(at int) Proc -> str {
     // task 192.2: the list of the tasks of the session, so that the agent can say that a work belongs to one of them
     ro tasks = tasks_hint(s.rt.task_dir, @ct_lines(s))
     mut parts = []str.new()
-    if text.byte_len() > 0 { parts.push(text) }
+    if text.byte_len() > 0 {
+        parts.push(text)
+        @hint_add(at, "инструкция режима", text)
+    }
     if hint.byte_len() > 0 { parts.push(hint) }
-    if tasks.byte_len() > 0 { parts.push(tasks) }
+    if tasks.byte_len() > 0 {
+        parts.push(tasks)
+        @hint_add(at, "список задач", tasks)
+    }
     joined(parts, "\n\n")
 }
 
@@ -362,7 +379,7 @@ fn Hub mut @route_attach_tree(at int) Proc Detach Time -> bool {
         @tell_error(0, s.id, s.engine.step_number(), "", "папка проекта не репозиторий git: дерево сделать нельзя")
         return false
     }
-    ro tree = tk_task_tree(base, s.rt.number, task_slug_of(s.rt.task_id))
+    ro tree = tk_task_tree(base, s.rt.number, task_slug_of(s.rt.task_id), @route_trees(s.id))
     if !tree.ok {
         @tell_error(0, s.id, s.engine.step_number(), "", "дерево задачи не создано: ${tree.text}")
         return false
@@ -1211,12 +1228,7 @@ fn Hub mut @route_merge(trace str) Proc Detach Time -> () {
         ro merged = @cs_merge(at)
         return
     }
-    // the parent goes to main last
-    ro held = @cs_block(s)
-    if held.len() > 0 {
-        @tell_error(0, trace, s.engine.step_number(), "", "не слиты подзадачи: ${joined(held, ", ")}")
-        return
-    }
+    // task 192.5: an epic goes to main at any moment; the children not merged yet are only named in the card ("не слиты: ..., останутся отдельно"), they never hold it
     // what the agent changed and did not commit goes into one commit (nothing changed - nothing to commit)
     ro auto = tk_autocommit(s.rt.worktree, s.rt.number, task_slug_of(s.rt.task_id))
     if auto.status == "error" {
@@ -1261,6 +1273,7 @@ fn Hub mut @route_publish_step(at int, mode str) Proc Detach Time -> () {
         me.rt.unmerged = 0
         @sessions[at] = me
         @rt_state(at, "done", "")
+        @cs_detach_kids(at)
         ro tail = if r.cleanup.byte_len() > 0 { "; дерево: ${r.cleanup}" } else { "" }
         @rt_note(at, "▸ задача ${s.rt.number} влита в main и запушена (${r.reason}). Основная копия: ${r.main_note}${tail}")
         @route_broadcast(at, false)

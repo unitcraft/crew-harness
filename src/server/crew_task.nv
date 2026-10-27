@@ -102,7 +102,7 @@ export fn is_code_word(text str, word str) -> bool {
 
 /// The description of the tool for `tools/list`.
 export fn crew_task_tool_json() -> JsonValue {
-    ro text = "{\"name\":\"crew_task\",\"description\":\"Call it when the message of the user is REAL WORK on the files of the project (code, documents, tests, settings): something is to be changed, written or built. Do NOT call it for a question, a talk, an explanation, a look at the code or a one-word answer. The hub then shows the user a card and the user confirms (new task) or refuses; do not touch the files until the hub tells the decision. If the work belongs to a task that is already in the list of the tasks of the session, say kind=extend and its number in extends. Call it once per piece of work, at the very beginning, before the first change of a file.\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"kind\":{\"type\":\"string\",\"enum\":[\"new\",\"subtask\",\"epic_task\",\"extend\"],\"description\":\"new - a new task of its own (the default); subtask - the work is explicitly a part of the task in parent; epic_task - the work is a task of the epic in epic; extend - the work belongs to an existing task of the list.\"},\"parent\":{\"type\":\"integer\",\"description\":\"For kind=subtask: the number of the task it is a part of.\"},\"epic\":{\"type\":\"integer\",\"description\":\"For kind=epic_task: the number of the epic.\"},\"title\":{\"type\":\"string\",\"description\":\"A short title of the work (up to 60 characters).\"},\"summary\":{\"type\":\"string\",\"description\":\"What is to be done, in a few lines: it becomes the text of message.N.md.\"},\"extends\":{\"type\":\"integer\",\"description\":\"For kind=extend: the number of the task of the list.\"},\"touches\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"description\":\"The files and folders the work will change (paths in the project).\"},\"confidence\":{\"type\":\"string\",\"enum\":[\"high\",\"medium\",\"low\"],\"description\":\"How sure you are that it is real work and not a talk.\"}},\"required\":[\"kind\",\"title\",\"summary\"]}}"
+    ro text = "{\"name\":\"crew_task\",\"description\":\"Call it when the message of the user is REAL WORK on the files of the project (code, documents, tests, settings): something is to be changed, written or built. Do NOT call it for a question, a talk, an explanation, a look at the code or a one-word answer. The hub then shows the user a card and the user confirms (new task) or refuses; do not touch the files until the hub tells the decision. If the work belongs to a task that is already in the list of the tasks of the session, say kind=extend and its number in extends. Call it once per piece of work, at the very beginning, before the first change of a file.\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"kind\":{\"type\":\"string\",\"enum\":[\"new\",\"child\",\"epic\",\"extend\"],\"description\":\"new - a new task of its own (the default); child - the work is explicitly a child task of the epic in epic; epic - the work is a big one, an epic with child tasks; extend - the work belongs to an existing task of the list.\"},\"epic\":{\"type\":\"integer\",\"description\":\"For kind=child: the number of the epic (any open task of the list may be one).\"},\"title\":{\"type\":\"string\",\"description\":\"A short title of the work (up to 60 characters).\"},\"summary\":{\"type\":\"string\",\"description\":\"What is to be done, in a few lines: it becomes the text of message.md.\"},\"extends\":{\"type\":\"integer\",\"description\":\"For kind=extend: the number of the task of the list.\"},\"touches\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"description\":\"The files and folders the work will change (paths in the project).\"},\"confidence\":{\"type\":\"string\",\"enum\":[\"high\",\"medium\",\"low\"],\"description\":\"How sure you are that it is real work and not a talk.\"}},\"required\":[\"kind\",\"title\",\"summary\"]}}"
     mparse(text)
 }
 
@@ -122,7 +122,8 @@ fn ct_int(v JsonValue) -> int {
 /// The proposal from the arguments of a call of the tool, or the reason it is not good (the agent reads it and goes on).
 export fn proposal_of_arguments(arguments JsonValue) -> Result[Proposal, str] {
     ro kind_raw = mtext_of(arguments, "kind").trim_ascii()
-    ro kind = if kind_raw == "extend" || kind_raw == "subtask" || kind_raw == "epic_task" { kind_raw } else { "new" }
+    // task 192.5: the kinds are "new", "extend", "child" (a child task of the epic `epic`) and "epic"; the old words "subtask" and "epic_task" are read as "child"
+    ro kind = if kind_raw == "extend" || kind_raw == "epic" { kind_raw } else if kind_raw == "child" || kind_raw == "subtask" || kind_raw == "epic_task" { "child" } else { "new" }
     ro title = mtext_of(arguments, "title").trim_ascii()
     if title.byte_len() == 0 { return Err("crew_task: the argument title is missing") }
     ro summary_raw = mtext_of(arguments, "summary").trim_ascii()
@@ -159,7 +160,8 @@ export fn proposal_of_arguments(arguments JsonValue) -> Result[Proposal, str] {
     }
     mut made = proposal_new(kind, title, summary, extends, touches, mtext_of(arguments, "confidence"))
     made.parent = parent
-    made.epic = epic
+    // an old agent names the task in `parent` (subtask) - for a child it is the same epic
+    made.epic = if epic > 0 { epic } else if kind == "child" { parent } else { 0 }
     Ok(made)
 }
 
@@ -176,7 +178,6 @@ export fn proposal_arguments_text(p Proposal) -> str {
     mput(o, "title", JsonValue.str(p.title))
     mput(o, "summary", JsonValue.str(p.summary))
     mput(o, "extends", JsonValue.int(p.extends))
-    mput(o, "parent", JsonValue.int(p.parent))
     mput(o, "epic", JsonValue.int(p.epic))
     mput(o, "touches", ct_strings(p.touches))
     mput(o, "confidence", JsonValue.str(p.confidence))
@@ -301,7 +302,7 @@ export fn tasks_hint(task_shown str, lines []SubLine) -> str {
         ro state = if l.waits > 0 { "ждёт подзадачу ${l.waits}" } else { l.state }
         rows.push("${l.n}. «${l.title}» (${state}) — ${if l.file.byte_len() > 0 { l.file } else { "${task_shown}/message.${l.n}.md" }}")
     }
-    "[crew] Задачи в работе (в crew_task_list: kind=extend и extends=<номер>, если работа дополняет одну из них; kind=subtask и parent=<номер>, если она явно часть такой задачи; kind=epic_task и epic=<номер эпика> для задачи эпика; иначе kind=new — самостоятельная задача):\n${joined(rows, "\n")}"
+    "[crew] Задачи в работе (в crew_task_list: kind=extend и extends=<номер>, если работа дополняет одну из них; kind=child и epic=<номер>, если она явно дочерняя задача такой задачи (любая открытая задача может быть эпиком); иначе kind=new — самостоятельная задача):\n${joined(rows, "\n")}"
 }
 
 /// The note for the agent after the owner answered the card.
@@ -322,7 +323,6 @@ fn ct_proposal_view(p Proposal, extends_title str) -> JsonValue {
     mput(o, "summary", JsonValue.str(p.summary))
     mput(o, "extends", JsonValue.int(p.extends))
     mput(o, "extends_title", JsonValue.str(extends_title))
-    mput(o, "parent", JsonValue.int(p.parent))
     mput(o, "epic", JsonValue.int(p.epic))
     mput(o, "touches", ct_strings(p.touches))
     mput(o, "confidence", JsonValue.str(p.confidence))
@@ -346,8 +346,7 @@ export fn crew_view_extend(base str, props []Proposal, subs []SubLine, active in
     for p in props {
         mut shown = ""
         for l in subs { if p.kind == "extend" && l.n == p.extends { shown = l.title } }
-        for l in subs { if p.kind == "subtask" && l.n == p.parent { shown = l.title } }
-        for l in subs { if p.kind == "epic_task" && l.n == p.epic { shown = l.title } }
+        for l in subs { if p.kind == "child" && l.n == p.epic { shown = l.title } }
         cards.push(ct_proposal_view(p, shown))
     }
     mput(o, "proposals", JsonValue.array(cards))
@@ -359,4 +358,33 @@ export fn crew_view_extend(base str, props []Proposal, subs []SubLine, active in
     mput(o, "confirm_word", JsonValue.str(confirm_word))
     mput(o, "over_word", JsonValue.str(over_word))
     JsonValue.object(o).to_str()
+}
+
+/// The service hints of the session for the panel "Машины" (task 192.5): `hints` - the newest last, each `{ms, kind, text}`.
+export fn hints_view_extend(base str, hints []HintRec) -> str {
+    mut o = match Json.parse(base) {
+        Ok(v) => v.object() ?? JsonObject.new()
+        Err(e) => JsonObject.new()
+    }
+    mut rows = []JsonValue.new()
+    for h in hints {
+        mut r = JsonObject.new()
+        mput(r, "ms", JsonValue.int(h.ms))
+        mput(r, "kind", JsonValue.str(h.kind))
+        mput(r, "text", JsonValue.str(h.text))
+        rows.push(JsonValue.object(r))
+    }
+    mput(o, "hints", JsonValue.array(rows))
+    JsonValue.object(o).to_str()
+}
+
+/// The list of the hints with one more at the end, at most `HINTS_MAX` of them (the oldest go).
+export const HINTS_MAX = 20
+
+export fn hints_added(hints []HintRec, ms int, kind str, text str) -> []HintRec {
+    mut out = []HintRec.new()
+    for h in hints { out.push(h) }
+    out.push(HintRec { ms, kind, text })
+    while out.len() > HINTS_MAX { out.remove(0) }
+    out
 }

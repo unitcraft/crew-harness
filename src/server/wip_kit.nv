@@ -1,7 +1,8 @@
-// wip_kit.nv - task 192.4: the scenarios of the work that is not a task yet (the branch `wip/<name>`) over a hub with the fake ACP agent in a repository with a remote
+// wip_kit.nv - task 192.4: the scenarios of the work that is not a task yet (a tree on a detached head, no branch) over a hub with the fake ACP agent in a repository with a remote
 // (the helpers are in `routes_kit.nv`, `crew_task_kit.nv` and `child_kit.nv`).
 module crew_harness.server
 
+import crew_harness.projects.{projects_create}
 import std.encoding.json.{Json, JsonValue, JsonObject}
 
 /// The settings of the scenarios of the wip branch: a repository with a bare origin, the sessions make a wip tree at the first message, "В работу" makes the children.
@@ -12,20 +13,6 @@ export fn kit_routes_wip(name str) Proc -> ServerSettings {
     settings.route_children = true
     settings.route_wip = true
     settings
-}
-
-/// A hook of the scenarios: the journal of the session says that the branch of its task is `branch` (the scenario renamed it by hand to check the rename before a child).
-export fn Hub mut @kit_set_branch(trace str, branch str) Proc Detach Time -> () {
-    ro at = @find(trace)
-    if at < 0 { return }
-    ro s = @sessions[at]
-    mut o = JsonObject.new()
-    js(o, "branch", branch)
-    js(o, "worktree", s.rt.worktree)
-    js(o, "base", s.rt.base)
-    js(o, "dir", s.rt.task_dir)
-    js(o, "shown", s.rt.task_shown)
-    @rt_task_op(at, "attach_tree", o)
 }
 
 // How many trees the repository has (the main copy is one).
@@ -66,9 +53,9 @@ fn wk_pwd(mut rig Rig, session str, turn str) Proc Detach Time -> str {
     answer
 }
 
-/// The start of a session and "В работу" of its first work: the first message makes the tree `wip/<name>` from a fresh origin/main and the agent works in it (no number, no folder of the task);
-/// the first work taken "в работу" renames the branch to `task/NNN-slug` in the same tree and writes and commits `message.md` there (no new session); the next separate work is a session of its
-/// own with a tree of its own; a subtask under a parent whose branch is still `wip/...` renames it first; the task that came from a wip branch is published ("Слить в main") into the bare origin
+/// The start of a session and "В работу" of its first work: the first message makes a tree on a detached head from a fresh origin/main and the agent works in it (no number, no folder of the task);
+/// the first work taken "в работу" makes the branch `task/NNN-slug` in the same tree and writes and commits `message.md` there (no new session); the next separate work is a session of its
+/// own with a tree of its own; the task that came from a wip tree is published ("Слить в main") into the bare origin
 /// and its tree is removed; after a restart the session comes back with the same tree and branch.
 export fn scenario_wip_flow(settings ServerSettings) Proc Detach Time Net Fs Os -> str {
     mut c = kit_check()
@@ -93,19 +80,19 @@ export fn scenario_wip_flow(settings ServerSettings) Proc Detach Time Net Fs Os 
     rig.run(300)
     ro w = wk_where(rig, 1, "s-w1")
     ro tree = jtext(w, "worktree")
-    c.expect(jtext(w, "kind") == "wip" && jtext(w, "branch") == "wip/s-w1", "the session works on a wip branch: ${jtext(w, "kind")} ${jtext(w, "branch")}")
-    c.expect(tree.byte_len() > 0 && dir_there(tree) && tree.contains("/worktrees/repo-wip-s-w1"), "the tree is next to the repository, in worktrees: ${tree}")
-    c.expect(wk_branch(tree) == "wip/s-w1", "the tree stands on wip/s-w1")
+    c.expect(jtext(w, "kind") == "wip" && jtext(w, "branch") == "", "the session works in a copy with no branch: ${jtext(w, "kind")} ${jtext(w, "branch")}")
+    c.expect(tree.byte_len() > 0 && dir_there(tree) && tree.contains("/repo-s-w1"), "the tree is next to the repository: ${tree}")
+    c.expect(wk_branch(tree) == "" && !wk_has_branch(repo, "wip/s-w1"), "the tree stands on a detached head, no wip branch")
     c.expect(path_there("${tree}/fresh.txt"), "the branch is cut from the fresh origin/main")
     c.expect(!path_there("${repo}/fresh.txt") && wk_branch(repo) == "main", "the main copy is untouched and stands on main")
     c.expect(rk_task_is_null(ck_state(rig, 1, "s-w1")), "no task, no number, no folder of a task")
     c.expect(!path_there("${tree}/doc/tasks/001-"), "no folder of a task in the tree")
-    c.expect(wk_pwd(rig, "s-w1", "t0p").contains("/worktrees/repo-wip-s-w1"), "the agent works in the wip tree")
+    c.expect(wk_pwd(rig, "s-w1", "t0p").contains("/repo-s-w1"), "the agent works in the wip tree")
     c.expect(ck_idle(rig, "s-w1", 60000), "the agent is free")
 
     // 2. the first work: the branch is renamed, the session is the session of the task
     ro made_file = write_file("${tree}/a.txt", "the work of the talk\n")
-    c.expect(ck_list(rig, "s-w1", "t1", [ck_item("new", "Первая правка", 0, 0, 0, ["a.txt"])], "Первая правка"), "the work is listed")
+    c.expect(ck_list(rig, "s-w1", "t1", [ck_item("new", "Первая правка", 0, 0, ["a.txt"])], "Первая правка"), "the work is listed")
     ck_press(rig, "s-w1", "Первая правка", "start")
     rig.run(3000)
     c.expect(ck_find(rig, 1, "Первая правка") == "", "no new session is made for the first work")
@@ -113,7 +100,8 @@ export fn scenario_wip_flow(settings ServerSettings) Proc Detach Time Net Fs Os 
     ro id1 = jtext(rk_task(st), "id")
     c.expect(id1.starts_with("001-") && jtext(rk_task(st), "branch") == "task/${id1}", "the session has the task 001 and its branch: ${id1} ${jtext(rk_task(st), "branch")}")
     c.expect(jtext(rk_task(st), "worktree") == tree, "the tree is the same: ${jtext(rk_task(st), "worktree")}")
-    c.expect(wk_branch(tree) == "task/${id1}" && !wk_has_branch(repo, "wip/s-w1"), "the branch is renamed, the wip name is gone")
+    c.expect(wk_branch(tree) == "task/${id1}", "the branch of the task is made in the same tree")
+    c.expect(git_run(tree, ["ls-files", "--others", "--exclude-standard"]).text.contains("a.txt") || path_there("${tree}/a.txt"), "the changes made before stay")
     c.expect((st.get("where") ?? JsonValue.null()).is_null(), "the page has no `where` for a task")
     ro m1 = rk_text("${tree}/doc/tasks/${id1}/task/message.md")
     c.expect(m1.contains("сделать: Первая правка") && !m1.contains("Родитель:") && !m1.contains("Эпик:"), "message.md of the task is in the same tree, no parent line: ${cut_text(m1, 60)}")
@@ -121,10 +109,10 @@ export fn scenario_wip_flow(settings ServerSettings) Proc Detach Time Net Fs Os 
     c.expect(git_run(tree, ["log", "-1", "--format=%s"]).text.starts_with("001"), "the commit of the files begins with the number: ${git_run(tree, ["log", "-1", "--format=%s"]).text}")
     c.expect(ck_turns(rig, 1, "s-w1") >= 1, "the agent got the service turn of the task")
     c.expect(ck_idle(rig, "s-w1", 60000), "the agent finishes the turn")
-    c.expect(wk_pwd(rig, "s-w1", "t1p").contains("/worktrees/repo-wip-s-w1"), "the agent works in the same tree")
+    c.expect(wk_pwd(rig, "s-w1", "t1p").contains("/repo-s-w1"), "the agent works in the same tree")
 
     // 3. the next separate work: a session of its own with a tree of its own, cut from the fresh origin/main
-    c.expect(ck_list(rig, "s-w1", "t2", [ck_item("new", "Вторая отдельная", 0, 0, 0, ["b.txt"])], "Вторая отдельная"), "the second work is listed")
+    c.expect(ck_list(rig, "s-w1", "t2", [ck_item("new", "Вторая отдельная", 0, 0, ["b.txt"])], "Вторая отдельная"), "the second work is listed")
     ck_press(rig, "s-w1", "Вторая отдельная", "start")
     rig.run(3500)
     ro s2 = ck_find(rig, 1, "Вторая отдельная")
@@ -134,27 +122,21 @@ export fn scenario_wip_flow(settings ServerSettings) Proc Detach Time Net Fs Os 
     c.expect(wk_branch(tree2) == "task/${ck_task_id(rig, 1, s2)}" && path_there("${tree2}/fresh.txt"), "its branch is cut from the fresh origin/main")
     c.expect(wk_branch(tree) == "task/${id1}", "the first session is as it was")
 
-    // 4. a subtask of the task 001 whose branch was (by hand) put back to wip/...: it is renamed before the child is cut from it
+    // 4. a child task of the task 001 (it becomes an epic): cut from the branch of the epic
     c.expect(ck_idle(rig, "s-w1", 60000), "the agent of the first session is free")
-    c.expect(rk_git(tree, ["branch", "-m", "task/${id1}", "wip/forced"]), "the branch is put back to a wip name")
-    rig.hub.kit_set_branch("s-w1", "wip/forced")
-    rig.run(300)
-    c.expect(ck_list(rig, "s-w1", "t3", [ck_item("subtask", "Часть первой", 1, 0, 0, ["c.txt"])], "Часть первой"), "a subtask is listed")
+    c.expect(ck_list(rig, "s-w1", "t3", [ck_item("child", "Часть первой", 1, 0, ["c.txt"])], "Часть первой"), "a child task is listed")
     ck_press(rig, "s-w1", "Часть первой", "start")
     rig.run(3500)
     ro s3 = ck_find(rig, 1, "Часть первой")
-    c.expect(s3 != "" && ck_parent(rig, 1, s3) == "s-w1", "the subtask is a session under the first")
-    c.expect(wk_branch(tree) == "task/${id1}" && !wk_has_branch(repo, "wip/forced"), "the branch of the parent is renamed back to task/NNN-slug: ${wk_branch(tree)}")
+    c.expect(s3 != "" && ck_parent(rig, 1, s3) == "s-w1", "the child is a session under the first")
     c.expect(jtext(rk_task(ck_state(rig, 1, "s-w1")), "branch") == "task/${id1}", "and the page is told")
-    c.expect(jtext(jchild(ck_state(rig, 1, s3), "child") ?? JsonObject.new(), "target") == "parent", "the child merges into the branch of its parent")
+    c.expect(jtext(jchild(ck_state(rig, 1, s3), "child") ?? JsonObject.new(), "target") == "parent", "the child merges into the branch of its epic")
 
-    // 5. the publication of a task that came from a wip branch: the child goes into the parent first, then "Слить в main"
+    // 5. the epic goes to main at any moment: the child that is not merged yet does not hold it, it stays apart and goes to main by its own button
     c.expect(ck_idle(rig, s3, 60000) && ck_idle(rig, "s-w1", 60000), "the agents are free")
     c.expect(ck_commit(ck_tree(rig, 1, s3), "c.txt"), "a commit in the tree of the child")
-    rig.page(1, "route_merge", s3, "{}")
-    c.expect(ck_wait_row(rig, "s-w1", ck_number(rig, 1, s3), "merged", 40000), "the child is merged into the branch of the parent: ${ck_errors(rig)}")
-    c.expect(ck_idle(rig, "s-w1", 60000), "the agent of the parent is free")
     c.expect(rk_git(tree, ["add", "a.txt"]), "the work of the talk is staged")
+    c.expect(rk_array(ck_state(rig, 1, "s-w1"), "children_unmerged").len() == 1, "the page names the child that is not merged")
     rig.page(1, "route_merge", "s-w1", "{}")
     ro deadline = Time.now().unix_millis() + 90000
     mut state = ""
@@ -163,12 +145,23 @@ export fn scenario_wip_flow(settings ServerSettings) Proc Detach Time Net Fs Os 
         state = jtext(rk_task(ck_state(rig, 1, "s-w1")), "state")
         if state == "ready" || state == "active" || state == "finishing" { state = "" }
     }
-    c.expect(state == "done", "the task is published: ${state} ${ck_errors(rig)}")
+    c.expect(state == "done", "the epic is published although a child is not merged: ${state} ${ck_errors(rig)}")
     c.expect(git_run(origin, ["show", "main:a.txt"]).text.trim_ascii() == "the work of the talk", "the work is in the bare origin")
-    c.expect(git_run(origin, ["show", "main:c.txt"]).text.contains("work of c.txt"), "and the work of the child")
-    c.expect(git_run(origin, ["show", "main:doc/tasks/${id1}/task/message.md"]).ok, "and the files of the task")
+    c.expect(!git_run(origin, ["show", "main:c.txt"]).ok, "the work of the unmerged child is not there")
+    c.expect(git_run(origin, ["show", "main:doc/tasks/${id1}/task/message.md"]).ok, "and the files of the task are")
     c.expect(!dir_there(tree), "the tree (the path of the wip tree, from the journal) is removed")
-    c.expect(!wk_has_branch(repo, "task/${id1}") && !wk_has_branch(repo, "wip/s-w1"), "the branch is removed")
+    c.expect(!wk_has_branch(repo, "task/${id1}"), "the branch is removed")
+    c.expect(jtext(jchild(ck_state(rig, 1, s3), "child") ?? JsonObject.new(), "target") == "main", "the child that stayed apart merges into main now")
+    rig.page(1, "route_merge", s3, "{}")
+    ro deadline3 = Time.now().unix_millis() + 90000
+    mut state3 = ""
+    while Time.now().unix_millis() < deadline3 && state3 != "done" {
+        rig.run(200)
+        state3 = jtext(rk_task(ck_state(rig, 1, s3)), "state")
+        if state3 == "ready" || state3 == "active" || state3 == "finishing" { state3 = "" }
+    }
+    c.expect(state3 == "done", "the child is published by its own button: ${state3} ${ck_errors(rig)}")
+    c.expect(git_run(origin, ["show", "main:c.txt"]).text.contains("work of c.txt"), "and its work is in the bare origin now")
 
     // 6. a restart: a session that has a wip tree comes back with the same tree and branch
     rig.page(1, "session_created", "s-w2", "{\"name\":\"После перезапуска\",\"agent\":\"opencode\"}")
@@ -177,16 +170,39 @@ export fn scenario_wip_flow(settings ServerSettings) Proc Detach Time Net Fs Os 
     c.expect(rig.until(KIT_DONE, 20000), "the talk is answered")
     rig.run(300)
     ro tree_b = jtext(wk_where(rig, 1, "s-w2"), "worktree")
-    c.expect(tree_b.contains("repo-wip-s-w2") && dir_there(tree_b), "the second talk has its wip tree: ${tree_b}")
+    c.expect(tree_b.contains("repo-s-w2") && dir_there(tree_b), "the second talk has its wip tree: ${tree_b}")
     c.expect(ck_idle(rig, "s-w2", 60000), "the agent is free")
     rig.shut()
     mut again = rig_open(settings)
     again.attach(1)
     again.run(1500)
     ro w2 = jchild(ck_state(again, 1, "s-w2"), "where") ?? JsonObject.new()
-    c.expect(jtext(w2, "kind") == "wip" && jtext(w2, "branch") == "wip/s-w2" && jtext(w2, "worktree") == tree_b, "after the restart: the same branch and tree: ${jtext(w2, "branch")} ${jtext(w2, "worktree")}")
-    c.expect(wk_pwd(again, "s-w2", "u1").contains("/worktrees/repo-wip-s-w2"), "the agent works in the same tree again")
+    c.expect(jtext(w2, "kind") == "wip" && jtext(w2, "branch") == "" && jtext(w2, "worktree") == tree_b, "after the restart: the same copy: ${jtext(w2, "branch")} ${jtext(w2, "worktree")}")
+    c.expect(wk_pwd(again, "s-w2", "u1").contains("/repo-s-w2"), "the agent works in the same tree again")
     again.shut()
+    c.report()
+}
+
+/// The setting "папка деревьев" of a project (task 192.5): a session of the project makes its wip tree in that folder.
+export fn scenario_wip_trees_dir(settings ServerSettings) Proc Detach Time Net Fs Os -> str {
+    mut c = kit_check()
+    ro repo = settings.workdir
+    ro body = "{\"name\":\"P\",\"folders\":[{\"path\":\"${repo}\"}],\"worktrees_dir\":\"worktrees\"}"
+    ro id = match projects_create(settings.data_dir, kit_json_object(body)) {
+        Ok(x) => x
+        Err(f) => panic("the project cannot be made: ${f.message}")
+    }
+    mut rig = rig_open(settings)
+    rig.attach(1)
+    rig.page(1, "session_created", "s-t1", "{\"name\":\"В проекте\",\"agent\":\"opencode\",\"project_id\":\"${id}\",\"folder\":\"${repo}\"}")
+    c.expect(rig.until("\"kind\":\"session_created\"", 5000), "the session of the project is shown")
+    rig.page(1, "user_message", "s-t1", "{\"turn\":\"t0\",\"text\":\"привет\"}")
+    c.expect(rig.until(KIT_DONE, 20000), "the first message is answered")
+    rig.run(300)
+    ro tree = jtext(wk_where(rig, 1, "s-t1"), "worktree")
+    c.expect(tree.contains("/worktrees/repo-s-t1") && dir_there(tree), "the tree is in the folder of the trees of the project: ${tree}")
+    c.expect(!dir_there("${repo}/../repo-s-t1"), "and not beside the repository")
+    rig.shut()
     c.report()
 }
 
@@ -222,11 +238,11 @@ export fn scenario_wip_folder_and_delete(settings ServerSettings) Proc Detach Ti
     c.expect(rig.until(KIT_DONE, 20000), "it is answered")
     rig.run(300)
     ro tree2 = jtext(wk_where(rig, 1, "s-f2"), "worktree")
-    c.expect(dir_there(tree2) && wk_has_branch(repo, "wip/s-f2"), "it has a wip tree: ${tree2}")
+    c.expect(dir_there(tree2), "it has a wip tree: ${tree2}")
     c.expect(ck_idle(rig, "s-f2", 60000), "the agent is free")
     rig.page(1, "session_delete", "s-f2", "{}")
     rig.run(2500)
-    c.expect(!dir_there(tree2) && !wk_has_branch(repo, "wip/s-f2"), "the empty tree and the branch are removed without a question")
+    c.expect(!dir_there(tree2), "the empty tree and the branch are removed without a question")
 
     // 3. a wip tree with work: the page is told (the question is the owner's), the delete without a word keeps the tree, "drop" removes it
     rig.page(1, "session_created", "s-f3", "{\"name\":\"С правкой\",\"agent\":\"opencode\"}")
@@ -248,7 +264,7 @@ export fn scenario_wip_folder_and_delete(settings ServerSettings) Proc Detach Ti
     c.expect(rk_number(jchild(ck_state(rig, 1, "s-f3"), "where") ?? JsonObject.new(), "unmerged_commits") == 1, "one commit is not merged")
     rig.page(1, "session_delete", "s-f3", "{}")
     rig.run(2500)
-    c.expect(dir_there(tree3) && wk_has_branch(repo, "wip/s-f3"), "a deleted session with work leaves the tree and the branch (the owner chose neither)")
+    c.expect(dir_there(tree3), "a deleted session with work leaves the tree and the branch (the owner chose neither)")
 
     // 4. the drop of a wip tree with the work by the card: the agent goes back to the folder of the project
     rig.page(1, "session_created", "s-f4", "{\"name\":\"Сбросить\",\"agent\":\"opencode\"}")
@@ -265,7 +281,7 @@ export fn scenario_wip_folder_and_delete(settings ServerSettings) Proc Detach Ti
     c.expect(dir_there(tree4), "no drop of the work without the word")
     rig.page(1, "route_tree_drop", "s-f4", "{\"force\":true}")
     rig.run(2500)
-    c.expect(!dir_there(tree4) && !wk_has_branch(repo, "wip/s-f4"), "with the word the tree and the branch are removed")
+    c.expect(!dir_there(tree4), "with the word the tree and the branch are removed")
     c.expect(jtext(wk_where(rig, 1, "s-f4"), "kind") == "folder", "the session is on the folder of the project now")
     rig.shut()
     c.report()

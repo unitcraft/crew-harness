@@ -1,11 +1,13 @@
-// wip_hub.nv - task 192.4: the hub side of the work that is not a task yet (the branch `wip/<name>`).
+// wip_hub.nv - task 192.4 (changed by the owner 2026-10-27, task 192.5): the hub side of the work that is not a task yet (a tree with NO branch).
 //
-// A session with the switch "Worktree" on gets a tree of its own at its FIRST message: `<worktrees>/<repo>-wip-<name>`, branch `wip/<name>` cut from a fresh origin/main; the agent works in it. There is no
-// number, no folder `doc/tasks` and no `message.md` yet. A session with the switch off works in the folder of the project on its branch (the page says which: `route_state.where`).
-// "В работу" of the FIRST work of such a session does not make a new session: the branch `wip/<name>` is renamed to `task/NNN-slug` (`git branch -m`, the tree stays where it is, its path is in the journal),
-// `doc/tasks/NNN-slug/task/message.md` is written in this tree and committed, and the session becomes the session of the task (`wip` of `route_task` is cleared by the `open` of the task).
-// The next separate works of the session are sessions of their own with trees cut from a fresh origin/main (`child_hub.nv`); a parent whose branch is still `wip/...` is renamed before a child is cut from it.
-// A deleted session takes its wip tree with it when there is nothing to lose (no commits that are not in origin/main, no changed files); else the owner is asked (keep the branch / delete all).
+// A session with the switch "Worktree" on gets a tree of its own at its FIRST message: `<worktrees>/<repo>-<short code of the session>` on a DETACHED head cut from a fresh origin/main
+// (`git worktree add --detach`), no branch `wip/...`; the agent works in it. There is no number, no folder `doc/tasks` and no `message.md` yet. A session with the switch off works in the folder of
+// the project on its branch (the page says which: `route_state.where`).
+// "В работу" of the FIRST work of such a session does not make a new session: the branch `task/NNN-slug` is made in this very tree (`git switch -c` on the current head, so the changes made before and the
+// commits made on the detached head go with it; the tree stays where it is, its path is in the journal), `doc/tasks/NNN-slug/task/message.md` is written in this tree and committed, and the session becomes
+// the session of the task (`wip` of `route_task` is cleared by the `open` of the task). The way "Эпик" does the same and marks the task as an epic.
+// The next separate works of the session are sessions of their own with trees cut from a fresh origin/main (`child_hub.nv`).
+// A deleted session takes its tree with it when there is nothing to lose (no commits that are not in origin/main, no changed files); else the owner is asked (keep the work / delete all).
 module crew_harness.server
 
 import crew_harness.acp.{AcpImage}
@@ -56,7 +58,7 @@ fn wip_head_branch(dir str) -> str {
 
 // ----- the start -----
 
-/// The first message of a session in the mode interactive with the switch "Worktree" on: the tree `wip/<name>` is made and the agent will work in it. Nothing is made again later.
+/// The first message of a session in the mode interactive with the switch "Worktree" on: a tree on a detached head is made and the agent will work in it. Nothing is made again later.
 fn Hub mut @wip_start(at int) Proc Detach Time -> () {
     ro s = @sessions[at]
     if !@settings.route_wip || !s.rt.use_tree || s.rt.wip_tree.byte_len() > 0 || s.rt.kind == "child" { return }
@@ -65,7 +67,7 @@ fn Hub mut @wip_start(at int) Proc Detach Time -> () {
     if !tk_is_repo(base) { return }
     ro name = wip_name(s.id)
     if name.byte_len() == 0 { return }
-    ro tree = tk_wip_tree(base, name)
+    ro tree = tk_wip_tree(base, name, @route_trees(s.id))
     if !tree.ok {
         @tell_error(0, s.id, s.engine.step_number(), "", "дерево для работы не создано (${tree.text}): агент работает в папке проекта")
         return
@@ -85,17 +87,18 @@ fn Hub mut @wip_start(at int) Proc Detach Time -> () {
 
 // ----- "В работу" of the first work of a session with a wip branch -----
 
-/// The first work of the session that has a wip branch: the branch is renamed to `task/NNN-slug`, the folder of the task is written in the same tree and committed, the session becomes the session of the task.
-/// false - the branch could not be renamed (the caller makes a session of its own as before).
+/// The first work of the session that has a wip tree: the branch `task/NNN-slug` is made in it, the folder of the task is written in the same tree and committed, the session becomes the session of the task.
+/// false - the branch could not be made (the caller makes a session of its own as before).
 fn Hub mut @wip_take(at int, p Proposal, how str, queued bool) Proc Detach Time -> bool {
     ro cur = @sessions[at]
     ro number = task_number_text(next_task_number(@cs_taken_names(cur)))
     ro slug = child_slug("", "", p.title)
     ro folder = "${number}-${slug}"
     ro tree = cur.rt.wip_tree
-    ro renamed = tk_branch_rename(tree, cur.rt.wip_branch, "task/${folder}")
-    if !renamed.ok {
-        @say_log("the branch ${cur.rt.wip_branch} of ${cur.id} is not renamed: ${renamed.text}")
+    // the branch is made in this very tree on the current head: the commits made on the detached head and the changed files go with it
+    ro made_branch = tk_branch_create(tree, "task/${folder}")
+    if !made_branch.ok {
+        @say_log("the branch task/${folder} of ${cur.id} is not made: ${made_branch.text}")
         return false
     }
     ro in_tree = dir_there("${tree}/doc/tasks")
@@ -143,6 +146,8 @@ fn Hub mut @wip_take(at int, p Proposal, how str, queued bool) Proc Detach Time 
         j += 1
     }
     @route_save_images(at, files)
+    // the way "Эпик": this very session is the epic from the start (the mark and the table of its children)
+    if p.kind == "epic" { @cs_make_epic(at) }
     // the files of the task are a part of the work: they go into the branch at once
     if in_tree {
         ro why = tk_commit_task_files(tree, "doc/tasks/${folder}", number)
@@ -150,35 +155,15 @@ fn Hub mut @wip_take(at int, p Proposal, how str, queued bool) Proc Detach Time 
     }
     @ct_drop(at, p.id, false)
     ro c = @sessions[at]
-    @rt_note(at, "▸ работа стала задачей ${number}: ветка ${cur.rt.wip_branch} переименована в task/${folder}")
+    @rt_note(at, "▸ работа стала ${if p.kind == "epic" { "эпиком" } else { "задачей" }} ${number}: ветка task/${folder} создана в дереве сессии")
     if sib.byte_len() > 0 || queued {
         @ct_note(at, if sib.byte_len() > 0 { "▸ «${p.title}» (задача ${number}) ждёт задачу ${p.with_n}" } else { "▸ «${p.title}» (задача ${number}) в очереди: в работе уже ${@cs_active_all()}" })
     } else {
-        @ct_note(at, "▸ «${p.title}» (задача ${number}) взята в работу: эта сессия")
+        @ct_note(at, "▸ «${p.title}» (задача ${number}) взята в работу: ${if p.kind == "epic" { "эпик, эта сессия" } else { "эта сессия" }}")
         if !@ct_has_steps(c) { @ct_kick(at, 1, child_note(number, p.title, shown, "", "", @cs_target_text(c))) }
     }
     @route_broadcast(at, true)
     true
-}
-
-/// A parent whose branch is still `wip/...` gets the branch of its task before a child is cut from it.
-fn Hub mut @wip_rename_task(at int) Proc Detach Time -> () {
-    ro s = @sessions[at]
-    if !s.rt.task_open || s.rt.worktree.byte_len() == 0 || !s.rt.branch.starts_with("wip/") { return }
-    ro to = "task/${s.rt.task_id}"
-    ro renamed = tk_branch_rename(s.rt.worktree, s.rt.branch, to)
-    if !renamed.ok {
-        @say_log("the branch ${s.rt.branch} of ${s.id} is not renamed: ${renamed.text}")
-        return
-    }
-    mut o = JsonObject.new()
-    js(o, "branch", to)
-    js(o, "worktree", s.rt.worktree)
-    js(o, "base", s.rt.base)
-    js(o, "dir", s.rt.task_dir)
-    js(o, "shown", s.rt.task_shown)
-    @rt_task_op(at, "attach_tree", o)
-    @rt_note(at, "▸ ветка ${s.rt.branch} переименована в ${to}")
 }
 
 // ----- the observer -----
@@ -206,12 +191,12 @@ fn Hub mut @wip_observe(at int) Proc Detach Time -> bool {
     ro days = if last > 0 { (now_millis() - last) / 86400000 } else { 0 }
     ro keep = @settings.route_keep_days
     ro stale = keep > 0 && days >= keep
-    ro changed = count != s.rt.wip_unmerged || dirty != s.rt.wip_dirty || (if days < 0 { 0 } else { days }) != s.rt.wip_idle || stale != s.rt.wip_stale || s.rt.where_branch != s.rt.wip_branch
+    ro changed = count != s.rt.wip_unmerged || dirty != s.rt.wip_dirty || (if days < 0 { 0 } else { days }) != s.rt.wip_idle || stale != s.rt.wip_stale
     s.rt.wip_unmerged = count
     s.rt.wip_dirty = dirty
     s.rt.wip_idle = if days < 0 { 0 } else { days }
     s.rt.wip_stale = stale
-    s.rt.where_branch = s.rt.wip_branch
+    s.rt.where_branch = ""
     s.rt.wip_at = now_millis()
     @sessions[at] = s
     changed
@@ -228,10 +213,10 @@ fn Hub mut @wip_delete(at int, branch str) Proc Detach Time -> () {
     @route_close_agent_in(at, s.rt.wip_tree)
     ro work = @wip_has_work(s)
     if branch == "drop" || (!work && branch != "keep") {
-        ro dropped = tk_tree_drop(@cwd_of(s.folder), s.rt.wip_tree, s.rt.wip_branch)
+        ro dropped = tk_tree_drop(@cwd_of(s.folder), s.rt.wip_tree, "")
         if !dropped.ok { @say_log("the tree ${s.rt.wip_tree} of ${s.id} is not removed: ${dropped.text}") }
     } else {
-        @say_log("the session ${s.id} is deleted, the tree ${s.rt.wip_tree} and the branch ${s.rt.wip_branch} stay")
+        @say_log("the session ${s.id} is deleted, the tree ${s.rt.wip_tree} stays")
     }
 }
 
@@ -250,7 +235,7 @@ fn Hub mut @wip_drop(trace str, force bool) Proc Detach Time -> () {
         return
     }
     @route_close_agent_in(at, s.rt.wip_tree)
-    ro gone = tk_tree_drop(@cwd_of(s.folder), s.rt.wip_tree, s.rt.wip_branch)
+    ro gone = tk_tree_drop(@cwd_of(s.folder), s.rt.wip_tree, "")
     if !gone.ok {
         @tell_error(0, trace, s.engine.step_number(), "", "дерево не удалено: ${gone.text}")
         return
@@ -260,7 +245,7 @@ fn Hub mut @wip_drop(trace str, force bool) Proc Detach Time -> () {
     js(o, "worktree", "")
     js(o, "base", "")
     @rt_task_op(at, "wip", o)
-    @rt_note(at, "▸ дерево и ветка ${s.rt.wip_branch} удалены")
+    @rt_note(at, "▸ отдельная копия (дерево) удалена")
     mut me = @sessions[at]
     me.rt.wip_unmerged = 0
     me.rt.wip_dirty = false

@@ -8,6 +8,6 @@ fn children_clean(report str) -> () {
     assert(report == "")
 }
 
-test "files: the child sessions: a task of its own by default, a subtask under its parent, a task of an epic, a wait for a clash, the merge into the branch of the parent, the hold of the parent, the chain, a restart" {
+test "files: the child sessions: a task of its own by default, a child task under its epic (any task becomes an epic), the way epic, an epic with no branch, a wait for a clash, the merge into the branch of the epic, unmerged children never hold the epic, the chain, a restart" {
     children_clean(scenario_route_children(kit_routes_children("route-children")))
 }

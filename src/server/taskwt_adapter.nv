@@ -57,32 +57,34 @@ export fn tk_tree_remove(main_copy str, tree str, branch str) Proc -> ShellOut {
 export fn tk_tree_drop(main_copy str, tree str, branch str) Proc -> ShellOut {
     ro r = git_run(main_copy, ["worktree", "remove", "--force", tree])
     if !r.ok { return r }
+    // a wip tree has no branch (a detached head): nothing to delete
+    if branch.byte_len() == 0 { return r }
     git_run(main_copy, ["branch", "-D", branch])
 }
 
 fn tk_failed(text str) -> TkTree => { ok: false, branch: "", worktree: "", base: "", text }
 
-/// A tree for the task `number` `slug`: branch `task/<number>-<slug>`, the folder next to the repository (in `worktrees`).
-export fn tk_task_tree(main_copy str, number str, slug str) Proc -> TkTree {
-    ro made = with Os = real_os(), Fs = real_fs() { task_tree_create(main_copy, number, slug) }
+/// A tree for the task `number` `slug`: branch `task/<number>-<slug>`, the folder in the folder of the trees of the project (`trees`, see `worktrees_dir`; empty - next to the repository).
+export fn tk_task_tree(main_copy str, number str, slug str, trees str) Proc -> TkTree {
+    ro made = with Os = real_os(), Fs = real_fs() { task_tree_create(main_copy, number, slug, trees) }
     match made {
         Ok(t) => { ok: true, branch: t.branch, worktree: t.path, base: t.base, text: t.note }
         Err(e) => tk_failed(e)
     }
 }
 
-/// A tree for a work that is not a task yet (task 192.4): branch `wip/<name>`, the folder `<repo>-wip-<name>` next to the others, cut from a fresh `origin/main`.
-export fn tk_wip_tree(main_copy str, name str) Proc -> TkTree {
-    ro made = with Os = real_os(), Fs = real_fs() { wip_tree_create(main_copy, name) }
+/// A tree for a work that is not a task yet (task 192.4): NO branch (a detached head), the folder `<repo>-<name>` next to the others, cut from a fresh `origin/main`.
+export fn tk_wip_tree(main_copy str, name str, trees str) Proc -> TkTree {
+    ro made = with Os = real_os(), Fs = real_fs() { wip_tree_create(main_copy, name, trees) }
     match made {
         Ok(t) => { ok: true, branch: t.branch, worktree: t.path, base: t.base, text: t.note }
         Err(e) => tk_failed(e)
     }
 }
 
-/// Rename the branch of a tree (`wip/<name>` to `task/NNN-slug`); the tree stays.
-export fn tk_branch_rename(tree str, from str, to str) Proc -> ShellOut {
-    match with Os = real_os(), Fs = real_fs() { branch_rename(tree, from, to) } {
+/// Make the branch of the task in a wip tree (`git switch -c task/NNN-slug` on the detached head); the tree stays.
+export fn tk_branch_create(tree str, to str) Proc -> ShellOut {
+    match with Os = real_os(), Fs = real_fs() { branch_create(tree, to) } {
         Ok(done) => { ok: true, text: "" }
         Err(e) => { ok: false, text: e }
     }

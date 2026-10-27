@@ -293,7 +293,7 @@ fn line_of(mut s Dialog, e Incoming) -> Option[str] {
 
 fn meta_text(name str, agent str, folder str, project str, project_id str) -> str => meta_text_child(name, agent, folder, project, project_id, "", "")
 
-// Task 192.3: the session may be a child of another session (`parent` is the id of the parent, `parent_kind` "subtask", "epic" or "chat"); the page nests it under the parent.
+// Task 192.3: the session may be a child of another session (`parent` is the id of the epic, `parent_kind` "epic"; the old journals also hold "subtask"); the page nests it under the parent.
 fn meta_text_child(name str, agent str, folder str, project str, project_id str, parent str, parent_kind str) -> str {
     mut o = JsonObject.new()
     jput(o, "name", JsonValue.str(name))
@@ -1312,7 +1312,7 @@ fn Hub mut @delete(conn int, trace str, branch str) Proc Detach Time -> () {
             @say_log("the session ${trace} is deleted, the tree ${s.rt.worktree} and the branch ${s.rt.branch} stay (${count} commits not merged)")
         }
     }
-    // task 192.4: the tree `wip/<name>` of a work that was not a task (a session with a task of its own tree has none: the wip fields are cleared)
+    // task 192.4: the tree (no branch) of a work that was not a task (a session with a task of its own tree has none: the wip fields are cleared)
     if s.rt.wip_tree.byte_len() > 0 { @wip_delete(at, branch) }
     ro removed = with Fs = real_fs() { delete_files(@settings.data_dir, trace) }
     if !removed {
@@ -1512,12 +1512,10 @@ export fn Hub mut @handle(conn int, text str) Proc Detach Time -> () {
         @ct_answer(trace, jint(input, "id"), jtext(input, "action"), jtext(input, "agent"), jtext(input, "mode"), jint(input, "target"))
     } else if kind == "route_children_merge" {
         @cs_chain_signal(trace)
-    } else if kind == "route_epic" {
-        @cs_epic_signal(trace, jflag(input, "on"))
     } else if kind == "route_recognize" {
         @ct_recognize(trace)
-    } else if kind == "route_quick" {
-        @ct_quick(trace, jtext(input, "text"))
+    } else if kind == "route_apply" {
+        @ct_apply(trace, jlist(input, "items"))
     } else {
         @say_log("a message of the kind ${kind} from page ${conn}: ignored")
     }

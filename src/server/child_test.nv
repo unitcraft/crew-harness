@@ -1,5 +1,5 @@
 // child_test.nv - task 192.3: the pure part of the child sessions (`child.nv`): the slug of a child, `message.md`, the table `children.md` and its parser, the words of the states,
-// the view for the page, and the rules of the proposals that name a parent or an epic.
+// the view for the page, and the rules of the proposals that name an epic.
 module crew_harness.server
 
 import std.encoding.json.{Json, JsonValue, JsonObject}
@@ -14,32 +14,31 @@ fn cht_j(text str) -> JsonValue {
 fn cht_int(o JsonObject, key str) -> int => (o.get(key) ?? JsonValue.null()).int() ?? 0
 
 fn cht_row(k int, number str, state str) -> ChildRow {
-    ChildRow { k, number, kind: "подзадача", title: "Панель | пульта", folder: "${number}-232-privet-panel", branch: "task/${number}-232-privet-panel", session: "s-p-c${k}", state, waits: 0, touches: ["src/web/view.js", "src/web/app.css"], done: 0, total: 0 }
+    ChildRow { k, number, kind: "дочерняя", title: "Панель | пульта", folder: "${number}-panel", branch: "task/${number}-panel", session: "s-p-c${k}", state, waits: 0, touches: ["src/web/view.js", "src/web/app.css"], done: 0, total: 0 }
 }
 
-test "child: the slug is the number of the direct parent, its slug cut to 20 characters, the slug of the title" {
-    assert(child_slug("232", "privet", "Панель") == "232-privet-panel")
-    assert(child_slug("232", "a-very-long-slug-of-the-parent-task", "Тест") == "232-a-very-long-slug-of-test")
-    assert(child_slug("232", "ends-with-dash-paddi-ng", "Тест") == "232-ends-with-dash-paddi-test")
+test "child: the slug of a child is the plain slug of its title, the epic is not in it" {
+    assert(child_slug("232", "privet", "Панель") == "panel")
+    assert(child_slug("232", "a-very-long-slug-of-the-parent-task", "Тест") == "test")
     assert(child_slug("", "", "Панель пульта") == "panel-pulta")
-    assert(child_slug("232", "", "Панель") == "232-panel")
 }
 
 test "child: the first line of message.md says whose child it is" {
     assert(child_first_line("epic", "001") == "Эпик: 001")
-    assert(child_first_line("subtask", "232") == "Родитель: 232")
+    assert(child_first_line("subtask", "232") == "Эпик: 232")
     assert(child_first_line("", "") == "")
     ro epic = child_message_text("epic", "001", "Панель", "сделать панель", "владелец: сделай панель", 1792000000000)
     assert(epic.starts_with("Эпик: 001\n"))
     assert(epic.contains("# Задание: Панель"))
     assert(epic.contains("## Сообщение владельца"))
     ro sub = child_message_text("subtask", "232", "Панель", "сделать панель", "", 1792000000000)
-    assert(sub.starts_with("Родитель: 232\n"))
+    assert(sub.starts_with("Эпик: 232\n"))
     assert(!sub.contains("## Сообщение владельца"))
     ro own = child_message_text("", "", "Панель", "сделать панель", "", 1792000000000)
     assert(own.starts_with("# Задание: Панель"))
-    assert(child_kind_of_message(epic) == "задача эпика")
-    assert(child_kind_of_message(sub) == "подзадача")
+    assert(child_kind_of_message(epic) == "дочерняя")
+    assert(child_kind_of_message(sub) == "дочерняя")
+    assert(child_kind_of_message("Родитель: 7\n\n# Задание: Старая\n") == "дочерняя")
     assert(child_kind_of_message(own) == "задача")
 }
 
@@ -47,14 +46,14 @@ test "child: the table is written and read back, a hand-edited table is read too
     ro rows = [cht_row(1, "233", child_state_word("running", 0)), cht_row(2, "234", child_state_word("waits", 233)), cht_row(3, "235", child_state_word("merged", 0))]
     ro text = children_table_text("232", rows)
     assert(text.contains("| Номер | Тип | Название | Папка | Ветка | Сессия | Состояние | Затрагивает |"))
-    assert(text.contains("[doc/tasks/233-232-privet-panel](../../233-232-privet-panel)"))
+    assert(text.contains("[doc/tasks/233-panel](../../233-panel)"))
     assert(text.contains("ждёт 233"))
     ro back = children_parse(text)
     assert(back.len() == 3)
     assert(back[0].number == "233")
-    assert(back[0].kind == "подзадача")
-    assert(back[0].folder == "233-232-privet-panel")
-    assert(back[0].branch == "task/233-232-privet-panel")
+    assert(back[0].kind == "дочерняя")
+    assert(back[0].folder == "233-panel")
+    assert(back[0].branch == "task/233-panel")
     assert(back[0].session == "s-p-c1")
     assert(back[0].state == "идёт")
     assert(back[0].touches.len() == 2)
@@ -74,7 +73,7 @@ test "child: the table is written and read back, a hand-edited table is read too
     assert(children_parse("| битая строка |").len() == 0)
 }
 
-test "child: the progress of the parent is the merged children out of all, the unmerged ones hold the merge" {
+test "child: the progress of the parent is the merged children out of all, the unmerged ones are only listed" {
     ro rows = [cht_row(1, "233", "слита"), cht_row(2, "234", "идёт"), cht_row(3, "235", "готово")]
     ro count = children_count(rows)
     assert(count.merged == 1 && count.total == 3)
@@ -94,70 +93,80 @@ test "child: the words of the states and their keys for the page" {
     assert(child_state_key("слита") == "merged")
     assert(child_state_key("готово") == "ready")
     assert(child_state_key("идёт") == "running")
-    assert(child_kind_word("epic") == "задача эпика")
-    assert(child_kind_word("subtask") == "подзадача")
+    assert(child_kind_word("epic") == "дочерняя")
+    assert(child_kind_word("subtask") == "дочерняя")
     assert(child_kind_word("") == "задача")
-    assert(branch_number("task/233-232-privet-panel", "x") == "233")
+    assert(branch_number("task/233-panel", "x") == "233")
     assert(branch_number("main", "x") == "x")
 }
 
-test "child: the view carries the children, the block of the merge, the info of a child, the epic and the targets" {
+test "child: the view carries the children, the unmerged children, the info of a child, the epic and the targets" {
     ro rows = [cht_row(1, "233", "идёт"), cht_row(2, "234", "слита")]
-    ro info = ChildInfo { parent: "s-top", parent_name: "Оркестратор", kind: "subtask", parent_no: "232", k: 1, target: "parent" }
+    ro info = ChildInfo { parent: "s-top", parent_name: "Оркестратор", kind: "epic", parent_no: "232", k: 1, target: "parent", pbranch: "task/232-privet" }
     ro targets = [ChildTarget { number: 232, title: "Привет", session: "s-top", epic: false }]
     ro text = children_view_extend("{\"route\":\"interactive\"}", rows, ["233"], info, true, targets)
     ro o = cht_j(text).object() ?? JsonObject.new()
     assert(cht_int(o, "children_merged") == 1)
     assert(cht_int(o, "children_total") == 2)
     assert(((o.get("children") ?? JsonValue.null()).array() ?? []JsonValue.new()).len() == 2)
-    assert(((o.get("children_block") ?? JsonValue.null()).array() ?? []JsonValue.new()).len() == 1)
+    assert(((o.get("children_unmerged") ?? JsonValue.null()).array() ?? []JsonValue.new()).len() == 1)
     assert(((o.get("targets") ?? JsonValue.null()).array() ?? []JsonValue.new()).len() == 1)
     assert((o.get("epic") ?? JsonValue.null()).bool() ?? false)
     ro child = (o.get("child") ?? JsonValue.null()).object() ?? JsonObject.new()
     assert(((child.get("parent") ?? JsonValue.null()).str() ?? "") == "s-top")
     assert(((child.get("target") ?? JsonValue.null()).str() ?? "") == "parent")
-    ro none = children_view_extend("{}", rows, []str.new(), ChildInfo { parent: "", parent_name: "", kind: "", parent_no: "", k: 0, target: "" }, false, []ChildTarget.new())
+    ro none = children_view_extend("{}", rows, []str.new(), ChildInfo { parent: "", parent_name: "", kind: "", parent_no: "", k: 0, target: "", pbranch: "" }, false, []ChildTarget.new())
     ro n = cht_j(none).object() ?? JsonObject.new()
     assert(((n.get("child") ?? JsonValue.null()).object() ?? JsonObject.new()).len() == 0)
 }
 
-test "child: the proposals name a parent or an epic, an unknown kind is a task of its own" {
+test "child: the proposals name an epic, the old words are read as a child, an unknown kind is a task of its own" {
+    match proposal_of_arguments(cht_j("{\"kind\":\"child\",\"title\":\"Панель\",\"summary\":\"s\",\"epic\":232}")) {
+        Ok(p) => {
+            assert(p.kind == "child")
+            assert(p.epic == 232)
+        }
+        Err(e) => panic(e)
+    }
     match proposal_of_arguments(cht_j("{\"kind\":\"subtask\",\"title\":\"Панель\",\"summary\":\"s\",\"parent\":232}")) {
         Ok(p) => {
-            assert(p.kind == "subtask")
-            assert(p.parent == 232)
-            assert(p.epic == 0)
+            assert(p.kind == "child")
+            assert(p.epic == 232)
         }
         Err(e) => panic(e)
     }
     match proposal_of_arguments(cht_j("{\"kind\":\"epic_task\",\"title\":\"Задача\",\"summary\":\"s\",\"epic\":\"100\"}")) {
         Ok(p) => {
-            assert(p.kind == "epic_task")
+            assert(p.kind == "child")
             assert(p.epic == 100)
         }
+        Err(e) => panic(e)
+    }
+    match proposal_of_arguments(cht_j("{\"kind\":\"epic\",\"title\":\"Большая\",\"summary\":\"s\"}")) {
+        Ok(p) => assert(p.kind == "epic")
         Err(e) => panic(e)
     }
     match proposal_of_arguments(cht_j("{\"kind\":\"whatever\",\"title\":\"Задача\",\"summary\":\"s\"}")) {
         Ok(p) => assert(p.kind == "new")
         Err(e) => panic(e)
     }
-    match proposals_of_list(cht_j("{\"tasks\":[{\"kind\":\"subtask\",\"title\":\"A\",\"summary\":\"s\",\"parent\":5},{\"title\":\"B\",\"summary\":\"s\"}]}")) {
+    match proposals_of_list(cht_j("{\"tasks\":[{\"kind\":\"child\",\"title\":\"A\",\"summary\":\"s\",\"epic\":5},{\"title\":\"B\",\"summary\":\"s\"}]}")) {
         Ok(items) => {
             assert(items.len() == 2)
             ro first = items[0]
             ro second = items[1]
-            assert(first.kind == "subtask")
-            assert(first.parent == 5)
+            assert(first.kind == "child")
+            assert(first.epic == 5)
             assert(second.kind == "new")
             assert(first.listed)
         }
         Err(e) => panic(e)
     }
-    // the text between the MCP server and the hub keeps the parent and the epic
-    match proposal_of_arguments(cht_j("{\"kind\":\"subtask\",\"title\":\"A\",\"summary\":\"s\",\"parent\":5}")) {
+    // the text between the MCP server and the hub keeps the epic
+    match proposal_of_arguments(cht_j("{\"kind\":\"child\",\"title\":\"A\",\"summary\":\"s\",\"epic\":5}")) {
         Ok(p) => {
             match proposal_of_text(proposal_arguments_text(p)) {
-                Ok(q) => assert(q.kind == "subtask" && q.parent == 5)
+                Ok(q) => assert(q.kind == "child" && q.epic == 5)
                 Err(e) => panic(e)
             }
         }
@@ -166,12 +175,12 @@ test "child: the proposals name a parent or an epic, an unknown kind is a task o
 }
 
 test "child: the note to the agent tells whose child the task is and where it merges" {
-    ro note = child_note("233", "Панель", "doc/tasks/233-232-privet-panel/task", "subtask", "232", "Твоя ветка вливается в ветку родителя.")
-    assert(note.contains("подзадача задачи 232"))
-    assert(note.contains("doc/tasks/233-232-privet-panel/task/message.md"))
+    ro note = child_note("233", "Панель", "doc/tasks/233-panel/task", "epic", "232", "Твоя ветка вливается в ветку родителя.")
+    assert(note.contains("дочерняя задача эпика 232"))
+    assert(note.contains("doc/tasks/233-panel/task/message.md"))
     assert(note.contains("progress.md"))
     ro own = child_note("234", "Своя", "doc/tasks/234-svoya/task", "", "", "x")
     assert(!own.contains("подзадача"))
     assert(!own.contains("эпик"))
-    assert(child_note("235", "Э", "d/task", "epic", "100", "x").contains("задача эпика 100"))
+    assert(child_note("235", "Э", "d/task", "epic", "100", "x").contains("эпика 100"))
 }
