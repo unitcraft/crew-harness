@@ -1,7 +1,8 @@
-// crew-task.js — задача 192.2: распознавание задач агентом и подтверждение владельцем; чистый модуль без DOM.
+// crew-task.js — задача 192.2/192.5: распознавание задач агентом и подтверждение владельцем; чистый модуль без DOM.
 //
-// Хаб кладёт в route_state поля `proposals` (карточки), `active`, `max_active`, `confirm_word`, `over_word`, `candidates`. Главный путь — кнопка «Распознать задачи»:
-// агент присылает список (`listed`), у каждой строки кнопки «В работу», «Обсудить дальше», «Забыть» и общее поле быстрого ответа. Одиночное предложение
+// Хаб кладёт в route_state поля `proposals` (карточки), `active`, `max_active`, `confirm_word`, `over_word`, `candidates`, `targets`. Главный путь — кнопка «Распознать задачи»:
+// агент присылает список (`listed`), страница показывает ТАБЛИЦУ кандидатов: у каждой строки три переключателя «В работу / Обсудить / Забыть» (по умолчанию «Обсудить»), для «В работу» —
+// выпадающий «Способ» (Отдельная задача · Дочерняя задача эпика K · Эпик · Дополнить K), внизу одна кнопка «Применить: N в работу · M обсудить · K забыть». Одиночное предложение
 // агента (`crew_task`, настройка route_auto_propose) — карточка с кодовым словом. Здесь — разбор payload и сборка сигналов; рисует crew-task-ui.js.
 
 import { t } from './strings.js';
@@ -12,17 +13,22 @@ const num = (v) => (Number.isFinite(v) ? v : 0);
 const strings = (v) => (Array.isArray(v) ? v.filter((x) => typeof x === 'string') : []);
 
 const PROPOSAL_STATES = ['open', 'overlap', 'limit'];
-const KINDS = ['new', 'subtask', 'epic_task', 'extend'];
+/** Способы оформления работы: отдельная задача, дочерняя задача эпика, эпик, дополнение задачи. */
+export const KINDS = Object.freeze(['new', 'child', 'epic', 'extend']);
+/** Решения по строке таблицы. */
+export const CHOICES = Object.freeze(['work', 'discuss', 'forget']);
+export const DEFAULT_CHOICE = 'discuss';
 
 function parseProposal(raw) {
+  // старый хаб говорил subtask / epic_task: это дочерняя задача эпика
+  const kind = raw.kind === 'subtask' || raw.kind === 'epic_task' ? 'child' : (KINDS.includes(raw.kind) ? raw.kind : 'new');
   return {
     id: num(raw.id),
-    kind: KINDS.includes(raw.kind) ? raw.kind : 'new',
+    kind,
     title: str(raw.title),
     summary: str(raw.summary),
     extends: num(raw.extends),
-    parent: num(raw.parent),
-    epic: num(raw.epic),
+    epic: num(raw.epic) || (kind === 'child' ? num(raw.parent) : 0),
     extendsTitle: str(raw.extends_title),
     touches: strings(raw.touches),
     state: PROPOSAL_STATES.includes(raw.state) ? raw.state : 'open',
@@ -45,7 +51,7 @@ export function parseCrewTask(input) {
     confirmWord: str(src.confirm_word),
     overWord: str(src.over_word),
     candidates: num(src.candidates),
-    // задача 192.3: задачи, частью которых может стать новая работа (подзадача задачи K, задача эпика E)
+    // открытые задачи, к которым можно отнести работу: дочерняя задача эпика K (любая открытая задача становится эпиком с первой дочерней) или «Дополнить K»
     targets: (Array.isArray(src.targets) ? src.targets : []).filter(isObject).map((x) => ({ number: num(x.number), title: str(x.title), session: str(x.session), epic: x.epic === true })).filter((x) => x.number > 0),
   };
 }
@@ -54,15 +60,15 @@ export const EMPTY_CREW = Object.freeze(parseCrewTask({}));
 
 /** Сигналы страницы серверу: { kind, input }; шаг события и id добавляет app.js. */
 export const crewSignal = Object.freeze({
-  // opts: { mode: 'new' | 'subtask' | 'epic_task' | 'extend', target: номер задачи, agent: семья агента дочерней сессии }
+  // opts: { mode: 'new' | 'child' | 'epic' | 'extend', target: номер задачи, agent: семья агента сессии новой задачи }
   prop: (id, action, opts = {}) => ({ kind: 'route_prop', input: { id, action: String(action), ...(opts.mode ? { mode: opts.mode, target: opts.target || 0 } : {}), ...(opts.agent ? { agent: opts.agent } : {}) } }),
   recognize: () => ({ kind: 'route_recognize', input: {} }),
   childrenMerge: () => ({ kind: 'route_children_merge', input: {} }),
-  epic: (on) => ({ kind: 'route_epic', input: { on: on === true } }),
-  quick: (text) => ({ kind: 'route_quick', input: { text: String(text) } }),
+  // items: [{ id, action: 'work' | 'discuss' | 'forget', mode?, target?, agent? }] — вся таблица кандидатов одним сигналом
+  apply: (items) => ({ kind: 'route_apply', input: { items: items.map((x) => ({ id: x.id, action: x.action, ...(x.action === 'work' ? { mode: x.mode || 'new', target: x.target || 0 } : {}), ...(x.action === 'work' && x.agent ? { agent: x.agent } : {}) })) } }),
 });
 
-/** Строки списка «Распознать задачи» (по порядку, номера с 1 — как в быстром ответе). */
+/** Строки списка «Распознать задачи» (по порядку, номера с 1). */
 export function listedItems(crew) {
   return crew.proposals.filter((p) => p.listed).map((p, i) => ({ ...p, number: i + 1 }));
 }
@@ -78,32 +84,35 @@ export function activeText(crew) {
   return crew.maxActive > 0 ? t('crewtask.active_limit', { n: crew.active, max: crew.maxActive }) : t('crewtask.active', { n: crew.active });
 }
 
-/** Что делает работа словами: «самостоятельная задача», «подзадача задачи K», «задача эпика E» или «дополняет задачу K». */
+/** Что делает работа словами: «отдельная задача», «дочерняя задача эпика K», «эпик» или «дополняет задачу K». */
 export function kindText(p) {
   if (p.kind === 'extend' && p.extends > 0) return t('crewtask.extends', { n: p.extends });
-  if (p.kind === 'subtask' && p.parent > 0) return t('crewtask.subtask_of', { n: p.parent });
-  if (p.kind === 'epic_task' && p.epic > 0) return t('crewtask.epic_of', { n: p.epic });
+  if (p.kind === 'child' && p.epic > 0) return t('crewtask.child_of', { n: p.epic });
+  if (p.kind === 'epic') return t('crewtask.epic_new');
   return t('crewtask.new');
 }
 
-/** Способ, выбранный по умолчанию в строке: то, что пометил агент (иначе — отдельная задача); значение вида «subtask:233». */
-export function defaultWay(p) {
-  if (p.kind === 'extend' && p.extends > 0) return `extend:${p.extends}`;
-  if (p.kind === 'subtask' && p.parent > 0) return `subtask:${p.parent}`;
-  if (p.kind === 'epic_task' && p.epic > 0) return `epic_task:${p.epic}`;
+/**
+ * Способ, выбранный по умолчанию в строке: то, что пометил агент, если это сейчас возможно (такая задача открыта), иначе — отдельная задача; значение вида «child:233».
+ * Способ, который подразумевает задачу, которой нет, не предлагается.
+ */
+export function defaultWay(p, crew = EMPTY_CREW) {
+  const has = (n) => crew.targets.some((x) => x.number === n);
+  if (p.kind === 'extend' && p.extends > 0 && has(p.extends)) return `extend:${p.extends}`;
+  if (p.kind === 'child' && p.epic > 0 && has(p.epic)) return `child:${p.epic}`;
+  if (p.kind === 'epic') return 'epic:0';
   return 'new:0';
 }
 
-/** Способы для выпадающего списка строки: отдельная задача · подзадача задачи K · задача эпика E · дополнить K (значение «режим:номер»). */
+/**
+ * Способы для выпадающего списка строки: Отдельная задача · Дочерняя задача эпика K (любая открытая задача) · Эпик · Дополнить K (значение «способ:номер»).
+ * Нет открытых задач — только «Отдельная задача» и «Эпик».
+ */
 export function wayOptions(p, crew) {
   const out = [{ value: 'new:0', label: t('crewtask.way_new') }];
-  for (const x of crew.targets) {
-    out.push({ value: `subtask:${x.number}`, label: t('crewtask.way_subtask', { n: x.number, title: x.title }) });
-    if (x.epic) out.push({ value: `epic_task:${x.number}`, label: t('crewtask.way_epic', { n: x.number, title: x.title }) });
-    out.push({ value: `extend:${x.number}`, label: t('crewtask.way_extend', { n: x.number, title: x.title }) });
-  }
-  const have = out.some((o) => o.value === defaultWay(p));
-  if (!have) out.push({ value: defaultWay(p), label: kindText(p) });
+  for (const x of crew.targets) out.push({ value: `child:${x.number}`, label: t('crewtask.way_child', { n: x.number, title: x.title }) });
+  out.push({ value: 'epic:0', label: t('crewtask.way_epic') });
+  for (const x of crew.targets) out.push({ value: `extend:${x.number}`, label: t('crewtask.way_extend', { n: x.number, title: x.title }) });
   return out;
 }
 
@@ -115,6 +124,38 @@ export function parseWay(value) {
   return { mode: KINDS.includes(mode) ? mode : 'new', target };
 }
 
+/** Строки таблицы кандидатов: только открытые (у строк с пересечением или упёртым лимитом свои кнопки). */
+export function tableRows(crew) {
+  return listedItems(crew).filter((p) => p.state === 'open');
+}
+
+/** Строки, на которые нужен отдельный ответ: пересечение файлов с идущей задачей или лимит. */
+export function problemRows(crew) {
+  return listedItems(crew).filter((p) => p.state !== 'open');
+}
+
+/** Сводка таблицы: сколько строк «в работу», «обсудить», «забыть» (choices: id строки -> решение; нет записи — «Обсудить»). */
+export function applyCounts(rows, choices) {
+  const out = { work: 0, discuss: 0, forget: 0 };
+  for (const p of rows) out[choices.get(p.id) || DEFAULT_CHOICE] += 1;
+  return out;
+}
+
+/** Подпись кнопки внизу таблицы: «Применить: 2 в работу · 1 обсудить · 0 забыть». */
+export function applyLabel(counts) {
+  return t('crewtask.apply', counts);
+}
+
+/** Что уходит серверу по кнопке «Применить»: по строке на каждую; «В работу» — со способом и семьёй агента. */
+export function applyPlan(rows, choices, ways, agents, crew) {
+  return rows.map((p) => {
+    const action = choices.get(p.id) || DEFAULT_CHOICE;
+    if (action !== 'work') return { id: p.id, action };
+    const { mode, target } = parseWay(ways.get(p.id) || defaultWay(p, crew));
+    return { id: p.id, action, mode, target, agent: agents.get(p.id) || '' };
+  });
+}
+
 /** Строка списка: «1. Название — новая — затронет: файлы». */
 export function rowText(p, number) {
   const parts = [`${number}. ${p.title}`, kindText(p)];
@@ -122,7 +163,7 @@ export function rowText(p, number) {
   return parts.join(' — ');
 }
 
-/** Кнопки строки списка: для «дополняет» первая — «Дополнить K», для остального — «В работу». */
+/** Кнопки одиночной карточки и строк, которым нужен отдельный ответ: для «дополняет» первая — «Дополнить K», для остального — «В работу». */
 export function rowActions(p, way = '') {
   const chosen = way ? parseWay(way) : null;
   const extending = chosen ? chosen.mode === 'extend' : p.kind === 'extend';
@@ -146,7 +187,7 @@ export function rowActions(p, way = '') {
   return out;
 }
 
-/** Текст проблемы карточки: пересечение с подзадачей или упёртый лимит; для обычной — пусто. */
+/** Текст проблемы карточки: пересечение с задачей или упёртый лимит; для обычной — пусто. */
 export function problemText(p, crew) {
   if (p.state === 'overlap') {
     if (p.unknown || p.withFiles.length === 0) return t('crewtask.overlap_unknown', { n: p.withN });
@@ -163,7 +204,7 @@ export function wordHint(p, crew) {
   return t('crewtask.word', { word: crew.confirmWord });
 }
 
-/** Что стоит в строке подзадачи, которая ждёт: другую подзадачу или место под лимитом (иначе пусто). */
+/** Что стоит в строке дочерней задачи, которая ждёт: другую задачу или место под лимитом (иначе пусто). */
 export function subWaitsText(sub) {
   if (sub.state !== 'waits') return '';
   return sub.waitsFor > 0 ? t('crewtask.waits_for', { n: sub.waitsFor }) : t('crewtask.waits_queue');

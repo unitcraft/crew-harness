@@ -22,6 +22,7 @@ export function createMachinesPanel(doc, deps) {
   const stamps = new Map(); // «сессия|ключ|состояние» -> когда страница впервые это увидела
   const treeState = new Map(); // путь в дереве -> раскрыто ли
   const fullShown = new Set(); // пути длинных значений, показанных целиком
+  const hintOpen = new Set(); // «сессия|время|вид» подсказок, показанных целиком
   let rev = 0;
 
   const store = () => {
@@ -157,6 +158,28 @@ export function createMachinesPanel(doc, deps) {
       copy);
   }
 
+  // ---- служебные подсказки агенту (задача 192.5) ----
+
+  function hintsCard(session) {
+    const hints = (session.routeState && session.routeState.hints) || [];
+    const rows = hints.slice().reverse().map((x) => {
+      const key = `${session.id}|${x.ms}|${x.kind}`;
+      const opened = hintOpen.has(key);
+      const toggle = h(doc, 'button', { type: 'button', class: 'link-btn hint-toggle', 'aria-expanded': String(opened), text: opened ? t('mach.hint_hide') : t('mach.hint_show') });
+      toggle.addEventListener('click', () => { if (opened) hintOpen.delete(key); else hintOpen.add(key); changed(); });
+      return h(doc, 'li', { class: 'hint-row', 'data-kind': x.kind },
+        h(doc, 'div', { class: 'hint-head' },
+          h(doc, 'span', { class: 'hint-time muted', text: x.ms ? clock(x.ms) : '' }),
+          h(doc, 'span', { class: 'hint-kind', text: x.kind }),
+          toggle),
+        opened ? h(doc, 'pre', { class: 'hint-text mono', text: x.text }) : false);
+    });
+    return h(doc, 'section', { class: 'card mach-hints' },
+      h(doc, 'h3', { class: 'card-title', text: t('mach.hints') }),
+      rows.length === 0 ? h(doc, 'p', { class: 'muted', text: t('mach.hints_none') }) : h(doc, 'ul', { class: 'hint-list' }, ...rows),
+      rows.length === 0 ? false : h(doc, 'p', { class: 'muted hint-note', text: t('mach.hints_note', { n: rows.length }) }));
+  }
+
   function debugCard(session) {
     const opened = isOpen(session.id);
     const head = h(doc, 'button', { type: 'button', class: 'card-head mach-debug-head', 'aria-expanded': String(opened) },
@@ -173,10 +196,10 @@ export function createMachinesPanel(doc, deps) {
   return {
     /** Подпись содержимого: меняется, когда должна меняться картинка. */
     signature(session, queued) {
-      return JSON.stringify([rev, session.machine, session.state, session.routeState, queued.length, isOpen(session.id)]);
+      return JSON.stringify([rev, session.machine, session.state, session.routeState, queued.length, isOpen(session.id), [...hintOpen]]);
     },
     render(session, queued) {
-      return [workCard(session, queued), debugCard(session)];
+      return [workCard(session, queued), hintsCard(session), debugCard(session)];
     },
   };
 }

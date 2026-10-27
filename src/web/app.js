@@ -324,8 +324,7 @@ const handlers = {
   onCrewRecognize(trace) { send(...signal(trace, crewSignal.recognize())); },
   onCrewProp(trace, id, action, opts) { send(...signal(trace, crewSignal.prop(id, action, opts))); },
   onChildrenMerge(trace) { send(...signal(trace, crewSignal.childrenMerge())); },
-  onEpic(trace, on) { send(...signal(trace, crewSignal.epic(on))); },
-  onCrewQuick(trace, text) { send(...signal(trace, crewSignal.quick(text))); },
+  onCrewApply(trace, items) { send(...signal(trace, crewSignal.apply(items))); },
   onRouteSubtaskChoose(trace, n, tree) { send(...signal(trace, routeSignal.subtaskChoose(n, tree))); },
   // «Закончить задачу»: переключить режим и сразу прогнать шаги окончания — два сигнала подряд, шаг события у каждого свой
   onRouteFinish(trace, route) {

@@ -156,11 +156,20 @@ function parseTask(raw) {
   };
 }
 
+/**
+ * Задача 192.5: служебные подсказки агенту (то, что хаб говорит агенту скрытыми заметками): время, вид и полный текст; последние 20 на сессию. Только в памяти хаба, в ленте и в журнале их нет.
+ * Хаб шлёт hints [{ ms, kind, text }].
+ */
+export function parseHints(src) {
+  const list = Array.isArray(src && src.hints) ? src.hints : [];
+  return list.filter(isObject).map((x) => ({ ms: num(x.ms), kind: str(x.kind), text: str(x.text) })).filter((x) => x.text !== '').slice(-20);
+}
+
 const KID_STATES = ['running', 'waits', 'ready', 'merged'];
 
 /**
- * Задача 192.3: дети сессии (дочерние сессии) и сведения о себе, если сессия — дочерняя. Хаб шлёт children (строки таблицы task/children.md),
- * children_block (номера, что держат слияние родителя), child { parent, parent_name, kind, parent_no, k, target }, epic.
+ * Задачи 192.3 и 192.5: дочерние задачи эпика (дочерние сессии) и сведения о себе, если сессия — дочерняя. Хаб шлёт children (строки таблицы task/children.md),
+ * children_unmerged (номера не слитых дочерних: справка «останутся отдельно», слияние эпика они не держат), child { parent, parent_name, kind, parent_no, k, target }, epic.
  */
 export function parseKids(src) {
   const list = (Array.isArray(src.children) ? src.children : []).filter(isObject).map((r) => ({
@@ -183,14 +192,14 @@ export function parseKids(src) {
     list,
     merged: list.filter((r) => r.state === 'merged').length,
     total: list.length,
-    block: Array.isArray(src.children_block) ? src.children_block.filter((x) => typeof x === 'string') : [],
+    unmerged: Array.isArray(src.children_unmerged) ? src.children_unmerged.filter((x) => typeof x === 'string') : [],
     epic: src.epic === true,
-    child: c && str(c.parent) ? { parent: str(c.parent), parentName: str(c.parent_name), kind: str(c.kind), parentNo: str(c.parent_no), k: num(c.k), target: c.target === 'parent' ? 'parent' : 'main' } : null,
+    child: c && str(c.parent) ? { parent: str(c.parent), parentName: str(c.parent_name), kind: str(c.kind), parentNo: str(c.parent_no), parentBranch: str(c.parent_branch), k: num(c.k), target: c.target === 'parent' ? 'parent' : 'main' } : null,
   };
 }
 
 /**
- * Задача 192.4: где работает агент, пока у сессии нет задачи. kind: 'wip' (дерево своей ветки wip/<имя>) или 'folder' (папка проекта на её текущей ветке).
+ * Задача 192.4: где работает агент, пока у сессии нет задачи. kind: 'wip' (отдельная копия-дерево на отсоединённом коммите, без ветки) или 'folder' (папка проекта на её текущей ветке).
  * Хаб шлёт where { kind, branch, worktree, unmerged_commits, work, idle_days, stale }; у сессии с задачей поля нет (там ветка задачи).
  */
 export function parseWhere(raw) {
@@ -207,8 +216,8 @@ export function parseWhere(raw) {
 }
 
 /**
- * Подпись под полем: где идёт работа. Черновик: Worktree включён — «в своей ветке wip/… (создастся с первым сообщением)», выключен — «прямо в папке проекта».
- * Открытая сессия: задача с веткой — «в ветке task/…»; wip — «в ветке wip/…»; без дерева — «прямо в main» или «прямо в ветке X» (текущая ветка папки проекта).
+ * Подпись под полем: где идёт работа. Черновик: Worktree включён — «в отдельной копии (без ветки), создастся с первым сообщением», выключен — «прямо в папке проекта».
+ * Открытая сессия: задача с веткой — «в ветке task/…»; wip — «в отдельной копии (без ветки)»; без дерева — «прямо в main» или «прямо в ветке X» (текущая ветка папки проекта).
  */
 export function whereText(session) {
   if (!session) return '';
@@ -219,7 +228,7 @@ export function whereText(session) {
   if (task && task.worktree) return task.branch ? t('where.branch', { branch: task.branch }) : '';
   const w = rs.where;
   if (!w) return '';
-  if (w.kind === 'wip') return w.branch ? t('where.branch', { branch: w.branch }) : '';
+  if (w.kind === 'wip') return t('where.copy');
   if (!w.branch) return '';
   return w.branch === 'main' ? t('where.main') : t('where.folder_branch', { branch: w.branch });
 }
@@ -232,13 +241,13 @@ export function parseRouteState(input) {
   const src = isObject(input) ? input : {};
   const route = normalizeRoute(src.route);
   const useTree = src.use_tree !== false;
-  if (!routeInfo(route).hasSteps) return { route, stepless: true, steps: [], running: false, useTree, task: parseTask(src.task), where: parseWhere(src.where), crew: parseCrewTask(src), kids: parseKids(src) };
+  if (!routeInfo(route).hasSteps) return { route, stepless: true, steps: [], running: false, useTree, task: parseTask(src.task), where: parseWhere(src.where), crew: parseCrewTask(src), kids: parseKids(src), hints: parseHints(src) };
   const steps = (Array.isArray(src.steps) ? src.steps : []).filter(isObject).map((s, i) => ({
     n: Number.isInteger(s.n) ? s.n : i + 1,
     title: str(s.title),
     state: STEP_STATES.includes(s.state) ? s.state : 'pending',
   }));
-  return { route, stepless: false, steps, running: src.running === true, useTree, task: parseTask(src.task), where: parseWhere(src.where), crew: parseCrewTask(src), kids: parseKids(src) };
+  return { route, stepless: false, steps, running: src.running === true, useTree, task: parseTask(src.task), where: parseWhere(src.where), crew: parseCrewTask(src), kids: parseKids(src), hints: parseHints(src) };
 }
 
 export const INTERACTIVE_STATE = Object.freeze(parseRouteState({ route: DEFAULT_ROUTE }));

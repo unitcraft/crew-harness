@@ -1324,3 +1324,23 @@ input[aria-invalid="true"] { border-color: var(--danger); }
 .crew-kid[data-state="merged"] .crew-kid-title { text-decoration: line-through; opacity: .7; }
 .crew-kids-title { margin: 8px 0 2px; font-size: 12px; }
 .crew-parent { display: block; margin: 4px 0; }
+
+/* задача 192.5: таблица кандидатов, «папка деревьев» проекта, служебные подсказки агенту */
+.crew-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.crew-table th { text-align: left; font-weight: 600; color: var(--fg-muted); padding: 4px 8px 4px 0; white-space: nowrap; }
+.crew-table td { padding: 6px 8px 6px 0; vertical-align: top; border-top: 1px solid var(--border); }
+.crew-no { width: 1%; color: var(--fg-muted); }
+.crew-title { font-weight: 600; min-width: 120px; overflow-wrap: anywhere; }
+.crew-summary { max-width: 260px; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; }
+.crew-touches { max-width: 200px; overflow-wrap: anywhere; font-size: 12px; }
+.crew-choices { white-space: nowrap; }
+.crew-choice { display: inline-flex; align-items: center; gap: 3px; margin-right: 8px; cursor: pointer; }
+.crew-way-cell { min-width: 150px; }
+.crew-apply-row { display: flex; justify-content: flex-end; margin-top: 8px; }
+.proj-trees .field-hint, .field-hint { font-size: 12px; margin: 2px 0 0; }
+.hint-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.hint-head { display: flex; align-items: center; gap: 8px; }
+.hint-kind { font-weight: 600; flex: 1; }
+.hint-text { margin: 4px 0 0; padding: 6px 8px; max-height: 260px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; border: 1px solid var(--border); border-radius: 8px; font-size: 12px; }
+.crew-merge-all { margin-top: 6px; }
+@media (max-width: 720px) { .crew-table thead { display: none; } .crew-table tr { display: block; padding: 6px 0; } .crew-table td { display: block; border: 0; padding: 2px 0; max-width: none; } }

@@ -549,22 +549,22 @@ test('задача 192.4: подпись, где идёт работа — пр�
   assert.equal(whereText(sess(rs({ where: { kind: 'folder', branch: 'main' } }))), 'работа идёт прямо в main');
   assert.equal(whereText(sess(rs({ where: { kind: 'folder', branch: 'feature/x' } }))), 'работа идёт прямо в ветке feature/x папки проекта');
   assert.equal(whereText(sess(rs({ where: { kind: 'folder', branch: '' } }))), '', 'папка не репозиторий или отсоединённая голова: подписи нет');
-  assert.equal(whereText(sess(rs({ where: { kind: 'wip', branch: 'wip/ab12', worktree: '/w/repo-wip-ab12' } }))), 'работа идёт в ветке wip/ab12');
+  assert.equal(whereText(sess(rs({ where: { kind: 'wip', branch: '', worktree: '/w/repo-ab12' } }))), 'работа идёт в отдельной копии (без ветки)');
   assert.equal(whereText(sess(rs({ task: { id: '007-x', branch: 'task/007-x', worktree: '/w/t' } }))), 'работа идёт в ветке task/007-x');
   assert.equal(whereText({ draft: true, worktree: false }), 'работа пойдёт прямо в папке проекта, без отдельной ветки');
-  assert.match(whereText({ draft: true }), /wip/);
+  assert.match(whereText({ draft: true }), /без ветки/);
   assert.equal(whereText(null), '');
   assert.equal(whereText(sess(null)), '');
 });
 
 test('задача 192.4: where из route_state вычищается; карточка устаревшей wip-ветки — только у wip без задачи', () => {
   assert.equal(parseWhere(undefined), null);
-  assert.deepEqual(parseWhere({ kind: 'wip', branch: 'wip/a', worktree: 'W', unmerged_commits: 2, work: true, idle_days: 31, stale: true }),
-    { kind: 'wip', branch: 'wip/a', worktree: 'W', unmergedCommits: 2, work: true, idleDays: 31, stale: true });
+  assert.deepEqual(parseWhere({ kind: 'wip', branch: '', worktree: 'W', unmerged_commits: 2, work: true, idle_days: 31, stale: true }),
+    { kind: 'wip', branch: '', worktree: 'W', unmergedCommits: 2, work: true, idleDays: 31, stale: true });
   assert.equal(parseWhere({ kind: 'junk' }).kind, 'folder');
-  const stale = parseRouteState({ route: 'interactive', where: { kind: 'wip', branch: 'wip/a', stale: true } });
+  const stale = parseRouteState({ route: 'interactive', where: { kind: 'wip', branch: '', stale: true } });
   assert.equal(wipStalePrompt(stale), true);
-  assert.equal(wipStalePrompt(parseRouteState({ route: 'interactive', where: { kind: 'wip', branch: 'wip/a', stale: false } })), false);
+  assert.equal(wipStalePrompt(parseRouteState({ route: 'interactive', where: { kind: 'wip', branch: '', stale: false } })), false);
   assert.equal(wipStalePrompt(parseRouteState({ route: 'interactive', where: { kind: 'folder', branch: 'main', stale: true } })), false);
   assert.equal(wipStalePrompt(null), false);
   assert.equal(parseRouteState({ route: 'fast' }).where, null);

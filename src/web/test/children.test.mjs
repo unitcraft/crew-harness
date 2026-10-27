@@ -1,5 +1,5 @@
 // Дочерние сессии (задача 192.3): вложенность и сворачивание в списке, потомки для удаления, разбор детей и родителя из route_state,
-// панель детей с открытием ребёнка, выбор способа в карточке («Как подзадачу задачи K» и др.), сигналы.
+// панель дочерних задач с открытием ребёнка, выбор способа в карточке («Дочерняя задача эпика K», «Эпик» и др.), сигналы.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as st from '../state.js';
@@ -36,20 +36,20 @@ test('descendantsOf: дети и внуки, не сам родитель и н�
   assert.deepEqual(st.descendantsOf(list, 'g'), []);
 });
 
-test('сессия из session_created несёт parent; route_state — детей, родителя, эпик и блок слияния', () => {
-  const model = st.reduce(st.initialModel(), { id: 'e1', trace: 'c1', step: 0, kind: 'session_created', input: { name: 'Дочь', agent: 'claude', parent: 'top', parent_kind: 'subtask' }, time: 1 });
+test('сессия из session_created несёт parent; route_state — дочерние, эпик и справку о не слитых', () => {
+  const model = st.reduce(st.initialModel(), { id: 'e1', trace: 'c1', step: 0, kind: 'session_created', input: { name: 'Дочь', agent: 'claude', parent: 'top', parent_kind: 'epic' }, time: 1 });
   assert.equal(model.sessions.c1.parent, 'top');
   const rs = parseRouteState({
     route: 'interactive',
-    children: [{ k: 1, number: '233', kind: 'подзадача', title: 'Панель', folder: '233-232-privet-panel', branch: 'task/233-232-privet-panel', session: 'top-c1', state: 'running', state_text: 'идёт', done: 1, total: 3, touches: ['a.js'] }, { k: 2, number: '234', title: 'Тест', state: 'merged', session: 'top-c2', waits_for: 0 }, 5, { state: 'зря' }],
-    children_block: ['233'],
+    children: [{ k: 1, number: '233', kind: 'дочерняя', title: 'Панель', folder: '233-232-privet-panel', branch: 'task/233-232-privet-panel', session: 'top-c1', state: 'running', state_text: 'идёт', done: 1, total: 3, touches: ['a.js'] }, { k: 2, number: '234', title: 'Тест', state: 'merged', session: 'top-c2', waits_for: 0 }, 5, { state: 'зря' }],
+    children_unmerged: ['233'],
     epic: true,
-    child: { parent: 'top', parent_name: 'Оркестратор', kind: 'subtask', parent_no: '232', k: 1, target: 'parent' },
+    child: { parent: 'top', parent_name: 'Оркестратор', kind: 'epic', parent_no: '232', k: 1, target: 'parent' },
   });
   assert.equal(rs.kids.list.length, 3);
   assert.equal(rs.kids.merged, 1);
   assert.equal(rs.kids.total, 3);
-  assert.deepEqual(rs.kids.block, ['233']);
+  assert.deepEqual(rs.kids.unmerged, ['233']);
   assert.equal(rs.kids.epic, true);
   assert.equal(rs.kids.child.parentName, 'Оркестратор');
   assert.equal(rs.kids.child.target, 'parent');
@@ -58,36 +58,50 @@ test('сессия из session_created несёт parent; route_state — де�
   assert.deepEqual(parseRouteState({}).kids.list, []);
 });
 
-test('карточка: способ по умолчанию — отдельная задача; пометка агента (подзадача, задача эпика, дополнить) выбрана заранее', () => {
+test('карточка: способ по умолчанию — отдельная задача; пометка агента (дочерняя, эпик, дополнить) выбрана заранее, если такая задача открыта', () => {
   const crew = parseCrewTask({ proposals: [], targets: [{ number: 232, title: 'Привет', session: 's', epic: false }, { number: 100, title: 'Эпик', session: 'e', epic: true }, { number: 0 }] });
   assert.equal(crew.targets.length, 2);
-  const base = { kind: 'new', parent: 0, epic: 0, extends: 0, state: 'open', title: 'x' };
-  assert.equal(defaultWay(base), 'new:0');
-  assert.equal(defaultWay({ ...base, kind: 'subtask', parent: 232 }), 'subtask:232');
-  assert.equal(defaultWay({ ...base, kind: 'epic_task', epic: 100 }), 'epic_task:100');
-  assert.equal(defaultWay({ ...base, kind: 'extend', extends: 232 }), 'extend:232');
+  const base = { kind: 'new', epic: 0, extends: 0, state: 'open', title: 'x' };
+  assert.equal(defaultWay(base, crew), 'new:0');
+  assert.equal(defaultWay({ ...base, kind: 'child', epic: 100 }, crew), 'child:100');
+  assert.equal(defaultWay({ ...base, kind: 'epic' }, crew), 'epic:0');
+  assert.equal(defaultWay({ ...base, kind: 'extend', extends: 232 }, crew), 'extend:232');
+  // пометка про задачу, которой нет (закрыта, сессия удалена): такого способа не предлагают
+  assert.equal(defaultWay({ ...base, kind: 'child', epic: 7 }, crew), 'new:0');
+  assert.equal(defaultWay({ ...base, kind: 'extend', extends: 7 }, crew), 'new:0');
+  assert.equal(defaultWay({ ...base, kind: 'child', epic: 7 }), 'new:0');
   const values = wayOptions(base, crew).map((o) => o.value);
-  assert.deepEqual(values, ['new:0', 'subtask:232', 'extend:232', 'subtask:100', 'epic_task:100', 'extend:100']);
-  assert.deepEqual(parseWay('subtask:232'), { mode: 'subtask', target: 232 });
+  assert.deepEqual(values, ['new:0', 'child:232', 'child:100', 'epic:0', 'extend:232', 'extend:100']);
+  // нет открытых задач — только «Отдельная задача» и «Эпик»
+  assert.deepEqual(wayOptions(base, parseCrewTask({})).map((o) => o.value), ['new:0', 'epic:0']);
+  assert.deepEqual(wayOptions(base, parseCrewTask({})).map((o) => o.label), ['Отдельная задача', 'Эпик']);
+  assert.deepEqual(parseWay('child:232'), { mode: 'child', target: 232 });
+  assert.deepEqual(parseWay('epic:0'), { mode: 'epic', target: 0 });
   assert.deepEqual(parseWay('мусор'), { mode: 'new', target: 0 });
-  assert.match(kindText({ ...base, kind: 'subtask', parent: 232 }), /подзадача задачи 232/);
-  assert.match(kindText({ ...base, kind: 'epic_task', epic: 100 }), /задача эпика 100/);
+  assert.match(kindText({ ...base, kind: 'child', epic: 232 }), /дочерняя задача эпика 232/);
+  assert.equal(kindText({ ...base, kind: 'epic' }), 'эпик');
+  // старые слова хаба — дочерняя задача эпика
+  const old = parseCrewTask({ proposals: [{ id: 1, kind: 'subtask', parent: 232, title: 'a' }, { id: 2, kind: 'epic_task', epic: 100, title: 'b' }] });
+  assert.deepEqual(old.proposals.map((p) => [p.kind, p.epic]), [['child', 232], ['child', 100]]);
   // выбор «Дополнить» меняет главную кнопку
   assert.equal(rowActions(base, 'extend:232')[0].action, 'extend');
   assert.equal(rowActions(base, 'new:0')[0].action, 'start');
 });
 
-test('сигналы: способ и агент уходят с кнопкой, слияние подзадач и эпик — свои сигналы', () => {
-  assert.deepEqual(crewSignal.prop(3, 'start', { mode: 'subtask', target: 232, agent: 'codex' }), { kind: 'route_prop', input: { id: 3, action: 'start', mode: 'subtask', target: 232, agent: 'codex' } });
+test('сигналы: способ и агент уходят с кнопкой, «Применить» несёт всю таблицу, слияние дочерних — свой сигнал, сигнала «сделать эпиком» нет', () => {
+  assert.deepEqual(crewSignal.prop(3, 'start', { mode: 'child', target: 232, agent: 'codex' }), { kind: 'route_prop', input: { id: 3, action: 'start', mode: 'child', target: 232, agent: 'codex' } });
   assert.deepEqual(crewSignal.prop(3, 'discuss'), { kind: 'route_prop', input: { id: 3, action: 'discuss' } });
   assert.deepEqual(crewSignal.childrenMerge(), { kind: 'route_children_merge', input: {} });
-  assert.deepEqual(crewSignal.epic(true), { kind: 'route_epic', input: { on: true } });
+  assert.equal(crewSignal.epic, undefined);
+  assert.equal(crewSignal.quick, undefined);
+  assert.deepEqual(crewSignal.apply([{ id: 1, action: 'work', mode: 'epic', target: 0 }, { id: 2, action: 'discuss' }, { id: 3, action: 'forget', mode: 'child' }]),
+    { kind: 'route_apply', input: { items: [{ id: 1, action: 'work', mode: 'epic', target: 0 }, { id: 2, action: 'discuss' }, { id: 3, action: 'forget' }] } });
 });
 
 test('панель: дети с состоянием и прогрессом, клик открывает сессию ребёнка; у ребёнка — ссылка на родителя', () => {
   const doc = createFakeDocument();
   const opened = [];
-  const ui = createCrewTaskUi(doc, { onSelect: (id) => opened.push(id), onEpic() {} }, { agents: () => [] });
+  const ui = createCrewTaskUi(doc, { onSelect: (id) => opened.push(id), onChildrenMerge() {} }, { agents: () => [] });
   const routeState = parseRouteState({
     route: 'interactive',
     children: [{ k: 1, number: '233', title: 'Панель', session: 'top-c1', state: 'running', state_text: 'идёт', done: 1, total: 3 }, { k: 2, number: '234', title: 'Тест', session: 'top-c2', state: 'waits', state_text: 'ждёт 233' }],
@@ -100,7 +114,7 @@ test('панель: дети с состоянием и прогрессом, к
   assert.match(kids[1].textContent, /ждёт 233/);
   kids[1].click();
   assert.deepEqual(opened, ['top-c2']);
-  const childPanel = ui.panel({ id: 'top-c1', draft: false, routeState: parseRouteState({ route: 'interactive', child: { parent: 'top', parent_name: 'Оркестратор', kind: 'subtask', parent_no: '232', k: 1, target: 'parent' } }) });
+  const childPanel = ui.panel({ id: 'top-c1', draft: false, routeState: parseRouteState({ route: 'interactive', child: { parent: 'top', parent_name: 'Оркестратор', kind: 'epic', parent_no: '232', k: 1, target: 'parent' } }) });
   const link = childPanel.querySelectorAll('.crew-parent');
   assert.equal(link.length, 1);
   link[0].click();

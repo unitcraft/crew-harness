@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import * as st from '../state.js';
 import { parseMachineState, workingNow, previewValue, branchLabel, machineJson, machineOpenKey } from '../machines.js';
 import { createMachinesPanel } from '../machines-ui.js';
+import { parseRouteState } from '../routes.js';
 import { createMockServer, foldMachine, machineInput, routeStateInput } from '../mock.js';
 import { createFakeDocument } from './fake-dom.mjs';
 
@@ -209,4 +210,25 @@ test('foldMachine: чанки копят ответ, журнал не длин�
   assert.equal(m.journal.length, 20);
   assert.equal(machineInput(m).data.reply.length, 30);
   assert.equal(foldMachine(m, 'tool_call', {}, 9), m);
+});
+
+test('«Служебные подсказки агенту» (192.5): вид и время, полный текст по клику, новейшие сверху; последние 20; нет подсказок — пояснение', () => {
+  const none = setup(sessionWith({ state: 'idle' }));
+  const emptyBox = none.paint();
+  assert.equal(emptyBox.querySelector('.mach-hints .card-title').textContent, 'Служебные подсказки агенту');
+  assert.match(emptyBox.querySelector('.mach-hints').textContent, /Подсказок пока не было/);
+  const hints = Array.from({ length: 22 }, (_, i) => ({ ms: 1_000_000 + i, kind: i % 2 === 0 ? 'список задач' : 'Распознать задачи', text: `текст ${i}` }));
+  const routeState = parseRouteState({ route: 'interactive', hints });
+  assert.equal(routeState.hints.length, 20, 'на странице не больше 20');
+  const s = setup(sessionWith({ state: 'idle', routeState }));
+  let box = s.paint();
+  const rows = box.querySelectorAll('.hint-row');
+  assert.equal(rows.length, 20);
+  assert.equal(rows[0].querySelector('.hint-kind').textContent, 'Распознать задачи', 'новейшая сверху');
+  assert.equal(box.querySelectorAll('.hint-text').length, 0, 'текст скрыт');
+  rows[0].querySelector('.hint-toggle').click();
+  assert.equal(s.log.renders, 1);
+  box = s.paint();
+  assert.equal(box.querySelectorAll('.hint-text')[0].textContent, 'текст 21', 'полный текст по клику');
+  assert.match(s.panel.signature(sessionWith({ state: 'idle', routeState }), []), /текст 21/);
 });

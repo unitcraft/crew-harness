@@ -910,10 +910,13 @@ export function createView(doc, refs, deps) {
       deadline = overlapSeen.get(key);
     }
     const stale = stalePrompt(task) && !staleKept.has(`${session.id}:${task.id}`);
-    const kids = (session.routeState && session.routeState.kids) || { block: [], child: null };
-    const held = kids.block;
+    const kids = (session.routeState && session.routeState.kids) || { unmerged: [], child: null };
+    const held = kids.unmerged;
     const toParent = Boolean(kids.child) && kids.child.target === 'parent';
-    const sig = JSON.stringify([session.id, task && [task.id, task.number, task.branch, task.state, task.unmergedCommits, task.diff, task.tests, task.testsRunning, task.stale, task.idleDays], finish, ready, overlap, showDiff, deadline, stale, held, toParent, wipStalePrompt(session.routeState) && !staleKept.has(`${session.id}:wip`) && session.routeState.where]);
+    // у дочерней задачи эпика с веткой кнопка закрытия — «Влить в ветку эпика K», подпись называет ветку; иначе «Слить в main» (push в origin/main)
+    const epicNo = kids.child ? kids.child.parentNo : '';
+    const epicBranch = kids.child ? kids.child.parentBranch : '';
+    const sig = JSON.stringify([session.id, task && [task.id, task.number, task.branch, task.state, task.unmergedCommits, task.diff, task.tests, task.testsRunning, task.stale, task.idleDays], finish, ready, overlap, showDiff, deadline, stale, held, toParent, epicNo, epicBranch, wipStalePrompt(session.routeState) && !staleKept.has(`${session.id}:wip`) && session.routeState.where]);
     if (sig === cardsSig) return;
     cardsSig = sig;
     const cards = [];
@@ -935,11 +938,11 @@ export function createView(doc, refs, deps) {
       cards.push(h(doc, 'section', { class: 'route-card', 'data-card': 'finish' },
         h(doc, 'strong', { class: 'route-card-title', text: t('route.finish_title', { number: numberOf(task) }) }),
         testsBlock(),
-        held.length > 0 ? h(doc, 'span', { class: 'route-card-text', text: t('route.children_held', { list: held.join(', ') }) }) : false,
+        held.length > 0 && !toParent ? h(doc, 'span', { class: 'route-card-text', text: t('route.children_unmerged', { list: held.join(', ') }) }) : false,
         h(doc, 'div', { class: 'route-actions' },
-          held.length > 0 ? button(t('route.children_merge'), 'primary', () => handlers.onChildrenMerge(session.id)) : h(doc, 'span', { class: 'route-merge' },
-            button(toParent ? t('route.finish_merge_parent') : t('route.finish_merge'), 'primary', () => handlers.onRouteMerge(session.id)),
-            h(doc, 'small', { class: 'route-merge-note', text: toParent ? t('route.finish_merge_parent_note') : t('route.finish_merge_note') })),
+          h(doc, 'span', { class: 'route-merge' },
+            button(toParent ? t('route.finish_merge_parent', { n: epicNo }) : t('route.finish_merge'), 'primary', () => handlers.onRouteMerge(session.id)),
+            h(doc, 'small', { class: 'route-merge-note', text: toParent ? t('route.finish_merge_parent_note', { branch: epicBranch }) : t('route.finish_merge_note') })),
           button(t('route.finish_fast'), '', () => handlers.onRouteFinish(session.id, 'fast')),
           button(t('route.finish_full'), '', () => handlers.onRouteFinish(session.id, 'full')))));
     }
@@ -979,11 +982,11 @@ export function createView(doc, refs, deps) {
         h(doc, 'span', { class: 'route-card-text', text: summary }),
         testsBlock(),
         showDiff ? h(doc, 'ul', { class: 'route-diff' }, ...files) : false,
-        held.length > 0 ? h(doc, 'span', { class: 'route-card-text', text: t('route.children_held', { list: held.join(', ') }) }) : false,
+        held.length > 0 && !toParent ? h(doc, 'span', { class: 'route-card-text', text: t('route.children_unmerged', { list: held.join(', ') }) }) : false,
         h(doc, 'div', { class: 'route-actions' },
-          held.length > 0 ? button(t('route.children_merge'), 'primary', () => handlers.onChildrenMerge(session.id)) : h(doc, 'span', { class: 'route-merge' },
-            button(toParent ? t('route.ready_publish_parent') : t('route.ready_publish'), 'dark', () => handlers.onRouteMerge(session.id)),
-            h(doc, 'small', { class: 'route-merge-note', text: toParent ? t('route.finish_merge_parent_note') : t('route.finish_merge_note') })),
+          h(doc, 'span', { class: 'route-merge' },
+            button(toParent ? t('route.ready_publish_parent', { n: epicNo }) : t('route.ready_publish'), 'dark', () => handlers.onRouteMerge(session.id)),
+            h(doc, 'small', { class: 'route-merge-note', text: toParent ? t('route.finish_merge_parent_note', { branch: epicBranch }) : t('route.finish_merge_note') })),
           button(showDiff ? t('route.ready_hide') : t('route.ready_show'), '', () => {
             if (open.has(diffKey)) open.delete(diffKey); else open.add(diffKey);
             cardsSig = '';

@@ -1,7 +1,7 @@
 // Распознавание задач (задача 192.2): разбор route_state, строки и кнопки списка, сигналы, карточки и полоса «Распознать задачи».
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseCrewTask, EMPTY_CREW, crewSignal, listedItems, singleCard, activeText, rowText, rowActions, problemText, wordHint, recognizeShown } from '../crew-task.js';
+import { parseCrewTask, EMPTY_CREW, crewSignal, listedItems, singleCard, activeText, rowText, rowActions, problemText, wordHint, recognizeShown, applyCounts, applyLabel, applyPlan, tableRows, problemRows } from '../crew-task.js';
 import { parseRouteState } from '../routes.js';
 import { createCrewTaskUi } from '../crew-task-ui.js';
 import { createFakeDocument } from './fake-dom.mjs';
@@ -63,10 +63,9 @@ test('слова и счётчик: «в работе N из лимита M», �
   assert.match(wordHint({ state: 'overlap' }, crew), /подождать/);
 });
 
-test('сигналы: кнопка карточки, распознавание, быстрый ответ', () => {
+test('сигналы: кнопка карточки, распознавание', () => {
   assert.deepEqual(crewSignal.prop(4, 'start'), { kind: 'route_prop', input: { id: 4, action: 'start' } });
   assert.deepEqual(crewSignal.recognize(), { kind: 'route_recognize', input: {} });
-  assert.deepEqual(crewSignal.quick('1, 2 — в работу'), { kind: 'route_quick', input: { text: '1, 2 — в работу' } });
   assert.equal(recognizeShown({ id: 's1' }), true);
   assert.equal(recognizeShown({ id: 's1', draft: true }), false);
   assert.equal(recognizeShown(null), false);
@@ -78,29 +77,33 @@ function mount(extra = {}) {
   const ui = createCrewTaskUi(doc, {
     onCrewProp: (...a) => log.push(['prop', ...a]),
     onCrewRecognize: (...a) => log.push(['recognize', ...a]),
-    onCrewQuick: (...a) => log.push(['quick', ...a]),
+    onCrewApply: (...a) => log.push(['apply', ...a]),
   });
   const session = { id: 's1', routeState: parseRouteState({ route: 'interactive', ...wire(extra) }) };
   ui.render(session);
   return { doc, ui, log, session };
 }
 
-test('полоса и карточки: кнопка «Распознать задачи», строки списка, кнопки строк, одиночная карточка с «Это не задача»', () => {
+test('полоса и таблица: кнопка «Распознать задачи», строка на кандидата, по умолчанию «Обсудить», одиночная карточка с «Это не задача»', () => {
   const { ui, log } = mount();
   const el = ui.el;
-  assert.equal(el.hidden, false);
-  const buttons = (root) => root.querySelectorAll('button');
-  const byText = (text) => buttons(el).filter((b) => b.textContent === text);
+  const byText = (text) => el.querySelectorAll('button').filter((b) => b.textContent === text);
   assert.equal(byText('Распознать задачи').length, 1);
   byText('Распознать задачи')[0].click();
   assert.deepEqual(log.pop(), ['recognize', 's1']);
-  assert.equal(el.querySelectorAll('.crew-row').length, 2);
-  byText('В работу')[0].click();
-  assert.deepEqual(log.pop(), ['prop', 's1', 1, 'start', { mode: 'new', target: 0, agent: '' }]);
-  byText('Дополнить 3')[0].click();
-  assert.deepEqual(log.pop(), ['prop', 's1', 2, 'extend', { mode: 'extend', target: 3, agent: '' }]);
-  byText('Обсудить дальше')[0].click();
-  assert.deepEqual(log.pop(), ['prop', 's1', 1, 'discuss']);
+  // таблица: заголовки и две строки, у каждой три переключателя, выбран «Обсудить»
+  assert.deepEqual(el.querySelectorAll('th').map((x) => x.textContent), ['№', 'Название', 'Краткое содержание', 'Затронет', 'Решение', 'Способ']);
+  const rows = el.querySelectorAll('tbody tr');
+  assert.equal(rows.length, 2);
+  assert.match(rows[0].textContent, /Кнопка выхода/);
+  assert.match(rows[0].textContent, /сделать кнопку/);
+  assert.match(rows[0].textContent, /src\/web\/view\.js/);
+  assert.deepEqual(rows[0].querySelectorAll('input').map((r) => [r.value, r.checked]), [['work', false], ['discuss', true], ['forget', false]]);
+  assert.deepEqual(rows[0].querySelectorAll('label').map((l) => l.textContent), ['В работу', 'Обсудить', 'Забыть']);
+  assert.equal(rows[0].querySelectorAll('select').length, 0, 'способ виден только у «В работу»');
+  assert.equal(el.querySelectorAll('.crew-apply')[0].textContent, 'Применить: 0 в работу · 2 обсудить · 0 забыть');
+  assert.equal(el.querySelectorAll('.crew-quick').length, 0, 'текстового быстрого ответа нет');
+  // одиночная карточка
   byText('Это не задача')[0].click();
   assert.deepEqual(log.pop(), ['prop', 's1', 3, 'dismiss']);
   assert.match(el.textContent, /в работе 2 из лимита 3/);
@@ -108,25 +111,57 @@ test('полоса и карточки: кнопка «Распознать за
   assert.match(el.textContent, /или напишите слово «задача»/);
 });
 
-test('быстрый ответ: поле шлёт текст и очищается, пустое не шлёт; поле переживает перерисовку', () => {
-  const { ui, log, session } = mount();
-  const quick = ui.el.querySelector('.crew-quick');
-  quick.value = '1, 3 — в работу; 2 — забыть';
-  const apply = ui.el.querySelectorAll('button').filter((b) => b.textContent === 'Применить')[0];
-  apply.click();
-  assert.deepEqual(log.pop(), ['quick', 's1', '1, 3 — в работу; 2 — забыть']);
-  assert.equal(quick.value, '');
-  apply.click();
-  assert.equal(log.length, 0);
-  quick.value = 'черновик';
-  ui.render({ ...session, routeState: parseRouteState({ route: 'interactive', ...wire({ active: 1 }) }) });
-  assert.equal(ui.el.querySelector('.crew-quick'), quick);
-  assert.equal(quick.value, 'черновик');
+test('таблица: выбор «В работу» открывает «Способ», подпись кнопки считает, «Применить» шлёт всю таблицу одним вызовом', () => {
+  const targets = [{ number: 3, title: 'Старая', session: 's9', epic: false }];
+  const { ui, log, session } = mount({ targets });
+  const el = ui.el;
+  const radio = (row, value) => el.querySelectorAll('tbody tr')[row].querySelectorAll('input').filter((r) => r.value === value)[0];
+  const choose = (row, value) => { const r = radio(row, value); r.checked = true; r.dispatchEvent({ type: 'change', target: r }); };
+  choose(0, 'work');
+  assert.equal(el.querySelectorAll('.crew-apply')[0].textContent, 'Применить: 1 в работу · 1 обсудить · 0 забыть');
+  let way = el.querySelectorAll('tbody tr')[0].querySelectorAll('select')[0];
+  assert.ok(way, 'у «В работу» есть «Способ»');
+  assert.deepEqual(way.querySelectorAll('option').map((o) => o.textContent), ['Отдельная задача', 'Дочерняя задача эпика 3 · Старая', 'Эпик', 'Дополнить 3 · Старая']);
+  choose(1, 'forget');
+  assert.equal(el.querySelectorAll('.crew-apply')[0].textContent, 'Применить: 1 в работу · 0 обсудить · 1 забыть');
+  way = el.querySelectorAll('tbody tr')[0].querySelectorAll('select')[0];
+  way.value = 'child:3';
+  way.dispatchEvent({ type: 'change', target: way });
+  el.querySelectorAll('.crew-apply')[0].click();
+  assert.deepEqual(log.pop(), ['apply', 's1', [{ id: 1, action: 'work', mode: 'child', target: 3, agent: '' }, { id: 2, action: 'forget' }]]);
+  assert.ok(session);
+});
+
+test('таблица: без открытых задач «Способ» — только «Отдельная задача» и «Эпик»; пометка агента про несуществующую задачу не выбирается', () => {
+  const { ui } = mount({ proposals: [prop({ id: 1, kind: 'child', epic: 55 }), prop({ id: 2, kind: 'epic', title: 'Большая' })] });
+  const el = ui.el;
+  const choose = (row) => { const r = el.querySelectorAll('tbody tr')[row].querySelectorAll('input').filter((x) => x.value === 'work')[0]; r.checked = true; r.dispatchEvent({ type: 'change', target: r }); };
+  choose(0);
+  choose(1);
+  const ways = el.querySelectorAll('tbody tr').map((row) => row.querySelectorAll('select')[0]);
+  assert.deepEqual(ways[0].querySelectorAll('option').map((o) => o.textContent), ['Отдельная задача', 'Эпик']);
+  assert.equal(ways[0].value, 'new:0');
+  assert.equal(ways[1].value, 'epic:0', 'пометка «эпик» от агента выбрана');
+});
+
+test('сводка и план таблицы: счёт по решениям, способ и агент только у «В работу»; строки с пересечением в таблицу не входят', () => {
+  const crew = parseCrewTask({ proposals: [prop({ id: 1 }), prop({ id: 2 }), prop({ id: 3 }), prop({ id: 4, state: 'overlap', with_n: 1 })], targets: [{ number: 7, title: 'Т', session: 's', epic: false }] });
+  const rows = tableRows(crew);
+  assert.deepEqual(rows.map((p) => p.id), [1, 2, 3]);
+  const choices = new Map([[1, 'work'], [3, 'forget']]);
+  const counts = applyCounts(rows, choices);
+  assert.deepEqual(counts, { work: 1, discuss: 1, forget: 1 });
+  assert.equal(applyLabel(counts), 'Применить: 1 в работу · 1 обсудить · 1 забыть');
+  assert.deepEqual(applyPlan(rows, choices, new Map([[1, 'epic:0']]), new Map([[1, 'codex']]), crew), [
+    { id: 1, action: 'work', mode: 'epic', target: 0, agent: 'codex' }, { id: 2, action: 'discuss' }, { id: 3, action: 'forget' },
+  ]);
+  const over = problemRows(crew);
+  assert.equal(over.length, 1);
 });
 
 test('без списка и карточек остаётся только полоса; у черновика ничего нет; панель говорит про кандидатов и «Задач нет»', () => {
   const doc = createFakeDocument();
-  const ui = createCrewTaskUi(doc, { onCrewProp() {}, onCrewRecognize() {}, onCrewQuick() {} });
+  const ui = createCrewTaskUi(doc, { onCrewProp() {}, onCrewRecognize() {}, onCrewApply() {} });
   const empty = { id: 's2', routeState: parseRouteState({ route: 'interactive' }) };
   ui.render(empty);
   assert.equal(ui.el.hidden, false);
