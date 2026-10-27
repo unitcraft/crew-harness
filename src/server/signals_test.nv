@@ -70,12 +70,12 @@ fn sg_rows_take(rows []TableRow, w CodeSignal) -> bool {
     false
 }
 
-// The signal is taken by a row of a state.
+// The signal is taken by a row of a state or by a common event (Alula 2.26, task 240: the cancel `cancel_request` is a signal of the protocol, the common events of the machine take it).
 fn sg_in_table(def MachineDef, w CodeSignal) -> bool {
     for s in def.states {
         if sg_rows_take(s.rows, w) { return true }
     }
-    false
+    sg_rows_take(def.common, w)
 }
 
 // The signal is declared in the table: a signal of a party or of the machine, a part; an answer, a failure and a timeout have no name in the table.
@@ -152,7 +152,7 @@ test "sg the signals of the code are the four of the page" {
     mut names = []str.new()
     for w in signals_given_by_code() { names.push(w.name) }
     assert(names.contains("user_message"))
-    assert(names.contains("cancel"))
+    assert(names.contains("cancel_request"))
     assert(names.contains("permission_decision"))
     assert(names.contains("session_created"))
 }
@@ -180,7 +180,7 @@ test "sg a signal that the table knows is declared in the table of the dialog" {
     for w in sg_known() { assert(sg_declared(def, w)) }
 }
 
-test "sg a signal that the table knows is taken by a row of a state" {
+test "sg a signal that the table knows is taken by a row of a state or a common event" {
     ro def = sg_machine().def
     assert(sg_known().len() >= 5)
     for w in sg_known() { assert(sg_in_table(def, w)) }
@@ -219,17 +219,18 @@ test "sg session_created is a signal that the table does not know, on purpose" {
     assert(found)
 }
 
+// Alula 2.26 (task 240): the cancel is the signal of the protocol of a call `отмена_запроса` (`cancel_request`), declared by the library connected to the machine
 test "sg the signal cancel is a signal of the machine and is not a signal of the party user" {
     ro def = sg_machine().def
     mut as_party_signal = false
     for p in def.parties {
         for x in p.signals {
-            if x.name == "cancel" { as_party_signal = true }
+            if x.name == "cancel" || x.name == "cancel_request" { as_party_signal = true }
         }
     }
     mut as_machine_signal = false
     for x in def.signals {
-        if x.name == "cancel" { as_machine_signal = true }
+        if x.name == "cancel_request" { as_machine_signal = true }
     }
     assert(!as_party_signal)
     assert(as_machine_signal)

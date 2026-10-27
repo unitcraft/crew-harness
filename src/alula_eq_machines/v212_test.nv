@@ -10,10 +10,10 @@ fn product_tables() -> []str => ["chat.alula.md", "cycle_check.alula.md", "dialo
 
 fn json_of_table(name str) -> str => name.replace(".alula.md", ".alula.json")
 
-test "v212 table files say 2.25" {
+test "v212 table files say 2.26" {
     for name in product_tables() {
         ro text = text_of_file(table_files(), name)
-        assert(text.contains("format: 2.25\n"))
+        assert(text.contains("format: 2.26\n"))
         assert(!text.contains("format: 2.11"))
         assert(!text.contains("alula-2.11"))
     }
@@ -38,47 +38,51 @@ test "v212 check takes every table" {
 }
 
 test "v212 compile refuses 2.11" {
-    ro old = text_of_file(table_files(), "dialog.alula.md").replace("format: 2.25", "format: 2.11")
+    ro old = text_of_file(table_files(), "dialog.alula.md").replace("format: 2.26", "format: 2.11")
     assert(old.contains("format: 2.11"))
     ro made = run_with(["compile", "/m/dialog.alula.md"], one("/m/dialog.alula.md", old))
     assert(made.code != 0)
     assert(made.err.contains("2.11"))
-    assert(made.err.contains("format: 2.25"))
+    assert(made.err.contains("format: 2.26"))
 }
 
 test "v212 check refuses 2.11" {
-    ro old = text_of_file(table_files(), "chat.alula.md").replace("format: 2.25", "format: 2.11")
+    ro old = text_of_file(table_files(), "chat.alula.md").replace("format: 2.26", "format: 2.11")
     assert(old.contains("format: 2.11"))
     ro made = run_with(["check", "/m/chat.alula.md"], one("/m/chat.alula.md", old))
     assert(made.code != 0)
 }
 
-test "v212 render writes 2.25" {
+test "v212 render writes 2.26" {
     ro made = run_with(["render", "/m/dialog.alula.json"], one("/m/dialog.alula.json", text_of_file(machine_files(), "dialog.alula.json")))
     assert(made.code == 0)
-    assert(made.out.contains("- format: 2.25\n"))
+    assert(made.out.contains("- format: 2.26\n"))
     ro en = run_with(["render", "/m/dialog.alula.json", "--language", "en"], one("/m/dialog.alula.json", text_of_file(machine_files(), "dialog.alula.json")))
-    assert(en.out.contains("- format: 2.25\n"))
+    assert(en.out.contains("- format: 2.26\n"))
 }
 
 test "v212 json of 2.11 is refused" {
-    ro old = text_of_file(machine_files(), "dialog.alula.json").replace("\"alula_version\":\"2.25\"", "\"alula_version\":\"2.11\"")
+    ro old = text_of_file(machine_files(), "dialog.alula.json").replace("\"alula_version\":\"2.26\"", "\"alula_version\":\"2.11\"")
     ro made = run_with(["render", "/m/dialog.alula.json"], one("/m/dialog.alula.json", old))
     assert(made.code != 0)
 }
 
-test "v212 the line of the fragment in the written file" {
+// Alula 2.26 (AL-140): the connection of the library «Пауза» is a heading `### Пауза` with the file beside the machine, its hash and the table of the values of the parameters
+test "v212 the connection of the library in the written file" {
     ro made = run_with(["render", "/m/dialog_steps.alula.json"], one("/m/dialog_steps.alula.json", text_of_file(machine_files(), "dialog_steps.alula.json")))
     assert(made.code == 0)
-    assert(made.out.contains("Пауза(сигнал_остановки: halt, код_остановки: \"pause_halt\", вложенные: [agent_step], отмена_запросов: механика, вход_заново: ничего, право_записи: \"сессия ничего не пишет\")"))
-    assert(!made.out.contains("### Pause"))
+    assert(made.out.contains("## Подключения\n\n### Пауза\n- Файл: libs/pause.alula.md\n- Хеш: "))
+    assert(made.out.contains("| сигнал_остановки | \"halt\" |"))
+    assert(made.out.contains("| вход_заново | \"ничего\" |"))
+    assert(!made.out.contains("Пауза("))
 }
 
-test "v212 the line of the fragment in english" {
+test "v212 the connection of the library in english" {
     ro made = run_with(["render", "/m/dialog_steps.alula.json", "--language", "en"], one("/m/dialog_steps.alula.json", text_of_file(machine_files(), "dialog_steps.alula.json")))
     assert(made.code == 0)
-    assert(made.out.contains("Pause(halt_signal: "))
-    assert(made.out.contains("reenter: nothing"))
+    assert(made.out.contains("## Includes\n"))
+    assert(made.out.contains("- File: libs/pause.alula.md\n- Hash: "))
+    assert(!made.out.contains("Pause(halt_signal: "))
 }
 
 test "v212 circle of every machine that includes the fragment" {

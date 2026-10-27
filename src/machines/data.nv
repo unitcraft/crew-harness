@@ -627,19 +627,39 @@ export fn test_files() -> []NamedText => [
     NamedText { name: "session-session-2.alula.test.json", text: embed_str("../../machines/methodology/tests/session-session-2.alula.test.json") }
 ]
 
-/// The names of the files that the folders hold (read at compile time with `embed_dir`): `product_machines`, `methodology_machines`, `product_tables`, `methodology_tables`, `product_scenarios`,
-/// `methodology_scenarios`; a test compares them with the lists above, so a file that is added to a folder and not to its list is found. `product_files` and `methodology_files` are every file of the folder
+/// The names of the files that the folders hold (read at compile time with `embed_dir`): `product_machines`, `methodology_machines`, `product_tables`, `methodology_tables` (the files of the folder itself),
+/// `product_libraries` and `methodology_libraries` (`libs/…`), `product_scenarios`, `methodology_scenarios`; a test compares them with the lists above, so a file that is added to a folder and not to its list is found. `product_files` and `methodology_files` are every file of the folder
 /// (a test proves there is no `*.alula.txt` among them: the one extension of a table is `.alula.md`, task 169).
 export fn data_dir_names(dir str) -> []str {
     if dir == "product_machines" { return only_ending(embed_dir("../../machines/product").paths(), [".alula.json"]) }
     if dir == "methodology_machines" { return only_ending(embed_dir("../../machines/methodology").paths(), [".alula.json"]) }
-    if dir == "product_tables" { return only_ending(embed_dir("../../machines/product").paths(), [".alula.md"]) }
-    if dir == "methodology_tables" { return only_ending(embed_dir("../../machines/methodology").paths(), [".alula.md"]) }
+    if dir == "product_tables" { return only_top(only_ending(embed_dir("../../machines/product").paths(), [".alula.md"])) }
+    if dir == "methodology_tables" { return only_top(only_ending(embed_dir("../../machines/methodology").paths(), [".alula.md"])) }
+    if dir == "product_libraries" { return only_libs(only_ending(embed_dir("../../machines/product").paths(), [".alula.md"])) }
+    if dir == "methodology_libraries" { return only_libs(only_ending(embed_dir("../../machines/methodology").paths(), [".alula.md"])) }
     if dir == "product_files" { return embed_dir("../../machines/product").paths() }
     if dir == "methodology_files" { return embed_dir("../../machines/methodology").paths() }
     if dir == "product_scenarios" { return embed_dir("../../machines/product/tests").paths() }
     if dir == "methodology_scenarios" { return embed_dir("../../machines/methodology/tests").paths() }
     []str.new()
+}
+
+// The names of the files of the folder itself: `embed_dir` reads the folder recursively, the libraries lie in `libs/` beside the machines (Alula 2.26, section 9).
+fn only_top(names []str) -> []str {
+    mut out = []str.new()
+    for n in names {
+        if !n.contains("/") { out.push(n) }
+    }
+    out
+}
+
+// The names of the libraries beside the machines (`libs/…`).
+fn only_libs(names []str) -> []str {
+    mut out = []str.new()
+    for n in names {
+        if n.starts_with("libs/") { out.push(n) }
+    }
+    out
 }
 
 fn only_ending(names []str, suffixes []str) -> []str {
@@ -650,6 +670,50 @@ fn only_ending(names []str, suffixes []str) -> []str {
         }
     }
     out
+}
+
+/// The libraries that the tables connect (Alula 2.26, section 9; task 240), by the path beside a machine (`libs/pause.alula.md`, as the line `- Файл:` of a connection names it): of the
+/// methodology «Пауза» and the arithmetic of the cycle with their English twins (the files of `libs/` of the package 0.9.0: the script of the migration put the Russian ones beside the machines,
+/// the English ones are for the English sample of the agent step), of the product «Отмена запроса» (`machines/product/libs/`: the signal of the protocol of the cancel). A test that translates
+/// a table passes them to the translator.
+export fn library_files() -> []NamedText => [
+    NamedText { name: "libs/cycle_arithmetic.alula.md", text: embed_str("../../machines/methodology/libs/cycle_arithmetic.alula.md") },
+    NamedText { name: "libs/cycle_arithmetic.en.alula.md", text: embed_str("../../machines/methodology/libs/cycle_arithmetic.en.alula.md") },
+    NamedText { name: "libs/pause.alula.md", text: embed_str("../../machines/methodology/libs/pause.alula.md") },
+    NamedText { name: "libs/pause.en.alula.md", text: embed_str("../../machines/methodology/libs/pause.en.alula.md") },
+    NamedText { name: "libs/call_cancel.alula.md", text: embed_str("../../machines/product/libs/call_cancel.alula.md") }
+]
+
+/// The libraries put into the folder `dir` (`/m` -> `/m/libs/pause.alula.md`): for the program `alula` that a test runs on a folder of files.
+export fn library_files_in(dir str) -> []NamedText {
+    mut out = []NamedText.new()
+    for f in library_files() { out.push(NamedText { name: "${dir}/${f.name}", text: f.text }) }
+    out
+}
+
+/// Does the machine connect a library (a tree with `"file": "libs/…"` among its connections, or a table with the line `- Файл: libs/…`)? On the package 0.9.0 such a machine does not go
+/// through the English file (task 239, the test c222 of the package): the English text keeps the path of the Russian file of the library, and a library is read in the language of the machine
+/// only (section 9). The circles of the tests go in Russian for it.
+export fn connects_library(text str) -> bool => text.replace(" ", "").contains("\"file\":\"libs/") || text.contains("\n- Файл: libs/")
+
+/// The text written by `render` of the package 0.9.0 with the event of a part in the form of 2.26: the generator writes `часть(agent_chunk { content: кусок })` (`part(agent_chunk { … })` in English),
+/// the name of the part in brackets, which the translator of the same version refuses (since 2.26 the type of the part is named by the column `части` of the party: `часть { content: кусок }`).
+/// A circle of the tests mends this one form and compares the rest (task 240; a finding for the package 0.9.1).
+export fn part_mended(text str) -> str {
+    mut lines = []str.new()
+    for line in text.split("\n") {
+        mut l = line
+        for word in ["часть", "part"] {
+            ro open = "| ${word}(agent_chunk { "
+            if l.contains(open) {
+                l = l.replace(open, "| ${word} { ")
+                ro at = l.find(" }) |") ?? -1
+                if at >= 0 { l = "${l[..at]} } |${l[at + 5..]}" }
+            }
+        }
+        lines.push(l)
+    }
+    lines.join("\n")
 }
 
 /// The text of the machine of the chat session (`machines/product/chat.alula.json`).
@@ -690,6 +754,10 @@ export fn session_start_table_text() -> str => text_of_file(table_files(), "sess
 
 /// The copy of the sample of the agent step of the specification (`machines/methodology/agent-step-sample.txt`, the same text as `spec/samples/agent-step.alula.md` of the package, links aside).
 export fn agent_step_sample_text() -> str => embed_str("../../machines/methodology/agent-step-sample.txt")
+
+/// The copy of the English twin of the sample of the agent step (`machines/methodology/agent-step-sample.en.txt`, the text of `spec/samples/agent-step.en.alula.md` of the package 0.9.0 as it is, task 240):
+/// the package keeps for its own tests the sample at 2.25, the product needs the one of 2.26.
+export fn agent_step_sample_en_text() -> str => embed_str("../../machines/methodology/agent-step-sample.en.txt")
 
 /// The registry of the methodology as text (`machines/methodology/registry.md`): the 58 primitives (the parse of a reply is three functions, one per role), the sets of the types of the signatures.
 export fn methodology_registry_text() -> str => embed_str("../../machines/methodology/registry.md")

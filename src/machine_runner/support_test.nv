@@ -7,10 +7,10 @@ import std.encoding.json.{Json, JsonValue, JsonObject}
 import alula.machine.{NamedText}
 import alula.machine_table.{MachineDef, StateDef, TableRow, Target, ToState, ToNothing, ToPrevious, ToSame, ToPrepareReturn, load_machine}
 import alula.machine_run.{AlulaMachine, TestRun, load_alula_machine, parse_test, run_test, run_nested_test, run_ok, report_text}
-import alula.machine_text.{translate_checked, TranslateReport, TranslateError, error_text, render_machine}
-import crew_harness.machines.{methodology_nested, methodology_registry, test_files, task_runner_machine_text, task_runner_table_text}
+import alula.machine_text.{translate_checked_with, TranslateReport, TranslateError, error_text, render_machine}
+import crew_harness.machines.{methodology_nested, methodology_registry, test_files, task_runner_machine_text, task_runner_table_text, library_files, connects_library}
 
-fn table_report() -> TranslateReport => translate_checked(task_runner_table_text(), methodology_registry())
+fn table_report() -> TranslateReport => translate_checked_with(task_runner_table_text(), methodology_registry(), library_files())
 
 fn errors_text(report TranslateReport) -> str {
     mut parts = []str.new()
@@ -199,9 +199,11 @@ fn notes_of(report TranslateReport) -> []str {
 
 // The circle tree -> file -> tree in a language: "" when the second tree equals the first.
 fn circle(json str, lang str) -> str {
+    // a machine that connects a library goes through the English file not (the package 0.9.0, task 239: `connects_library`)
+    if lang == "en" && connects_library(json) { return "" }
     ro made = render_machine(json, lang)
     if made.notes.len() > 0 { return "render: ${made.notes.join(" ## ")}" }
-    ro again = translate_checked(made.text, methodology_registry())
+    ro again = translate_checked_with(made.text, methodology_registry(), library_files())
     if again.errors.len() > 0 { return "translate: ${notes_of(again).join(" ## ")}" }
     tree_diff(json, again.json)
 }

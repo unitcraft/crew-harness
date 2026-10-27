@@ -9,7 +9,7 @@ import std.io.{IoCapture, mock_io}
 import std.os.{MockOs, mock_os}
 import alula.machine.{NamedText, text_of_file}
 import alula.alula_cli.{execute}
-import crew_harness.machines.{machine_files, test_files, table_files, methodology_registry_text, all_journal_text}
+import crew_harness.machines.{machine_files, test_files, table_files, methodology_registry_text, all_journal_text, library_files_in}
 
 /// Ran: what a run of the program left.
 type Ran { code int, out str, err str }
@@ -30,6 +30,11 @@ fn run_with(argv []str, files []NamedText) -> Ran {
         for dir in host_dirs(files) {
             ro registry = write_text(Path.posix("${dir}/registry.md"), methodology_registry_text())
             ro journal = write_text(Path.posix("${dir}/journal.md"), all_journal_text())
+            // the libraries of the methodology beside the machines (Alula 2.26, section 9): the tables connect `libs/pause.alula.md` and `libs/cycle_arithmetic.alula.md`
+            for lib in library_files_in(dir) {
+                make_parents(lib.name)
+                ro written_lib = write_text(Path.posix(lib.name), lib.text)
+            }
         }
         code = execute()
     }

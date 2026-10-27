@@ -43,7 +43,7 @@ test "ac dialog: Idle takes the signal that closes the session" {
 
 test "ac dialog: Idle has no row for the cancel" {
     ro m = ac_dialog()
-    assert(!m.accepts_signal(m.initial(), "cancel"))
+    assert(!m.accepts_signal(m.initial(), "cancel_request"))
 }
 
 test "ac dialog: a name the table does not know is not taken" {
@@ -66,7 +66,7 @@ test "ac dialog: an open turn does not take a message" {
 
 test "ac dialog: an open turn takes the cancel, a signal of the table" {
     ro m = ac_dialog()
-    assert(m.accepts_signal(ac_open(m), "cancel"))
+    assert(m.accepts_signal(ac_open(m), "cancel_request"))
 }
 
 test "ac dialog: an open turn does not take the signal that closes the session" {
@@ -81,9 +81,9 @@ test "ac dialog: a part of an answer is not a signal" {
 
 test "ac dialog: after the cancel the session takes a message again" {
     ro m = ac_dialog()
-    ro back = ac_in(m, ac_open(m), "cancel", "")
+    ro back = ac_in(m, ac_open(m), "cancel_request", "")
     assert(m.accepts_signal(back, "user_message"))
-    assert(!m.accepts_signal(back, "cancel"))
+    assert(!m.accepts_signal(back, "cancel_request"))
 }
 
 test "ac dialog: the end takes nothing" {
@@ -91,7 +91,7 @@ test "ac dialog: the end takes nothing" {
     ro closed = ac_in(m, m.initial(), "close_session", "")
     assert(!m.accepts_signal(closed, "user_message"))
     assert(!m.accepts_signal(closed, "close_session"))
-    assert(!m.accepts_signal(closed, "cancel"))
+    assert(!m.accepts_signal(closed, "cancel_request"))
 }
 
 test "ac dialog: a state that is not in the table takes nothing" {
@@ -110,27 +110,27 @@ test "ac dialog: the answer does not depend on the names of the states" {
     ro m = ac_dialog()
     ro open = ac_open(m)
     assert(m.accepts_signal(m.initial(), "user_message") != m.accepts_signal(open, "user_message"))
-    assert(m.accepts_signal(m.initial(), "cancel") != m.accepts_signal(open, "cancel"))
+    assert(m.accepts_signal(m.initial(), "cancel_request") != m.accepts_signal(open, "cancel_request"))
 }
 
 test "ac chat: the first state takes a message and a cancel signal" {
     ro m = ac_chat()
     assert(m.accepts_signal(m.initial(), "user_message"))
-    assert(m.accepts_signal(m.initial(), "cancel"))
+    assert(m.accepts_signal(m.initial(), "cancel_request"))
 }
 
 test "ac chat: an open request takes the cancel and not a message" {
     ro m = ac_chat()
     ro open = ac_open(m)
     assert(!m.accepts_signal(open, "user_message"))
-    assert(m.accepts_signal(open, "cancel"))
+    assert(m.accepts_signal(open, "cancel_request"))
 }
 
 test "ac chat: the end takes nothing" {
     ro m = ac_chat()
     ro done = ac_feed(m, ac_open(m), stamped(EventKind.Answered, "agent_done", Some("agent-1"), ""))
     assert(!m.accepts_signal(done, "user_message"))
-    assert(!m.accepts_signal(done, "cancel"))
+    assert(!m.accepts_signal(done, "cancel_request"))
 }
 
 test "ac common event: a signal of the machine of the session start is taken in a state and not in the pause or the end" {

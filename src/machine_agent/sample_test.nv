@@ -5,18 +5,18 @@ module crew_harness.machine_agent
 
 // ORACLE-WORKAROUND(32): `import std.text` is needed in `nova build` for `[]str.join` (a `nova test` build has it already); drop the import when item 32 is fixed
 import std.text
-import alula.machine_text.{translate_checked, TranslateReport}
-import crew_harness.machines.{methodology_registry, agent_step_table_text, agent_step_machine_text, agent_step_sample_text}
+import alula.machine_text.{translate_checked_with, TranslateReport}
+import crew_harness.machines.{methodology_registry, agent_step_table_text, agent_step_machine_text, agent_step_sample_text, library_files}
 
 fn lf(text str) -> str => text.replace("\r\n", "\n")
 
 fn sample() -> str => lf(agent_step_sample_text())
 
-fn sample_report() -> TranslateReport => translate_checked(sample(), methodology_registry())
+fn sample_report() -> TranslateReport => translate_checked_with(sample(), methodology_registry(), library_files())
 
 fn sample_json() -> str => sample_report().json
 
-fn report_of(text str) -> TranslateReport => translate_checked(text, methodology_registry())
+fn report_of(text str) -> TranslateReport => translate_checked_with(text, methodology_registry(), library_files())
 
 test "sm project keys" {
     ro json = sample_json()
@@ -57,5 +57,5 @@ test "sm json differs by keys" {
     ro plain = product.replace(",\"project_key\":\"пауза_повтора\"", "").replace(",\"project_key\":\"политика_разрешений\"", "")
     assert(plain != product)
     assert(plain == report_of(with_usage(sample())).json)
-    assert(translate_checked(agent_step_table_text(), methodology_registry()).json == product)
+    assert(translate_checked_with(agent_step_table_text(), methodology_registry(), library_files()).json == product)
 }

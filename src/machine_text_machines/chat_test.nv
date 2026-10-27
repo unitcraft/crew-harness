@@ -3,8 +3,15 @@ module crew_harness.machine_text_machines
 
 import std.text
 import std.encoding.json.{Json, JsonValue, JsonObject}
-import crew_harness.machines.{chat_machine_text, chat_table_text}
-import alula.machine_text.{TranslateError, error_text, translate}
+import crew_harness.machines.{chat_machine_text, chat_table_text, library_files}
+import alula.machine_text.{TranslateError, error_text, translate_report_with}
+
+// The translation of the table of the chat with the libraries beside it (Alula 2.26, task 240: the chat connects the library of the cancel `libs/call_cancel.alula.md`).
+fn chat_translation() -> Result[str, []TranslateError] {
+    ro report = translate_report_with(chat_table_text(), library_files())
+    if report.errors.len() > 0 { return Err(report.errors) }
+    Ok(report.json)
+}
 
 fn errors_line(problems []TranslateError) -> str {
     mut parts = []str.new()
@@ -122,14 +129,14 @@ fn machine_diff(first_text str, second_text str) -> str {
 }
 
 test "chat translates" {
-    match translate(chat_table_text()) {
+    match chat_translation() {
         Ok(json) => assert(json.contains("\"machine\":\"ChatSession\""))
         Err(problems) => panic(errors_line(problems))
     }
 }
 
 test "chat equals" {
-    match translate(chat_table_text()) {
+    match chat_translation() {
         Ok(json) => {
             ro where = machine_diff(json, chat_machine_text())
             if where != "" { panic("differs at ${where}") }
@@ -140,7 +147,7 @@ test "chat equals" {
 }
 
 test "chat diff sees" {
-    match translate(chat_table_text()) {
+    match chat_translation() {
         Ok(json) => {
             assert(machine_diff(json.replace("cancelled by the user", "cancelled by a user"), chat_machine_text()) != "")
             assert(machine_diff(json.replace("\"to\":\"Awaiting\"", "\"to\":\"Failed\""), chat_machine_text()).starts_with("$.states[0].rows[0].to"))

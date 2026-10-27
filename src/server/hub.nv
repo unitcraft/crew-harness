@@ -502,7 +502,7 @@ fn Hub mut @cancel(trace str) Proc Detach Time -> () {
     if at < 0 { return }
     mut s = @sessions[at]
     if s.clients.len() == 0 { return }
-    feed_in(@settings.store == "pg", @settings.data_dir, s, Incoming.signal("cancel", ""))
+    feed_in(@settings.store == "pg", @settings.data_dir, s, Incoming.signal("cancel_request", ""))
     @drain(at)
 }
 

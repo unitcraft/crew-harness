@@ -6,8 +6,8 @@ import std.text
 import alula.machine.{text_of_file}
 import alula.machine_table.{StateKind, AppealKind, ForkKind, EndKind, OperationKind, MachineParty, GatekeeperParty, EnhancedParty}
 import alula.machine_run.{load_alula_machine}
-import alula.machine_text.{translate_checked, translate_report, render_summary, render_machine}
-import crew_harness.machines.{methodology_registry, machine_files, table_files, task_runner_machine_text, task_runner_table_text}
+import alula.machine_text.{translate_checked_with, translate_report_with, render_summary, render_machine}
+import crew_harness.machines.{methodology_registry, machine_files, table_files, task_runner_machine_text, task_runner_table_text, library_files}
 
 test "tr clean" {
     ro report = table_report()
@@ -20,7 +20,9 @@ test "tr clean" {
 
 test "tr file is translation" {
     assert(table_report().json == task_runner_machine_text())
-    assert(translate_report(task_runner_table_text()).json == task_runner_machine_text())
+    // Alula 2.26 (AL-138): the tree carries the reads of the states that the check derives, with the hidden reads of the external functions of the registry of the host; the translation
+    // without the registry does not know them, so only the checked translation is the committed file
+    assert(translate_report_with(task_runner_table_text(), library_files()).errors.len() == 0)
 }
 
 test "tr in the lists" {
@@ -40,7 +42,9 @@ test "tr loads" {
     assert(def.end_rows.len() == 8)
     assert(def.primitives.len() == 30)
     assert(def.request_limit.len() == 1)
-    assert(def.includes.len() == 0)
+    // Alula 2.26 (AL-140): «Пауза» is a library, the one connection of the runner
+    assert(def.includes.len() == 1)
+    assert(def.includes[0].file == "libs/pause.alula.md")
     assert(def.constants.len() == 2)
 }
 
@@ -109,8 +113,8 @@ test "tr summary" {
 }
 
 test "tr header" {
-    assert(task_runner_machine_text().starts_with("{\"format\":\"machine/2\",\"alula_version\":\"2.25\",\"machine\":\"task_runner\",\"version\":\"1\""))
-    assert(task_runner_table_text().contains("- format: 2.25"))
+    assert(task_runner_machine_text().starts_with("{\"format\":\"machine/2\",\"alula_version\":\"2.26\",\"machine\":\"task_runner\",\"version\":\"1\""))
+    assert(task_runner_table_text().contains("- format: 2.26"))
 }
 
 test "tr circle ru" {
@@ -124,7 +128,7 @@ test "tr circle en" {
 test "tr circle same file" {
     ro first = render_machine(task_runner_machine_text(), "ru")
     assert(first.notes.len() == 0)
-    ro again = translate_checked(first.text, methodology_registry())
+    ro again = translate_checked_with(first.text, methodology_registry(), library_files())
     assert(again.errors.len() == 0)
     assert(render_machine(again.json, "ru").text == first.text)
 }
@@ -136,13 +140,10 @@ test "tr english file" {
     assert(en.text.contains("machine session_start(input "))
     assert(en.text.contains("machine cycle_check(input "))
     assert(en.text.contains("### SessionLaunch — appeal"))
-    ro back = translate_checked(en.text, methodology_registry())
-    assert(back.errors.len() == 0)
-    assert(tree_diff(task_runner_machine_text(), back.json) == "")
-    ro ru = render_machine(back.json, "ru")
-    ro twice = translate_checked(ru.text, methodology_registry())
-    assert(twice.errors.len() == 0)
-    assert(tree_diff(task_runner_machine_text(), twice.json) == "")
+    // Alula 2.26 (the package 0.9.0, task 239): the runner connects the library «Пауза», the English text keeps the path of its Russian file and does not translate back
+    assert(en.text.contains("- File: libs/pause.alula.md"))
+    ro back = translate_checked_with(en.text, methodology_registry(), library_files())
+    assert(back.errors.len() > 0)
 }
 
 test "tr prepare return" {

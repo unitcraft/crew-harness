@@ -52,7 +52,7 @@ fn d_chunk(text str) -> Incoming => d_stamped(EventKind.Progress, "agent_chunk",
 fn d_done() -> Incoming => d_stamped(EventKind.Answered, "agent_done", Some("agent-1"), "")
 fn d_refused(code str) -> Incoming => d_stamped(EventKind.Refused, "agent_refused", Some("agent-1"), code)
 fn d_expired() -> Incoming => d_stamped(EventKind.Expired, "timeout", Some("agent-1"), "")
-fn d_cancel() -> Incoming => d_stamped(EventKind.Input, "cancel", None, "")
+fn d_cancel() -> Incoming => d_stamped(EventKind.Input, "cancel_request", None, "")
 
 fn d_waiting() -> ChatState => d_run(dialog_session(30000).initial(), d_said("hi")).state
 

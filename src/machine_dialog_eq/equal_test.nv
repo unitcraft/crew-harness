@@ -255,7 +255,7 @@ fn timeout_event(request str) -> Incoming => test_incoming(ScEvent { kind: "time
 
 // Every kind of event the machine knows and some it does not, for the machine alone (the engine would discard some of them before they reach it).
 fn all_events() -> []Incoming => [
-    signal_with_input("user_message", "hello"), signal_with_input("user_message", "привет, мир"), signal_with_input("cancel", ""), signal_event("cancel"),
+    signal_with_input("user_message", "hello"), signal_with_input("user_message", "привет, мир"), signal_with_input("cancel_request", ""), signal_event("cancel_request"),
     signal_with_input("weather_report", "rain"), chunk_event("agent-1", "part"), named_progress("tool_call", "{}"), named_progress("permission_request", "{}"),
     done_event("agent-1"), refused_event("agent-1", "Timeout"), refused_event("agent-1", "TotallyNew"), timeout_event("agent-1")
 ]
@@ -305,14 +305,15 @@ test "de many turns on the machine alone" {
     mut turn = 0
     while turn < 5 {
         p = step_pair(table, p, signal_with_input("user_message", "m${turn}"))
-        assert(pair_diff(table, p) == "")
+        ro opened = pair_diff(table, p)
+        if opened != "" { panic("turn ${turn}, the message: ${opened}") }
         assert(table.state_name(p.table_state) == "Awaiting")
         p = step_pair(table, p, chunk_event("agent-1", "r${turn}"))
         assert(pair_diff(table, p) == "")
         if turn == 0 { p = step_pair(table, p, done_event("agent-1")) }
         if turn == 1 { p = step_pair(table, p, refused_event("agent-1", "ModelRefused")) }
         if turn == 2 { p = step_pair(table, p, timeout_event("agent-1")) }
-        if turn == 3 { p = step_pair(table, p, signal_event("cancel")) }
+        if turn == 3 { p = step_pair(table, p, signal_event("cancel_request")) }
         if turn == 4 { p = step_pair(table, p, done_event("agent-1")) }
         assert(pair_diff(table, p) == "")
         assert(table.state_name(p.table_state) == "Idle")

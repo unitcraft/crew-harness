@@ -4,9 +4,9 @@ module crew_harness.machine_runner
 
 import std.text
 import alula.machine_table.{MachineDef, NestedProblem, check_nested, load_machine}
-import alula.machine_text.{translate_checked}
+import alula.machine_text.{translate_checked_with}
 import alula.machine_run.{NestedRegistry, check_registry, registry_gaps, load_alula_machine}
-import crew_harness.machines.{methodology_nested, methodology_registry, task_runner_machine_text, task_runner_table_text}
+import crew_harness.machines.{methodology_nested, methodology_registry, task_runner_machine_text, task_runner_table_text, library_files}
 
 fn problems_text(list []NestedProblem) -> str {
     mut out = []str.new()
@@ -24,7 +24,7 @@ fn callee_def(name str) -> MachineDef {
 
 fn runner_with(old str, new str) -> MachineDef {
     ro text = task_runner_table_text().replace(old, new)
-    ro report = translate_checked(text, methodology_registry())
+    ro report = translate_checked_with(text, methodology_registry(), library_files())
     if report.errors.len() > 0 { panic(notes_of(report).join(" ## ")) }
     match load_machine(report.json, methodology_registry()) {
         Ok(d) => d

@@ -14,7 +14,7 @@ fn chunk(text str) -> Incoming => stamped(EventKind.Progress, "agent_chunk", Som
 fn done() -> Incoming => stamped(EventKind.Answered, "agent_done", Some("agent-1"), "")
 fn refused(code str) -> Incoming => stamped(EventKind.Refused, "agent_refused", Some("agent-1"), code)
 fn expired() -> Incoming => stamped(EventKind.Expired, "timeout", Some("agent-1"), "")
-fn cancelled() -> Incoming => stamped(EventKind.Input, "cancel", None, "")
+fn cancelled() -> Incoming => stamped(EventKind.Input, "cancel_request", None, "")
 
 // The result of one step: where the machine goes (`moved` - by Go, not Stay) and the orders it gave to the environment.
 type Run { state ChatState, moved bool, orders []Order }

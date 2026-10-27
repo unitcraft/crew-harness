@@ -5,10 +5,10 @@ module crew_harness.machine_agent
 import std.text
 import alula.machine_table.{load_machine}
 import alula.machine_run.{load_alula_machine}
-import alula.machine_text.{translate_checked, translate_report, TranslateReport, error_text, render_summary}
-import crew_harness.machines.{methodology_registry, agent_step_machine_text, agent_step_table_text}
+import alula.machine_text.{translate_checked_with, translate_report_with, TranslateReport, error_text, render_summary}
+import crew_harness.machines.{methodology_registry, agent_step_machine_text, agent_step_table_text, library_files}
 
-fn agent_report() -> TranslateReport => translate_checked(agent_step_table_text(), methodology_registry())
+fn agent_report() -> TranslateReport => translate_checked_with(agent_step_table_text(), methodology_registry(), library_files())
 
 fn errors_text(report TranslateReport) -> str {
     mut parts = []str.new()
@@ -21,12 +21,15 @@ test "ag clean" {
     if report.errors.len() > 0 { panic(errors_text(report)) }
     assert(report.errors.len() == 0)
     assert(report.rows_noted == 0)
-    assert(report.rows_total == 126)
+    // Alula 2.26: no column `№`, no rows of the counters of the parties and of the data of the engine, no rows of the request that only the engine read (the bound as for the other machines)
+    assert(report.rows_total > 100)
 }
 
 test "ag file is translation" {
     assert(agent_report().json == agent_step_machine_text())
-    assert(translate_report(agent_step_table_text()).json == agent_step_machine_text())
+    // Alula 2.26 (AL-138): the tree carries the reads of the states that the check derives, with the hidden reads of the external functions of the registry of the host; the translation
+    // without the registry does not know them, so only the checked translation is the committed file
+    assert(translate_report_with(agent_step_table_text(), library_files()).errors.len() == 0)
 }
 
 test "ag loads" {
@@ -68,7 +71,7 @@ test "ag summary" {
     assert(text.contains("ends: 13 rows"))
 }
 
-// The table without the list markers and with the old continuation lines, format 2.5: the tree is the same but the key `alula_version`.
+// The table without the list markers and with the old continuation lines (the form before 2.26).
 fn without_markers(text str) -> str {
     mut lines = []str.new()
     for line in text.split("\n") {
@@ -80,13 +83,14 @@ fn without_markers(text str) -> str {
             lines.push(line)
         }
     }
-    lines.join("\n").replace("format: 2.25", "format: 2.25")
+    lines.join("\n")
 }
 
-test "ag markers optional" {
+// Alula 2.26 (AL-137): a key line is an item of a list; the same table without the markers is refused, the key line named.
+test "ag markers required" {
     ro plain = without_markers(agent_step_table_text())
     assert(plain != agent_step_table_text())
-    ro report = translate_checked(plain, methodology_registry())
-    if report.errors.len() > 0 { panic(errors_text(report)) }
-    assert(report.json == agent_step_machine_text())
+    ro report = translate_checked_with(plain, methodology_registry(), library_files())
+    assert(report.errors.len() > 0)
+    assert(errors_text(report).contains("AL-137"))
 }

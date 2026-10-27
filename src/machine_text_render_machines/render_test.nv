@@ -6,8 +6,8 @@ import std.text
 import alula.machine.{text_of_file}
 import alula.machine_agent.{methodology_text, methodology_en_text}
 import alula.machine_text_eq.{case_text}
-import alula.machine_text.{render_machine, render_machine_with, render, translate_report, render_type_in, render_expression_in, render_actions_in}
-import crew_harness.machines.{agent_step_table_text, chat_table_text, table_files}
+import alula.machine_text.{render_machine, render_machine_with, render, translate_report_with, render_type_in, render_expression_in, render_actions_in}
+import crew_harness.machines.{agent_step_table_text, chat_table_text, table_files, library_files, connects_library}
 
 fn chat_json() -> str => machine_json("chat.alula.json")
 
@@ -15,13 +15,14 @@ fn calc_json() -> str => machine_json("calc.alula.json")
 
 // ---- the canonical form ----------------------------------------------------------------------------------------------------------
 
-test "rn empty section dash" {
+// Alula 2.26: an empty section is not written (the chat has no input), the sections of the chat are its types, its connection and its common events
+test "rn empty section not written" {
     ro en = render(chat_json(), "en")
-    ro at = index_of_line(en, "## Types")
-    assert(at > 0)
-    assert(lines_from(en, at, 3) == "## Types\n—\n")
-    assert(lines_from(en, index_of_line(en, "## Input"), 2) == "## Input\n—")
-    assert(lines_from(en, index_of_line(en, "## Includes"), 2) == "## Includes\n—")
+    assert(index_of_line(en, "## Types") > 0)
+    assert(!text_has_line(en, "## Input"))
+    assert(!text_has_line(en, "—"))
+    assert(index_of_line(en, "## Includes") > 0)
+    assert(index_of_line(en, "## Common events") > index_of_line(en, "## Includes"))
     // a table has an empty line under the heading
     assert(lines_from(en, index_of_line(en, "## Data"), 3).starts_with("## Data\n\n| name |"))
 }
@@ -29,8 +30,8 @@ test "rn empty section dash" {
 test "rn language word" {
     ro ru = render(chat_json(), "ru")
     ro en = render(chat_json(), "en")
-    assert(text_has_line(ru, "## Состояния") && text_has_line(ru, "## Концы"))
-    assert(text_has_line(en, "## States") && text_has_line(en, "## Ends"))
+    assert(text_has_line(ru, "## Состояния") && text_has_line(ru, "## Выход"))
+    assert(text_has_line(en, "## States") && text_has_line(en, "## Output"))
     assert(!en.contains("Состояния"))
     assert(ru.contains("Начальное состояние: ") && en.contains("Initial state: "))
 }
@@ -78,20 +79,23 @@ test "rn circle ru chat" {
 
 test "rn circle chat table" {
     // md -> JSON -> md -> JSON on the chat machine written by hand in Russian
-    ro first = translate_report(chat_table_text()).json
+    ro first = translate_report_with(chat_table_text(), library_files()).json
     assert(circle(first, "ru") == "")
     assert(circle(first, "en") == "")
 }
 
 test "rn ru to en to ru chat" {
-    ro first = translate_report(chat_table_text()).json
+    // Alula 2.26 (task 240): the chat connects the library of the cancel `libs/call_cancel.alula.md`; on the package 0.9.0 such a machine does not go through the English file (task 239,
+    // `connects_library`): the English text keeps the Russian file and is refused, the Russian circle stays
+    ro first = translate_report_with(chat_table_text(), library_files()).json
+    assert(connects_library(first))
     ro english = render(first, "en")
-    ro second = json_of(english)
-    assert(same_tree(first, second) == "")
-    ro russian = render(second, "ru")
+    assert(english.contains("- File: libs/call_cancel.alula.md"))
+    assert(json_of(english).starts_with("ERROR "))
+    ro russian = render(first, "ru")
     ro third = json_of(russian)
     assert(same_tree(first, third) == "")
-    assert(render(third, "en") == english)
+    assert(render(third, "ru") == russian)
 }
 
 fn lit(v str) -> str => `{"op":"lit","value":${v}}`
@@ -109,7 +113,7 @@ test "rn circle pilot and examples" {
     assert(circle(pilot, "ru") == "")
     assert(circle(pilot, "en") == "")
     // the examples of the format are pieces of a machine, not a machine: they are translated without the checks of the table
-    ro examples = translate_report(case_text("format-examples.alula.md")).json
+    ro examples = translate_report_with(case_text("format-examples.alula.md"), library_files()).json
     assert(examples.byte_len() > 1000)
     assert(circle_loose(examples, "ru") == "")
     assert(circle_loose(examples, "en") == "")

@@ -31,10 +31,10 @@ fn has_bracket_after_name217(line str) -> bool {
     false
 }
 
-test "v217 tables say format 2.25" {
+test "v217 tables say format 2.26" {
     for name in tables217() {
         ro text = text_of_file(table_files(), name)
-        assert(text.contains("format: 2.25"))
+        assert(text.contains("format: 2.26"))
         assert(!text.contains("format: 2.14"))
     }
 }
@@ -63,14 +63,23 @@ test "v217 the task runner has its rows of the names" {
     assert(text.contains("| последняя_проверка_реализации | last_review |"))
 }
 
-test "v217 the tables use the dash of the request" {
-    mut dashes = 0
+// the number of the bars `|` of a row of a table
+fn bars217(line str) -> int {
+    mut n = 0
+    for c in line.chars() { if "${c}" == "|" { n += 1 } }
+    n
+}
+
+// Alula 2.26 (AL-138): the table `Запрос` has no column `читает`; the dash of an expression is an empty cell, the same name (4.2)
+test "v217 the tables use the default expression of the request" {
+    mut same_name = 0
     for name in tables217() {
         for line in text_of_file(table_files(), name).split("\n") {
-            if line.contains("| — | сторона |") || line.contains("| — | исполнитель |") { dashes += 1 }
+            assert(!line.contains("| поле запроса | выражение | читает |"))
+            if line.starts_with("| ") && line.ends_with(" |  |") && bars217(line) == 3 { same_name += 1 }
         }
     }
-    assert(dashes >= 10)
+    assert(same_name >= 10)
 }
 
 test "v217 the chat machines write their user as a free input" {

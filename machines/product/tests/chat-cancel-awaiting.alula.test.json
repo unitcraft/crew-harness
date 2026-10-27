@@ -5,6 +5,6 @@
   "start_at": 1000,
   "steps": [
     {"do": "feed", "event": {"kind": "signal", "name": "user_message", "input": "hi"}, "expect": {"state": "Awaiting"}},
-    {"do": "feed", "event": {"kind": "signal", "name": "cancel"}, "expect": {"state": "Failed", "journal": [{"code": "cancelled_while_waiting", "params": {}}], "outcome": "refusal:StoppedByHuman", "open": [], "cancelled": ["agent-1"]}}
+    {"do": "feed", "event": {"kind": "signal", "name": "cancel_request"}, "expect": {"state": "Failed", "journal": [{"code": "cancelled_while_waiting", "params": {}}], "outcome": "refusal:StoppedByHuman", "open": [], "cancelled": ["agent-1"]}}
   ]
 }

@@ -47,12 +47,14 @@ test "v217 the signal of a free input has no gate record" {
     }
 }
 
-test "v217 the counter of the party of a free input does not grow" {
+// Alula 2.26: the party of a free input has no counter and no datum of it (the loader makes the datum of a counter only for a party that names one)
+test "v217 the party of a free input has no counter datum" {
     ro m = chat_free()
     ro r1 = run1(m, m.initial(), said("one"))
-    assert(datum_json(r1.state, "user_attempt") == "0")
+    assert(datum_json(r1.state, "user_attempt") == "null")
     ro r2 = run1(m, r1.state, done())
-    assert(datum_json(r2.state, "user_attempt") == "0")
+    assert(datum_json(r2.state, "user_attempt") == "null")
+    assert(datum_json(r1.state, "agent_attempt") == "1")
 }
 
 test "v217 the counter of the agent grows as before" {
@@ -72,7 +74,7 @@ test "v217 a signal with no row in the state is thrown away" {
 test "v217 the hub asks the table about a signal of a free input" {
     ro m = chat_free()
     assert(m.accepts_signal(m.initial(), "user_message"))
-    assert(m.accepts_signal(m.initial(), "cancel"))
+    assert(m.accepts_signal(m.initial(), "cancel_request"))
 }
 
 test "v217 the hub is told that a waiting state takes no signal" {

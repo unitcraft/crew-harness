@@ -6,7 +6,7 @@
   "params": {"проект.срок_бездействия": 30000},
   "steps": [
     {"do": "feed", "event": {"kind": "signal", "name": "user_message", "input": "hi"}, "expect": {"state": "Awaiting"}},
-    {"do": "feed", "event": {"kind": "signal", "name": "cancel"}, "expect": {"state": "Idle", "outcome": "none", "cancelled": ["agent-1"]}},
+    {"do": "feed", "event": {"kind": "signal", "name": "cancel_request"}, "expect": {"state": "Idle", "outcome": "none", "cancelled": ["agent-1"]}},
     {"do": "feed", "event": {"kind": "answer", "name": "agent_done", "request": "agent-1"}, "expect": {"state": "Idle", "journal": [], "outcome": "none"}}
   ]
 }

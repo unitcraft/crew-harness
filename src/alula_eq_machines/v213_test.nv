@@ -5,7 +5,7 @@ module crew_harness.alula_eq_machines
 
 import std.text
 import alula.machine.{text_of_file}
-import crew_harness.machines.{machine_files, table_files}
+import crew_harness.machines.{machine_files, table_files, connects_library}
 
 fn all_tables() -> []str => ["chat.alula.md", "cycle_check.alula.md", "dialog.alula.md", "dialog_steps.alula.md", "session_start.alula.md", "task_runner.alula.md", "agent_step.alula.md"]
 
@@ -53,8 +53,10 @@ test "v213 tables write signals" {
 test "v213 tables write request and reads" {
     for name in all_tables() {
         ro text = text_of_file(table_files(), name)
-        // the key lines are list items or, in the table of the chat, lines at the first column
-        assert(has_line_starting(text, "- Запрос:") || has_line_starting(text, "- Читает:") || has_line_starting(text, "Запрос:") || has_line_starting(text, "Читает:"))
+        // Alula 2.26: a key line is a list item (AL-137), the reads of a state are derived by the check and not written (AL-138)
+        assert(has_line_starting(text, "- Запрос:"))
+        assert(!has_line_starting(text, "Запрос:"))
+        assert(!text.contains("Читает:"))
     }
 }
 
@@ -68,9 +70,9 @@ test "v213 tables have no empty keys" {
     }
 }
 
-test "v213 tables say 2.25" {
+test "v213 tables say 2.26" {
     for name in all_tables() {
-        assert(text_of_file(table_files(), name).contains("format: 2.25\n"))
+        assert(text_of_file(table_files(), name).contains("format: 2.26\n"))
     }
 }
 
@@ -92,17 +94,21 @@ test "v213 check takes every table" {
     }
 }
 
-test "v213 the fragment line has the signal parameter" {
+test "v213 the connection of the library has the signal parameter" {
     for name in ["dialog_steps.alula.md", "session_start.alula.md", "cycle_check.alula.md", "agent_step.alula.md"] {
         ro text = text_of_file(table_files(), name)
-        assert(text.contains("Пауза(сигнал_остановки:"))
+        // Alula 2.26 (AL-140): the connection is the heading `### Пауза` with the table of the values of the parameters
+        assert(text.contains("### Пауза\n- Файл: libs/pause.alula.md\n"))
+        assert(text.contains("| сигнал_остановки | "))
+        assert(!text.contains("Пауза(сигнал_остановки:"))
         assert(!text.contains("слово_остановки"))
     }
 }
 
 test "v213 circle of every machine that includes the fragment" {
     for name in ["dialog_steps.alula.md"] {
-        for lang in ["ru", "en"] {
+        // the Russian circle only: a machine that connects a library does not go through the English file on the package 0.9.0 (task 239, `connects_library`)
+        for lang in ["ru"] {
             ro first = run_with(["compile", "/m/${name}"], one("/m/${name}", text_of_file(table_files(), name)))
             if first.code != 0 { panic("compile ${name}: ${first.err}") }
             ro rendered = run_with(["render", "/m/x.alula.json", "--language", lang], one("/m/x.alula.json", first.out))
@@ -119,10 +125,11 @@ test "v213 convert ru en ru" {
         ro text = text_of_file(table_files(), name)
         ro en = run_with(["convert", "/m/${name}", "--language", "en"], one("/m/${name}", text))
         if en.code != 0 { panic("convert ${name}: ${en.err}") }
+        // Alula 2.26 (task 240): the chat machines connect the library of the cancel; on the package 0.9.0 the English file keeps the path of its Russian file (task 239,
+        // `connects_library`) and is not taken back
+        assert(connects_library(text))
+        assert(en.out.contains("- File: libs/call_cancel.alula.md"))
         ro back = run_with(["convert", "/m/b.alula.md", "--language", "ru"], one("/m/b.alula.md", en.out))
-        if back.code != 0 { panic("convert back ${name}: ${back.err}") }
-        ro first = run_with(["compile", "/m/${name}"], one("/m/${name}", text))
-        ro second = run_with(["compile", "/m/c.alula.md"], one("/m/c.alula.md", back.out))
-        assert(same_tree(first.out, second.out) == "")
+        assert(back.code != 0)
     }
 }

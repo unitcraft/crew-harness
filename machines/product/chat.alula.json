@@ -1,26 +1,27 @@
 {
   "format": "machine/2",
-  "alula_version": "2.25",
+  "alula_version": "2.26",
   "machine": "ChatSession",
   "version": "1",
   "title": "A chat session with an agent: the machine of src/chat written as data",
+  "types": {
+    "records": [ { "name": "agent_chunk", "fields": [ { "name": "content", "type": "text" } ] } ]
+  },
   "constants": [
     { "name": "IDLE_TERM", "type": "int>=0", "value": { "op": "lit", "value": 30000 } }
   ],
   "data": [
-    { "name": "user", "type": "text", "initial": { "expr": { "op": "lit", "value": "" } }, "writes": "rows" },
-    { "name": "reply", "type": "text", "initial": { "expr": { "op": "lit", "value": "" } }, "writes": "rows" },
-    { "name": "stop_code", "type": "?FailCode", "initial": { "expr": { "op": "lit", "value": null } }, "writes": "rows" },
-    { "name": "stop_text", "type": "text", "initial": { "expr": { "op": "lit", "value": "" } }, "writes": "rows" },
-    { "name": "user_attempt", "type": "int>=0", "initial": { "expr": { "op": "lit", "value": 0 } }, "monotonic": true, "writes": "mechanics" },
-    { "name": "agent_attempt", "type": "int>=0", "initial": { "expr": { "op": "lit", "value": 0 } }, "monotonic": true, "writes": "mechanics" }
+    { "name": "open_requests", "type": "[]text", "initial": { "expr": { "op": "list", "items": [] } }, "engine": true },
+    { "name": "user", "type": "text", "initial": { "expr": { "op": "lit", "value": "" } } },
+    { "name": "reply", "type": "text", "initial": { "expr": { "op": "lit", "value": "" } } },
+    { "name": "stop_code", "type": "?FailCode", "initial": { "expr": { "op": "lit", "value": null } } },
+    { "name": "stop_text", "type": "text", "initial": { "expr": { "op": "lit", "value": "" } } }
   ],
   "parties": [
     {
       "name": "user", "id": "user", "kind": "human",
       "signals": [
-        { "name": "user_message", "fields": [ { "name": "content", "type": "text" } ] },
-        { "name": "cancel" }
+        { "name": "user_message", "fields": [ { "name": "content", "type": "text" } ] }
       ]
     },
     {
@@ -28,11 +29,51 @@
       "progress": [ { "name": "agent_chunk", "fields": [ { "name": "content", "type": "text" } ] } ]
     }
   ],
-  "signals": [ { "name": "cancel" } ],
+  "signals": [
+    { "name": "human_stop", "fields": [ { "name": "human_word", "type": "text" }, { "name": "author", "type": "text" }, { "name": "source", "type": "text" } ] },
+    { "name": "parent_stop", "fields": [ { "name": "id", "type": "text" } ] },
+    { "name": "cancel_request", "fields": [ { "name": "id", "type": "text" } ] },
+    { "name": "parent_continue", "fields": [ { "name": "id", "type": "text" } ] },
+    { "name": "parent_halt", "fields": [ { "name": "id", "type": "text" } ] }
+  ],
+  "includes": [
+    {
+      "name": "call_cancel", "hash": "495ae0d10a58", "file": "libs/call_cancel.alula.md", "heading": "Отмена запроса",
+      "brings": { "common_events": 1, "signals": [ "human_stop", "parent_stop", "cancel_request", "parent_continue", "parent_halt" ] }
+    }
+  ],
   "initial": "Idle",
+  "common_events": [
+    {
+      "n": 1, "event": { "kind": "signal", "name": "cancel_request" },
+      "cond": { "op": "lit", "value": false },
+      "to": "@same"
+    },
+    {
+      "n": 2, "event": { "kind": "signal", "name": "cancel_request" },
+      "cond": { "op": "==", "left": { "op": "name", "name": "state" }, "right": { "op": "lit", "value": "Idle" } },
+      "actions": [
+        { "do": "journal", "code": "cancelled_before_request" },
+        { "do": "assign", "target": "stop_code", "value": { "op": "variant", "type": "FailCode", "name": "StoppedByHuman" } },
+        { "do": "assign", "target": "stop_text", "value": { "op": "lit", "value": "cancelled by the user" } }
+      ],
+      "to": "Failed"
+    },
+    {
+      "n": 3, "event": { "kind": "signal", "name": "cancel_request" },
+      "cond": { "op": "==", "left": { "op": "name", "name": "state" }, "right": { "op": "lit", "value": "Awaiting" } },
+      "actions": [
+        { "do": "journal", "code": "cancelled_while_waiting" },
+        { "do": "cancel_open", "party": "agent" },
+        { "do": "assign", "target": "stop_code", "value": { "op": "variant", "type": "FailCode", "name": "StoppedByHuman" } },
+        { "do": "assign", "target": "stop_text", "value": { "op": "lit", "value": "cancelled by the user" } }
+      ],
+      "to": "Failed"
+    }
+  ],
   "states": [
     {
-      "name": "Idle", "kind": "appeal", "party": "user",
+      "name": "Idle", "kind": "appeal", "party": "user", "reads": [],
       "rows": [
         {
           "n": 1, "event": { "kind": "signal", "name": "user_message", "bind": { "content": "message" } },
@@ -42,23 +83,13 @@
             { "do": "assign", "target": "reply", "value": { "op": "lit", "value": "" } }
           ],
           "to": "Awaiting"
-        },
-        {
-          "n": 2, "event": { "kind": "signal", "name": "cancel" },
-          "actions": [
-            { "do": "journal", "code": "cancelled_before_request" },
-            { "do": "assign", "target": "stop_code", "value": { "op": "variant", "type": "FailCode", "name": "StoppedByHuman" } },
-            { "do": "assign", "target": "stop_text", "value": { "op": "lit", "value": "cancelled by the user" } }
-          ],
-          "to": "Failed"
         }
       ]
     },
     {
-      "name": "Awaiting", "kind": "appeal", "party": "agent",
+      "name": "Awaiting", "kind": "appeal", "party": "agent", "reads": [ "user", "reply" ],
       "inputs": [
-        { "field": "prompt", "value": { "op": "name", "name": "user" }, "reads": "party" },
-        { "field": "reply", "value": { "op": "name", "name": "reply" }, "reads": "executor" }
+        { "field": "prompt", "value": { "op": "name", "name": "user" }, "reads": "party" }
       ],
       "silence": { "op": "name", "name": "IDLE_TERM" },
       "rows": [
@@ -85,17 +116,7 @@
           "to": "Failed"
         },
         {
-          "n": 4, "event": { "kind": "signal", "name": "cancel" },
-          "actions": [
-            { "do": "journal", "code": "cancelled_while_waiting" },
-            { "do": "cancel_open", "party": "agent" },
-            { "do": "assign", "target": "stop_code", "value": { "op": "variant", "type": "FailCode", "name": "StoppedByHuman" } },
-            { "do": "assign", "target": "stop_text", "value": { "op": "lit", "value": "cancelled by the user" } }
-          ],
-          "to": "Failed"
-        },
-        {
-          "n": 5, "event": { "kind": "timeout" },
+          "n": 4, "event": { "kind": "timeout" },
           "actions": [
             { "do": "journal", "code": "no_answer_in_time" },
             { "do": "assign", "target": "stop_code", "value": { "op": "variant", "type": "FailCode", "name": "Timeout" } },

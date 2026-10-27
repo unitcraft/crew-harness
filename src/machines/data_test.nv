@@ -42,6 +42,9 @@ test "dt the lists of the files hold every file of the folders" {
     mut scenarios_in_folders = data_dir_names("product_scenarios")
     for n in data_dir_names("methodology_scenarios") { scenarios_in_folders.push(n) }
     assert(dt_same(scenarios, scenarios_in_folders))
+    mut libraries_in_folders = data_dir_names("product_libraries")
+    for n in data_dir_names("methodology_libraries") { libraries_in_folders.push(n) }
+    assert(dt_same(dt_names(library_files()), libraries_in_folders))
     assert(data_dir_names("elsewhere").len() == 0)
 }
 
@@ -135,7 +138,7 @@ test "dt the registry of the methodology has 58 primitives and the language has 
 
 test "dt the sample of the specification is the sample" {
     assert(agent_step_sample_text().contains("Шаг агента"))
-    assert(agent_step_sample_text().contains("format: 2.25"))
+    assert(agent_step_sample_text().contains("- format: 2.26"))
     assert(all_journal_text().contains("agent_chunk"))
     assert(all_journal_text().contains("turn_failed"))
 }

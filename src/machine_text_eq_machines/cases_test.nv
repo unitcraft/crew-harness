@@ -6,12 +6,12 @@ import std.text
 import alula.machine.{Registry, Primitive, ParamSpec, TextType, ListType, Volatile, register, NamedText, find_primitive}
 import alula.machine_table.{parse_machine, load_machine}
 import alula.machine_run.{load_alula_machine}
-import alula.machine_text.{translate_report, translate_checked, translate_checked_with, TranslateReport, TranslateError, translate_definitions, DefsReport, definitions_hash, normalize_definitions, render_summary, error_text}
-import crew_harness.machines.{methodology_registry}
+import alula.machine_text.{translate_report_with, translate_checked_with, TranslateReport, TranslateError, translate_definitions, DefsReport, definitions_hash, normalize_definitions, render_summary, error_text}
+import crew_harness.machines.{methodology_registry, library_files}
 import alula.machine_text_eq.{case_text}
 
 test "cs pilot loads" {
-    ro report = translate_checked(case_text("agent-step.alula.md"), methodology_registry())
+    ro report = translate_checked_with(case_text("agent-step.alula.md"), methodology_registry(), library_files())
     match load_machine(report.json, methodology_registry()) {
         Ok(def) => {
             assert(def.name == "agent_step")
@@ -29,7 +29,7 @@ test "cs pilot loads" {
 }
 
 test "cs pilot builds" {
-    ro report = translate_checked(case_text("agent-step.alula.md"), methodology_registry())
+    ro report = translate_checked_with(case_text("agent-step.alula.md"), methodology_registry(), library_files())
     match load_alula_machine(report.json, methodology_registry()) {
         Ok(m) => {
             assert(m.name() == "agent_step")

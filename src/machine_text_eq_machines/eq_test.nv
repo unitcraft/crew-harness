@@ -7,11 +7,18 @@ module crew_harness.machine_text_eq_machines
 import std.text
 import alula.engine.{Incoming, Order, StepEnvironment, journal_line}
 import alula.machine_run.{AlulaState, AlulaMachine, Test, StepTrace, load_alula_machine, alula_step, ScriptedHost, drive_test, parse_test, test_incoming, run_test, run_ok, report_text}
-import alula.machine_text.{translate, error_text}
-import crew_harness.machines.{product_registry, chat_machine_text, chat_table_text, test_files}
+import alula.machine_text.{translate_report_with, error_text, TranslateError}
+import crew_harness.machines.{product_registry, chat_machine_text, chat_table_text, test_files, library_files}
+
+// The translation of the table of the chat with the libraries beside it (Alula 2.26, task 240: the chat connects the library of the cancel `libs/call_cancel.alula.md`).
+fn chat_translation() -> Result[str, []TranslateError] {
+    ro report = translate_report_with(chat_table_text(), library_files())
+    if report.errors.len() > 0 { return Err(report.errors) }
+    Ok(report.json)
+}
 
 fn translated_json() -> str {
-    match translate(chat_table_text()) {
+    match chat_translation() {
         Ok(json) => json
         Err(problems) => panic("the chat table does not translate: ${problems[0].message}")
     }

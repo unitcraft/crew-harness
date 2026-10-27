@@ -19,7 +19,7 @@ fn cs(name str, kind str, source str, fields str, known bool) -> CodeSignal => {
 /// The signals that the hub gives to the machine (from the page).
 export fn signals_given_by_code() -> []CodeSignal => [
     cs("user_message", "input", "src/server/hub.nv: Hub.say", "content (text)", true),
-    cs("cancel", "input", "src/server/hub.nv: Hub.cancel", "-", true),
+    cs("cancel_request", "input", "src/server/hub.nv: Hub.cancel", "-", true),
     cs("permission_decision", "input", "src/server/hub.nv: Hub.decide", "request, decision (JSON text)", false),
     cs("session_created", "input", "src/server/hub.nv: Hub.create", "name, agent, folder, project (JSON text)", false),
     cs("agent_switched", "input", "src/server/hub.nv: Hub.switch_agent", "from, to, shown, total, cut (JSON text)", false)

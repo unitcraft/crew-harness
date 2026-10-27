@@ -121,7 +121,7 @@ export fn chat_event_of(event Incoming) -> Option[ChatEvent] {
     match event.kind {
         EventKind.Input => {
             if event.name == "user_message" { return Some(UserMessage(event.input)) }
-            if event.name == "cancel" { return Some(Cancel) }
+            if event.name == "cancel_request" { return Some(Cancel) }
             None
         }
         EventKind.Progress => {
@@ -139,7 +139,7 @@ export fn chat_event_of(event Incoming) -> Option[ChatEvent] {
 /// The events of the outside world as the creator of an event builds them (the envelope is stamped by the engine).
 export fn user_says(text str) -> Incoming => Incoming.signal("user_message", text)
 
-export fn user_cancels() -> Incoming => Incoming.signal("cancel", "")
+export fn user_cancels() -> Incoming => Incoming.signal("cancel_request", "")
 
 export fn agent_chunk(request str, text str) -> Incoming => Incoming.incoming(EventKind.Progress, "agent_chunk", Some(request), text)
 
@@ -154,7 +154,7 @@ fn event_label(event ChatEvent) -> str => match event {
     AgentChunk(text) => "agent_chunk"
     AgentDone => "agent_done"
     AgentRefused(code) => "agent_refused"
-    Cancel => "cancel"
+    Cancel => "cancel_request"
     Timeout => "timeout"
 }
 

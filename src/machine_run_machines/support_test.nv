@@ -49,7 +49,7 @@ fn refused(code str) -> Incoming => stamped(EventKind.Refused, "agent_refused", 
 
 fn expired() -> Incoming => stamped(EventKind.Expired, "timeout", Some("agent-1"), "")
 
-fn cancelled() -> Incoming => stamped(EventKind.Input, "cancel", None, "")
+fn cancelled() -> Incoming => stamped(EventKind.Input, "cancel_request", None, "")
 
 // The result of one step: the state, whether the machine moved (Go), the orders it gave.
 type Out { state AlulaState, moved bool, orders []Order, signals []SignalOrder }

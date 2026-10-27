@@ -5,9 +5,9 @@
 module crew_harness.machine_session
 
 import std.text
-import alula.machine_text.{translate_checked}
+import alula.machine_text.{translate_checked_with}
 import alula.machine_run.{AlulaMachine, load_alula_machine, parse_test, run_test, run_ok, report_text, drive_test, StepTrace}
-import crew_harness.machines.{methodology_registry, session_start_table_text}
+import crew_harness.machines.{methodology_registry, session_start_table_text, library_files}
 
 fn broken_text() -> str {
     session_start_table_text()
@@ -16,7 +16,7 @@ fn broken_text() -> str {
 }
 
 fn broken_machine() -> AlulaMachine {
-    ro report = translate_checked(broken_text(), methodology_registry())
+    ro report = translate_checked_with(broken_text(), methodology_registry(), library_files())
     if report.errors.len() > 0 { panic("the changed table does not translate: ${report.errors[0].message}") }
     match load_alula_machine(report.json, methodology_registry()) {
         Ok(m) => m

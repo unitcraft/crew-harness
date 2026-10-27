@@ -14,6 +14,7 @@ test "event at an end" {
     ro ended = run1(m, r1.state, done()).state
     assert(summary(run1(m, ended, done()).orders) == "log:event_ignored(event=agent_done;state=Done)")
     assert(summary(run1(m, ended, expired()).orders) == "log:event_ignored(event=timeout;state=Done)")
-    assert(summary(run1(m, ended, cancelled()).orders) == "log:event_ignored(event=cancel;state=Done)")
+    // the cancel is the signal of the protocol `cancel_request` (task 240); at an end the declaration of its library does not take it, the engine drops it
+    assert(summary(run1(m, ended, cancelled()).orders) == "log:event_ignored(event=cancel_request;state=Done)")
     assert(!run1(m, ended, said("x")).moved)
 }

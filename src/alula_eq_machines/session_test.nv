@@ -44,9 +44,10 @@ test "ps the english file of the machine says the same" {
     assert(english.out.contains("- language: en\n"))
     assert(english.out.contains("# Machine: session_start\n"))
     assert(english.out.contains("Initial state: Gate2"))
+    // Alula 2.26 (the package 0.9.0, task 239): the session start connects the library «Пауза», the English file keeps the path of its Russian file and is not compiled back
+    assert(english.out.contains("- File: libs/pause.alula.md"))
     ro back = run_with(["compile", "/m/e.alula.md"], one("/m/e.alula.md", english.out))
-    assert(back.code == 0)
-    assert(same_tree(machine_json("session_start.alula.json"), back.out) == "")
+    assert(back.code != 0)
 }
 
 test "ps the summary names the states" {

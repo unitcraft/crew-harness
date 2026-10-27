@@ -36,7 +36,7 @@ test "chat parties" {
     assert(def.parties.len() == 2)
     assert(party_kind_word(def.parties[0].kind) == "human")
     assert(party_kind_word(def.parties[1].kind) == "agent")
-    assert(def.parties[0].signals.len() == 2)
+    assert(def.parties[0].signals.len() == 1)
     assert(def.parties[0].signals[0].fields.len() == 1)
     assert(def.parties[1].progress.len() == 1)
     assert(def.parties[1].id == "agent")
@@ -45,18 +45,24 @@ test "chat parties" {
     assert(find_party(def, "agent") == 1)
 }
 
+// Alula 2.26: the tree has no key `writes` of the data (the rows write every datum but the data of the engine) and no datum of a counter (the loader makes it); `open_requests` is a datum of the
+// engine (the library `контракт`, AL-141)
 test "chat data" {
     ro def = decoded(chat_machine_text())
     assert(def.data.len() == 6)
-    assert(def.data[2].name == "stop_code")
-    assert(spec_text(def.data[2].spec) == "?FailCode")
-    assert(write_kind_word(def.data[0].writes) == "rows")
-    assert(write_kind_word(def.data[4].writes) == "mechanics")
-    assert(def.data[4].monotonic.on)
-    assert(!def.data[0].monotonic.on)
-    assert(rows_may_write(def.data[0].writes))
-    assert(!rows_may_write(def.data[4].writes))
-    assert(find_data(def, "reply") == 1)
+    ro code = find_data(def, "stop_code")
+    assert(code >= 0)
+    assert(spec_text(def.data[code].spec) == "?FailCode")
+    ro user = find_data(def, "user")
+    assert(write_kind_word(def.data[user].writes) == "rows")
+    assert(rows_may_write(def.data[user].writes))
+    assert(!def.data[user].monotonic.on)
+    ro open = find_data(def, "open_requests")
+    assert(open >= 0)
+    assert(write_kind_word(def.data[open].writes) == "mechanics")
+    assert(!rows_may_write(def.data[open].writes))
+    assert(find_data(def, "reply") == user + 1)
+    assert(find_data(def, "user_attempt") == -1)
 }
 
 test "chat types" {
@@ -85,7 +91,7 @@ test "chat ends" {
 test "unknown key" {
     assert(says(chat_with("\"version\": \"1\",", "\"version\": \"1\", \"bogus\": 1,"), "bogus"))
     assert(says(chat_with("\"kind\": \"appeal\", \"party\": \"user\"", "\"kind\": \"appeal\", \"party\": \"user\", \"zzz\": 1"), "zzz"))
-    assert(says(chat_with("\"reads\": \"executor\"", "\"reads\": \"executor\", \"extra\": true"), "extra"))
+    assert(says(chat_with("\"reads\": \"party\"", "\"reads\": \"party\", \"extra\": true"), "extra"))
     assert(says(chat_with("{ \"do\": \"journal\", \"code\": \"agent_done\" }", "{ \"do\": \"journal\", \"code\": \"agent_done\", \"x\": 1 }"), "the key x"))
 }
 
@@ -101,8 +107,8 @@ test "bad kinds" {
     assert(says(chat_with("\"kind\": \"appeal\", \"party\": \"user\"", "\"kind\": \"loop\", \"party\": \"user\""), "kind of a state"))
     assert(says(chat_with("\"kind\": \"signal\", \"name\": \"user_message\"", "\"kind\": \"wish\", \"word\": \"user_message\""), "kind of an event"))
     assert(says(chat_with("\"do\": \"journal\", \"code\": \"agent_done\"", "\"do\": \"teleport\", \"code\": \"agent_done\""), "unknown action"))
-    assert(says(chat_with("\"writes\": \"rows\"", "\"writes\": \"sometimes\""), "writes must be"))
-    assert(says(chat_with("\"reads\": \"executor\"", "\"reads\": \"nobody\""), "party or executor"))
+    assert(says(chat_with("{ \"name\": \"stop_text\", \"type\": \"text\",", "{ \"name\": \"stop_text\", \"type\": \"text\", \"writes\": \"sometimes\","), "writes must be"))
+    assert(says(chat_with("\"reads\": \"party\"", "\"reads\": \"nobody\""), "party or executor"))
     assert(says(chat_with("\"kind\": \"answer\", \"value\"", "\"kind\": \"shout\", \"value\""), "answer of an end"))
 }
 
@@ -123,19 +129,24 @@ test "paths of errors" {
     assert(first_issue(chat_with("\"do\": \"journal\", \"code\": \"agent_done\"", "\"do\": \"teleport\", \"code\": \"agent_done\"")).starts_with("$.states[1].rows[1].actions[0].do"))
 }
 
+// The section of the types of the chat with more types: since 2.26 the chat declares the type of its part (`agent_chunk`), the fixtures add to that section and do not write a second one.
+fn chat_types(more str) -> str => chat_with("\"records\": [ { \"name\": \"agent_chunk\", \"fields\": [ { \"name\": \"content\", \"type\": \"text\" } ] } ]", more)
+
+fn chunk_record() -> str => "{ \"name\": \"agent_chunk\", \"fields\": [ { \"name\": \"content\", \"type\": \"text\" } ] }"
+
 test "types section" {
-    ro t = "\"types\": {\"records\": [{\"name\": \"Item\", \"fields\": [{\"name\": \"label\", \"type\": \"text\"}, {\"name\": \"next\", \"type\": \"?Item\"}]}], \"variants\": [{\"name\": \"Mode\", \"cases\": [{\"name\": \"Fast\"}, {\"name\": \"Slow\", \"fields\": [{\"name\": \"by\", \"type\": \"int\"}]}]}]},"
-    ro text = chat_with("\"constants\": [", "${t} \"constants\": [")
+    ro text = chat_types("\"records\": [${chunk_record()}, {\"name\": \"Item\", \"fields\": [{\"name\": \"label\", \"type\": \"text\"}, {\"name\": \"next\", \"type\": \"?Item\"}]}], \"variants\": [{\"name\": \"Mode\", \"cases\": [{\"name\": \"Fast\"}, {\"name\": \"Slow\", \"fields\": [{\"name\": \"by\", \"type\": \"int\"}]}]}]")
+    assert(text != chat_machine_text())
     ro def = decoded(text)
-    assert(def.types.records.len() == 2)
+    assert(def.types.records.len() == 3)
     assert(def.types.records[0].name == "JournalEvent")
-    assert(def.types.records[1].fields.len() == 2)
+    assert(def.types.records[2].fields.len() == 2)
     assert(def.types.variants.len() == 4)
     assert(def.types.variants[3].cases[1].fields.len() == 1)
     assert(ok_text(text))
-    assert(says(chat_with("\"constants\": [", "\"types\": {\"records\": [{\"name\": \"FailCode\", \"fields\": []}]}, \"constants\": ["), "repeated or reserved"))
-    assert(says(chat_with("\"constants\": [", "\"types\": {\"records\": [{\"name\": \"JournalEvent\", \"fields\": []}]}, \"constants\": ["), "repeated or reserved"))
-    assert(says(chat_with("\"constants\": [", "\"types\": {\"records\": [{\"name\": \"int\", \"fields\": []}]}, \"constants\": ["), "repeated or reserved"))
-    assert(says(chat_with("\"constants\": [", "\"types\": {\"variants\": [{\"name\": \"Empty\", \"cases\": []}]}, \"constants\": ["), "needs a case"))
-    assert(says(chat_with("\"constants\": [", "\"types\": {\"bogus\": []}, \"constants\": ["), "bogus"))
+    assert(says(chat_types("\"records\": [${chunk_record()}, {\"name\": \"FailCode\", \"fields\": []}]"), "repeated or reserved"))
+    assert(says(chat_types("\"records\": [${chunk_record()}, {\"name\": \"JournalEvent\", \"fields\": []}]"), "repeated or reserved"))
+    assert(says(chat_types("\"records\": [${chunk_record()}, {\"name\": \"int\", \"fields\": []}]"), "repeated or reserved"))
+    assert(says(chat_types("\"records\": [${chunk_record()}], \"variants\": [{\"name\": \"Empty\", \"cases\": []}]"), "needs a case"))
+    assert(says(chat_types("\"records\": [${chunk_record()}], \"bogus\": []"), "bogus"))
 }

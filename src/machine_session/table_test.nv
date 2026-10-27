@@ -4,9 +4,9 @@
 module crew_harness.machine_session
 
 import std.text
-import alula.machine_text.{translate_report, translate_checked}
+import alula.machine_text.{translate_report_with, translate_checked_with}
 import alula.machine_table.{MachineDef, StateDef, TableRow, StateKind, AppealKind, OperationKind, ForkKind, EndKind, ToState, ToPrevious, ToSame, ToNothing, ToPrepareReturn, MachineParty, GatekeeperParty, EnhancedParty, AssignAct, JournalAct, MachineErrorAct, IfAct, CallAct, PassAct, CancelOpenAct, SignalEv, AnswerEv, FailureEv, NowEv, SignalEv, find_party, find_data, find_state}
-import crew_harness.machines.{methodology_registry, session_start_machine_text, session_start_table_text}
+import crew_harness.machines.{methodology_registry, session_start_machine_text, session_start_table_text, library_files}
 
 fn target_name(r TableRow) -> str {
     match r.next.target {
@@ -267,8 +267,8 @@ test "st the input" {
 test "st the data in the order of the table" {
     ro def = session_def()
     ro names = data_names(def)
-    // the data of the fragment first, then the data of the machine
-    assert(names[0] == "previous" && names[1] == "call_request_id" && names[2] == "open_requests")
+    // Alula 2.26: the data of the engine first (the library `контракт`), then the data of the library «Пауза», then the data of the machine
+    assert(names[0] == "call_request_id" && names[1] == "open_requests" && names[2] == "previous")
     assert(names[3] == "session")
     assert(names.contains("launch_source") && names.contains("launch_pass") && names.contains("phase") && names.contains("route"))
     assert(names.contains("source_list") && names.contains("delivery_short") && names.contains("agent_reply") && names.contains("result"))
@@ -430,26 +430,29 @@ test "st the gates ask what the methodology says" {
     assert(gate1 == ["session"])
     mut gate13 = []str.new()
     for f in state_named(def, "Gate13Session").inputs { gate13.push(f.field) }
-    // the three data that the executor reads for the preparation of the repeated launch (task 162, C-5) stand after the two fields of the keeper
-    assert(gate13 == ["session", "refusal_text", "launch_pass", "task_dir", "repo_dir"])
+    // the three data that the executor reads for the preparation of the repeated launch (task 162, C-5): Alula 2.26 (AL-138) does not send them to the keeper, the check derives them
+    // as the reads of the state
+    assert(gate13 == ["session", "refusal_text"])
+    ro reads13 = state_named(def, "Gate13Session").reads
+    assert(reads13.contains("launch_pass") && reads13.contains("task_dir") && reads13.contains("repo_dir"))
 }
 
-test "st the table text is a table of 2.25" {
+test "st the table text is a table of 2.26" {
     ro text = session_start_table_text()
     assert(text.starts_with("# Машина: Запуск сессии\n"))
     assert(text.contains("- machine: session_start\n"))
-    assert(text.contains("- format: 2.25\n"))
+    assert(text.contains("- format: 2.26\n"))
     assert(text.contains("Начальное состояние: В2"))
-    assert(text.contains("Пауза(сигнал_остановки: остановить"))
+    assert(text.contains("### Пауза\n- Файл: libs/pause.alula.md\n"))
+    assert(text.contains("| сигнал_остановки | \"остановить\" |"))
     assert(session_start_machine_text().contains("\"format\": \"machine/2\"") || session_start_machine_text().contains("\"format\":\"machine/2\""))
 }
 
 test "st the json is the translation of the table" {
-    // the file of the product is what the program `alula compile` makes of the table, byte for byte
-    ro report = translate_report(session_start_table_text())
+    // the file of the product is what the program `alula compile` makes of the table, byte for byte: the checked translation (Alula 2.26, AL-138: the derived reads need the registry of the host)
+    ro report = translate_report_with(session_start_table_text(), library_files())
     assert(report.errors.len() == 0)
-    assert(report.json == session_start_machine_text())
-    ro checked = translate_checked(session_start_table_text(), methodology_registry())
+    ro checked = translate_checked_with(session_start_table_text(), methodology_registry(), library_files())
     assert(checked.errors.len() == 0)
     assert(checked.json == session_start_machine_text())
     assert(report.rows_total >= 21)
@@ -458,7 +461,7 @@ test "st the json is the translation of the table" {
 
 test "st the table has no unsupported note" {
     // every construction of the table runs: the translator leaves no note `unsupported` and no warning
-    ro report = translate_checked(session_start_table_text(), methodology_registry())
+    ro report = translate_checked_with(session_start_table_text(), methodology_registry(), library_files())
     assert(report.warnings.len() == 0)
     assert(report.rows_noted == 0)
     assert(!session_start_machine_text().contains("unsupported"))

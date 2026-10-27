@@ -6,8 +6,8 @@ import std.text
 import alula.machine.{text_of_file}
 import alula.machine_table.{StateKind, AppealKind, ForkKind, EndKind, OperationKind, PartyKind, MachineParty, GatekeeperParty, EnhancedParty}
 import alula.machine_run.{load_alula_machine}
-import alula.machine_text.{translate_checked, translate_report, render_summary, render_machine}
-import crew_harness.machines.{methodology_registry, cycle_check_machine_text, cycle_check_table_text, machine_files, table_files}
+import alula.machine_text.{translate_checked_with, translate_report_with, render_summary, render_machine}
+import crew_harness.machines.{methodology_registry, cycle_check_machine_text, cycle_check_table_text, machine_files, table_files, library_files}
 
 test "cc clean" {
     ro report = table_report()
@@ -20,7 +20,9 @@ test "cc clean" {
 
 test "cc file is translation" {
     assert(table_report().json == cycle_check_machine_text())
-    assert(translate_report(cycle_check_table_text()).json == cycle_check_machine_text())
+    // Alula 2.26 (AL-138): the tree carries the reads of the states that the check derives, with the hidden reads of the external functions of the registry of the host; the translation
+    // without the registry does not know them, so only the checked translation is the committed file
+    assert(translate_report_with(cycle_check_table_text(), library_files()).errors.len() == 0)
 }
 
 test "cc in the lists" {
@@ -42,9 +44,16 @@ test "cc loads" {
     assert(def.primitives.len() == 1)
     assert(def.primitives[0].name == "stop_agent_group")
     assert(def.request_limit.len() == 1)
-    assert(def.includes.len() == 1)
-    assert(def.includes[0].version == "1")
-    assert(def.includes[0].hash == "f757b8aa7b08")
+    // Alula 2.26 (AL-140): the arithmetic of the cycle is a library beside the machine, with the hash of its file and without a version
+    mut arithmetic = 0
+    for inc in def.includes {
+        if inc.name == "cycle_arithmetic" {
+            arithmetic += 1
+            assert(inc.file == "libs/cycle_arithmetic.alula.md")
+            assert(inc.hash == "9d9bbb379b8d")
+        }
+    }
+    assert(arithmetic == 1)
     assert(def.constants.len() == 3)
 }
 
@@ -109,23 +118,28 @@ test "cc summary" {
 }
 
 test "cc header" {
-    assert(cycle_check_machine_text().starts_with("{\"format\":\"machine/2\",\"alula_version\":\"2.25\",\"machine\":\"cycle_check\",\"version\":\"alula-2.24\""))
-    assert(cycle_check_table_text().contains("- format: 2.25"))
+    assert(cycle_check_machine_text().starts_with("{\"format\":\"machine/2\",\"alula_version\":\"2.26\",\"machine\":\"cycle_check\",\"version\":\"alula-2.24\""))
+    assert(cycle_check_table_text().contains("- format: 2.26"))
 }
 
 test "cc circle ru" {
     assert(circle(cycle_check_machine_text(), "ru") == "")
 }
 
+// Alula 2.26 (the package 0.9.0, task 239): a Russian table that connects a library keeps the path of its Russian file in the English text, and a library is read in the language of the
+// machine only (section 9), so the English text of the cycle check does not translate back; the package skips such a table in its own circle (c222), the product proves the refusal
 test "cc circle en" {
-    assert(circle(cycle_check_machine_text(), "en") == "")
+    ro en = render_machine(cycle_check_machine_text(), "en")
+    assert(en.text.contains("- File: libs/cycle_arithmetic.alula.md"))
+    ro back = translate_checked_with(en.text, methodology_registry(), library_files())
+    assert(back.errors.len() > 0)
 }
 
 test "cc circle same file" {
     // the generated file is the canonical form: a second pass gives the same file
     ro first = render_machine(cycle_check_machine_text(), "ru")
     assert(first.notes.len() == 0)
-    ro again = translate_checked(first.text, methodology_registry())
+    ro again = translate_checked_with(first.text, methodology_registry(), library_files())
     assert(again.errors.len() == 0)
     assert(render_machine(again.json, "ru").text == first.text)
 }
@@ -136,12 +150,6 @@ test "cc english file" {
     assert(en.text.contains("- language: en"))
     assert(en.text.contains("machine session_start(input "))
     assert(en.text.contains("### SessionLaunch — appeal"))
-    ro back = translate_checked(en.text, methodology_registry())
-    assert(back.errors.len() == 0)
-    assert(tree_diff(cycle_check_machine_text(), back.json) == "")
-    // ru -> en -> ru
-    ro ru = render_machine(back.json, "ru")
-    ro twice = translate_checked(ru.text, methodology_registry())
-    assert(twice.errors.len() == 0)
-    assert(tree_diff(cycle_check_machine_text(), twice.json) == "")
+    // the English text does not translate back while the table connects a library (see "cc circle en")
+    assert(en.text.contains("## Includes"))
 }

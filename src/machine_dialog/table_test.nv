@@ -7,11 +7,11 @@ import std.encoding.json.{Json}
 import alula.machine.{NamedText, Int, Text}
 import alula.machine_table.{MachineDef, load_machine}
 import alula.machine_run.{AlulaMachine, AlulaState, ProjectValue, Test, TestRun, load_alula_machine, load_alula_machine_with, parse_test, run_test, run_ok, report_text}
-import alula.machine_text.{translate_checked, translate_report, TranslateReport, error_text, render_summary}
+import alula.machine_text.{translate_checked_with, translate_report_with, TranslateReport, error_text, render_summary}
 import alula.engine.{Incoming, EventKind, StepEnvironment, Order}
-import crew_harness.machines.{product_registry, dialog_machine_text, dialog_table_text, test_files}
+import crew_harness.machines.{product_registry, dialog_machine_text, dialog_table_text, test_files, library_files}
 
-fn dialog_report() -> TranslateReport => translate_checked(dialog_table_text(), product_registry())
+fn dialog_report() -> TranslateReport => translate_checked_with(dialog_table_text(), product_registry(), library_files())
 
 fn errors_text(report TranslateReport) -> str {
     mut parts = []str.new()
@@ -48,13 +48,13 @@ test "dl clean" {
 
 test "dl file is translation" {
     assert(dialog_report().json == dialog_machine_text())
-    assert(translate_report(dialog_table_text()).json == dialog_machine_text())
+    assert(translate_report_with(dialog_table_text(), library_files()).json == dialog_machine_text())
 }
 
 test "dl header" {
-    assert(dialog_table_text().contains("- format: 2.25"))
+    assert(dialog_table_text().contains("- format: 2.26"))
     assert(dialog_table_text().contains("- machine: DialogSession"))
-    assert(dialog_machine_text().contains("\"alula_version\": \"2.25\"") || dialog_machine_text().contains("\"alula_version\":\"2.25\""))
+    assert(dialog_machine_text().contains("\"alula_version\": \"2.26\"") || dialog_machine_text().contains("\"alula_version\":\"2.26\""))
 }
 
 test "dl loads" {
@@ -67,14 +67,15 @@ test "dl loads" {
     assert(def.states[1].name == "Awaiting")
     assert(def.states[2].name == "Closed")
     assert(def.states[0].rows.len() == 2)
-    assert(def.states[1].rows.len() == 5)
+    assert(def.states[1].rows.len() == 4)
     assert(def.parties.len() == 2)
     assert(def.params.len() == 1)
     assert(def.params[0].name == "СРОК_БЕЗДЕЙСТВИЯ")
     assert(def.params[0].project_key == "срок_бездействия")
     assert(def.constants.len() == 0)
     assert(def.end_rows.len() == 1)
-    assert(def.common.len() == 0)
+    // Alula 2.26 (task 240): the row of the library «Отмена запроса» (the declaration of the signal `отмена_запроса`, condition `ложь`) and the row of the machine for the cancel of the turn
+    assert(def.common.len() == 2)
 }
 
 test "dl no primitives" {
@@ -94,9 +95,10 @@ test "dl builds" {
 
 test "dl summary" {
     ro text = render_summary(dialog_machine_text())
-    assert(text.starts_with("machine DialogSession (version 1): 3 states, 7 rows, "))
+    assert(text.starts_with("machine DialogSession (version 1): 3 states, 8 rows, "))
     assert(text.contains("  Idle (appeal): 2 rows"))
-    assert(text.contains("  Awaiting (appeal): 5 rows"))
+    assert(text.contains("  Awaiting (appeal): 4 rows"))
+    assert(text.contains("common events: 2 rows"))
     assert(text.contains("  Closed (end): 0 rows"))
     assert(text.contains("ends: 1 rows"))
 }
@@ -240,8 +242,8 @@ fn taken_by(run TestRun) -> []str {
 
 test "dl rows counted" {
     ro rows = all_rows()
-    assert(rows.len() == 8)
-    for r in ["Idle#1", "Idle#2", "Awaiting#1", "Awaiting#2", "Awaiting#3", "Awaiting#4", "Awaiting#5", "end:Closed#1"] { assert(rows.contains(r)) }
+    assert(rows.len() == 9)
+    for r in ["Idle#1", "Idle#2", "Awaiting#1", "Awaiting#2", "Awaiting#3", "Awaiting#4", "common#1", "common#2", "end:Closed#1"] { assert(rows.contains(r)) }
 }
 
 test "dl scenarios take every row" {
@@ -264,8 +266,10 @@ test "dl scenarios take every row" {
         }
     }
     assert(steps >= 150)
+    // `common#1` is the row of the library «Отмена запроса»: the declaration of the signal of the protocol with the condition `ложь`, no event is taken by it (task 240)
     for row in all_rows() {
-        if !covered.contains(row) { panic("no scenario takes the row ${row}") }
+        if row != "common#1" && !covered.contains(row) { panic("no scenario takes the row ${row}") }
     }
+    assert(!covered.contains("common#1"))
     assert(covered.len() == 8)
 }

@@ -5,6 +5,6 @@
   "start_at": 1000,
   "steps": [
     {"do": "feed", "event": {"kind": "signal", "name": "user_message", "input": "hi"}, "expect": {"state": "Awaiting"}},
-    {"do": "feed", "event": {"kind": "signal", "name": "user_message", "input": "again", "party": "user"}, "expect": {"state": "Awaiting", "journal": [{"code": "event_ignored", "params": {"event": "user_message", "state": "Awaiting"}}], "data": {"user": "hi", "user_attempt": 0}}}
+    {"do": "feed", "event": {"kind": "signal", "name": "user_message", "input": "again", "party": "user"}, "expect": {"state": "Awaiting", "journal": [{"code": "event_ignored", "params": {"event": "user_message", "state": "Awaiting"}}], "data": {"user": "hi"}}}
   ]
 }
