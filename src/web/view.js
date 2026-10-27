@@ -17,7 +17,6 @@ import { createToast } from './toast.js';
 import { h, svgNode, icon } from './dom.js';
 import { createProjectsUi } from './projects-ui.js';
 import { createSideKit } from './session-row.js';
-import { sessionPlace } from './projects.js';
 import { LANGS, createVoiceSettings, langFor, pageLang } from './stt.js';
 import { isBusy, keyAction } from './queue.js';
 import { historyStep, NO_HISTORY } from './history.js';
@@ -173,7 +172,7 @@ export function createView(doc, refs, deps) {
       const loc = win && win.location;
       return `${loc ? loc.origin + loc.pathname : ''}#s=${encodeURIComponent(id)}`;
     },
-    render: () => { listSig = ''; if (current.ui) renderList(current.model, current.ui); },
+    render: () => { listSig = ''; if (current.ui) renderList(current.model, current.ui); if (typeof syncHeadMenu === 'function') syncHeadMenu(); },
   });
   let listSig = '';
   const foldedParents = new Set(); // родители, чьи дочерние свёрнуты в списке
@@ -394,12 +393,15 @@ export function createView(doc, refs, deps) {
       ...list.map((p) => projectRow({ id: p.id, name: p.name, checked: Boolean(project) && p.id === project.id })),
       ...(many ? [h(doc, 'div', { class: 'project-folder' }, draftFolder)] : []));
   }
-  const agentText = h(doc, 'span', { class: 'agent-name' });
-  const modelText = h(doc, 'span', { class: 'session-model-slot', 'data-session-model': '' });
-  const stateBadge = h(doc, 'span', { class: 'badge' });
-  const placeText = h(doc, 'span', { class: 'place muted', title: t('session.place'), hidden: true });
-  const subRow = h(doc, 'div', { class: 'sub' }, agentText, modelText, stateBadge, placeText);
-  const titleBlock = h(doc, 'div', { class: 'title-block', hidden: true }, title, subRow);
+  // Шапка чата (задача 192.6): только название (с «родитель ›» и номером задачи) и шеврон ⌄ с меню действий сессии
+  const headMenu = h(doc, 'span', { class: 'head-menu' });
+  let headCtx = null; // { session, pinned, unread } показанной сессии
+  function syncHeadMenu() {
+    if (!headCtx) { headMenu.replaceChildren(); return; }
+    const open = sideKit.menuFor(headCtx.session, { pinned: headCtx.pinned, unread: headCtx.unread, rename: startRename });
+    headMenu.replaceChildren(...[sideKit.headButton(headCtx.session), open].filter(Boolean));
+  }
+  const titleBlock = h(doc, 'div', { class: 'title-block', hidden: true }, title, headMenu);
   const railButton = h(doc, 'button', { type: 'button', class: 'icon-btn', 'aria-label': t('rail.toggle'), title: t('rail.toggle'), 'aria-pressed': 'true' }, icon(doc, 'i-panel'));
   const topbar = h(doc, 'header', { class: 'topbar' }, backButton, titleBlock, railButton);
 
@@ -640,8 +642,7 @@ export function createView(doc, refs, deps) {
   const effortButton = h(doc, 'button', { type: 'button', class: 'status-btn', hidden: true, title: t('menu.effort'), 'aria-label': t('menu.effort'), 'aria-haspopup': 'menu', 'aria-expanded': 'false' });
   // Режим работы по методике (задача 192p): слева в строке статуса, плоский текст без шеврона.
   const routeButton = h(doc, 'button', { type: 'button', class: 'status-btn route-chip', hidden: true, title: t('route.label'), 'aria-label': t('route.label'), 'aria-haspopup': 'menu', 'aria-expanded': 'false' });
-  // Под полем новой сессии: проект · Worktree · режим · агент · модель · усилие (как «New session»).
-  const projectButton = h(doc, 'button', { type: 'button', class: 'status-btn project-chip', hidden: true, title: t('chat.project_pick'), 'aria-label': t('chat.project_pick'), 'aria-haspopup': 'menu', 'aria-expanded': 'false' });
+  // Под полем новой сессии: Worktree · режим · агент · модель · усилие; проект выбирается только списком посреди пустого чата (задача 192.6).
   const worktreeButton = h(doc, 'button', { type: 'button', class: 'status-btn worktree-chip', hidden: true, 'aria-pressed': 'true', title: t('route.worktree_on') },
     icon(doc, 'i-branch'), h(doc, 'span', { text: t('route.worktree') }));
   worktreeButton.addEventListener('click', () => {
@@ -650,12 +651,13 @@ export function createView(doc, refs, deps) {
     if (worktreeButton.dataset.draft === 'true') handlers.onDraftWorktree(currentTrace, on); else handlers.onWorktree(currentTrace, on);
   });
   // Задача 192.4: где идёт работа (main, ветка папки проекта или своя ветка wip/задачи)
-  const whereNote = h(doc, 'span', { class: 'where-note', hidden: true });
+  // Задача 192.6: подпись — отдельной строкой под строкой чипов, чтобы не отнимать у них ширину
+  const whereNote = h(doc, 'p', { class: 'where-note', hidden: true });
   const spinner = h(doc, 'span', { class: 'spinner', role: 'img', 'aria-label': t('composer.working'), hidden: true });
   const menu = h(doc, 'div', { class: 'menu', role: 'menu', hidden: true });
   // Одна группа чипов у правого края: семья, режим, модель и усилие; за ней кольцо контекста и спиннер (задача 192).
   const statusGroup = h(doc, 'div', { class: 'status-group' }, familyButton, modeButton, statusModel, modelButton, effortButton);
-  const status = h(doc, 'div', { class: 'composer-status', 'data-empty': 'true' }, projectButton, worktreeButton, whereNote, routeButton, h(doc, 'span', { class: 'grow' }), statusGroup, ringBox, spinner, menu);
+  const status = h(doc, 'div', { class: 'composer-status', 'data-empty': 'true' }, worktreeButton, routeButton, h(doc, 'span', { class: 'grow' }), statusGroup, ringBox, spinner, menu);
 
   // Меню выбора режима, модели и усилия (задача 192): показывает только то, что агент отдал по ACP.
   const MENU_MODELS = 4;
@@ -680,7 +682,6 @@ export function createView(doc, refs, deps) {
     effortButton.setAttribute('aria-expanded', 'false');
     familyButton.setAttribute('aria-expanded', 'false');
     routeButton.setAttribute('aria-expanded', 'false');
-    projectButton.setAttribute('aria-expanded', 'false');
   }
 
   function choose(setting, value) {
@@ -706,18 +707,6 @@ export function createView(doc, refs, deps) {
         name: agentLabel(a.id), checked: a.id === currentAgent, number: i < 9 ? i + 1 : 0,
         onPick: () => { if (currentTrace && a.id !== currentAgent) handlers.onSwitchAgent(currentTrace, a.id); closeMenu(); },
       })));
-      menu.hidden = false;
-      return;
-    }
-    if (menuKind === 'project') {
-      menuSearch.hidden = true;
-      menu.dataset.side = 'left';
-      const draft = currentTrace ? current.session : null;
-      const list = projectsList ?? [];
-      const picked = draft ? list.find((p) => p.id === draft.projectId) : null;
-      menuList.append(h(doc, 'div', { class: 'menu-head', text: t('chat.project_pick') }),
-        menuRow({ name: t('chat.project_none'), checked: !picked, onPick: () => { if (currentTrace) handlers.onDraftProject(currentTrace, ''); closeMenu(); } }),
-        ...list.map((p) => menuRow({ name: p.name, checked: Boolean(picked) && p.id === picked.id, onPick: () => { if (currentTrace) handlers.onDraftProject(currentTrace, p.id); closeMenu(); } })));
       menu.hidden = false;
       return;
     }
@@ -781,7 +770,6 @@ export function createView(doc, refs, deps) {
     menuSig = kind === 'route' ? currentRoute : JSON.stringify(options);
     familyButton.setAttribute('aria-expanded', kind === 'agent' ? 'true' : 'false');
     routeButton.setAttribute('aria-expanded', kind === 'route' ? 'true' : 'false');
-    projectButton.setAttribute('aria-expanded', kind === 'project' ? 'true' : 'false');
     modeButton.setAttribute('aria-expanded', kind === 'mode' ? 'true' : 'false');
     modelButton.setAttribute('aria-expanded', kind === 'model' || kind === 'more' ? 'true' : 'false');
     effortButton.setAttribute('aria-expanded', kind === 'effort' ? 'true' : 'false');
@@ -810,7 +798,6 @@ export function createView(doc, refs, deps) {
   const toggleMenu = (kind) => { if (menuKind) closeMenu(); else openMenu(kind); };
   familyButton.addEventListener('click', () => toggleMenu('agent'));
   routeButton.addEventListener('click', () => toggleMenu('route'));
-  projectButton.addEventListener('click', () => toggleMenu('project'));
   modeButton.addEventListener('click', () => toggleMenu('mode'));
   modelButton.addEventListener('click', () => toggleMenu('model'));
   effortButton.addEventListener('click', () => toggleMenu('effort'));
@@ -1018,7 +1005,8 @@ export function createView(doc, refs, deps) {
     box,
     voiceHint,
     queueButton,
-    status);
+    status,
+    whereNote);
 
   // Кнопка «вниз»: круглая, по центру над полем; есть, только когда лента не в самом низу; точка — пришло новое, пока читали выше.
   const jumpButton = h(doc, 'button', { type: 'button', class: 'jump-btn', hidden: true, title: t('chat.to_bottom'), 'aria-label': t('chat.to_bottom') },
@@ -1487,7 +1475,9 @@ export function createView(doc, refs, deps) {
       remindUnmerged(session);
     }
     title.hidden = Boolean(session.draft);
-    subRow.hidden = Boolean(session.draft);
+    headMenu.hidden = Boolean(session.draft);
+    headCtx = session.draft ? null : { session, pinned: effectivePins(sessionList(model).filter((x) => !x.draft), ui.pins).has(session.id), unread: Boolean(ui.unread && ui.unread[session.id] === true) };
+    syncHeadMenu();
     if (!renaming) titleText.textContent = session.name;
     const parentSession = session.parent ? model.sessions[session.parent] : undefined;
     crumb.hidden = !parentSession;
@@ -1501,15 +1491,6 @@ export function createView(doc, refs, deps) {
     taskNo.title = taskInfo ? (taskInfo.title ? t('route.task_no_title', { number: taskInfo.number, title: taskInfo.title }) : t('route.task_head_bare', { number: taskInfo.number })) : '';
     // Что показать про семью, модель, режим и усилие: данные показанной семьи (собственная сводка сессии, иначе каталог семьи)
     const shown = shownOf(model, session);
-    agentText.textContent = agentLabel(shown.agent);
-    const known = session.projectId ? projectById(session.projectId) : undefined;
-    const removed = Boolean(session.projectId) && projectsList !== null && !known; // проект удалён: сессия теперь «Без проекта»
-    const place = removed ? '' : sessionPlace({ project: known ? known.name : session.project, folder: session.folder, branch: session.branch });
-    placeText.hidden = place === '';
-    placeText.textContent = place;
-    modelText.textContent = shown.model || t('session.model_unknown');
-    stateBadge.textContent = t(STATE_KEYS[session.state]);
-    stateBadge.dataset.state = session.state;
     const busy = isBusy(session.state);
     const queued = handlers.queued(session.id);
     queueButton.hidden = queued === 0;
@@ -1522,11 +1503,6 @@ export function createView(doc, refs, deps) {
     routeButton.hidden = false;
     routeButton.replaceChildren(h(doc, 'span', { text: routeName(currentRoute) }));
     // проект и Worktree: у черновика — выбор; у открытой сессии без дерева — переключатель на следующую задачу
-    const knownProject = (projectsList ?? []).find((p) => p.id === session.projectId);
-    projectButton.hidden = !session.draft;
-    if (session.draft) {
-      projectButton.replaceChildren(icon(doc, 'i-folder'), h(doc, 'span', { text: knownProject ? knownProject.name : t('chat.project_none') }));
-    }
     const task = session.routeState && session.routeState.task;
     const hasTree = Boolean((task && task.worktree) || (session.routeState && session.routeState.where && session.routeState.where.kind === 'wip'));
     const treeOn = session.draft ? session.worktree !== false : (session.routeState ? session.routeState.useTree !== false : true);
@@ -1558,13 +1534,11 @@ export function createView(doc, refs, deps) {
     statusModel.hidden = hasModels;
     statusModel.textContent = shown.model || (shown.loading ? t('session.loading') : '');
     spinner.hidden = !busy;
-    status.dataset.empty = String(routeButton.hidden && worktreeButton.hidden && projectButton.hidden && familyButton.hidden && !statusModel.textContent && !busy && !hasModes && !hasModels && !hasEfforts && !session.usage);
+    status.dataset.empty = String(routeButton.hidden && worktreeButton.hidden && familyButton.hidden && !statusModel.textContent && !busy && !hasModes && !hasModels && !hasEfforts && !session.usage);
     if (menuKind === 'agent') renderMenu();
     else if (menuKind === 'route') {
       if (menuSig !== currentRoute) renderMenu();
       menuSig = currentRoute;
-    } else if (menuKind === 'project') {
-      if (!session.draft) closeMenu();
     } else if (menuKind && ((menuKind === 'mode' && !hasModes) || (menuKind === 'effort' && !hasEfforts) || ((menuKind === 'model' || menuKind === 'more') && !hasModels))) closeMenu();
     else if (menuKind) {
       const sig = JSON.stringify(options);

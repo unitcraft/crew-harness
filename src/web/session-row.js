@@ -107,7 +107,7 @@ export function createSideKit(doc, deps) {
         label: ctx.unread ? t('session.menu_read') : t('session.menu_unread'), iconId: 'i-dot',
         onPick: () => { menu = null; render(); handlers.onUnread(session.id, !ctx.unread); },
       }),
-      menuRow({ label: t('session.menu_rename'), iconId: 'i-pencil', onPick: () => startRename(session) }),
+      menuRow({ label: t('session.menu_rename'), iconId: 'i-pencil', onPick: () => { if (ctx.rename) { menu = null; render(); ctx.rename(); } else startRename(session); } }),
       separator(),
       menuRow({
         label: t('session.menu_link'), iconId: 'i-copy',
@@ -116,6 +116,21 @@ export function createSideKit(doc, deps) {
       menuRow({ label: t('session.menu_move'), iconId: 'i-folder', arrow: true, onPick: () => { menu = { id: session.id, sub: 'move' }; render(); } }),
       separator(),
       menuRow({ label: t('session.menu_delete'), iconId: 'i-trash', danger: true, onPick: () => askDelete(session) }));
+  }
+
+  /** Шеврон ⌄ в шапке чата (задача 192.6): открывает то же меню действий сессии. */
+  function headButton(session) {
+    const label = t('session.menu', { name: session.name });
+    const open = menu !== null && menu.id === session.id;
+    const button = h(doc, 'button', {
+      type: 'button', class: 'icon-btn small head-menu-btn', 'aria-label': label, title: label, 'aria-haspopup': 'menu', 'aria-expanded': String(open),
+    }, icon(doc, 'i-chevron-down'));
+    button.addEventListener('click', (e) => {
+      e.stopPropagation();
+      menu = open ? null : { id: session.id, sub: '' };
+      render();
+    });
+    return button;
   }
 
   /** Кнопка «⋯» у строки сессии. */
@@ -292,7 +307,7 @@ export function createSideKit(doc, deps) {
   }
 
   return {
-    menuFor, moreButton, renameField, afterRender, rowDnd, projectDnd,
+    menuFor, moreButton, headButton, renameField, afterRender, rowDnd, projectDnd,
     isRenaming: (id) => renaming !== null && renaming.id === id,
     isDragging: () => drag !== null,
     /** Перерисовку отложили, пока тащат: после броска она выполнится сама. */

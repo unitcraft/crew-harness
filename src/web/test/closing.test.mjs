@@ -131,7 +131,7 @@ test('новая сессия: режим по умолчанию — Интер
   assert.equal(real.sessions.d1.draft, undefined);
 });
 
-test('новая сессия: проект выбирается списком (значок папки, галочка у выбранного); под полем проект · Worktree · режим · агент · модель · усилие', () => {
+test('новая сессия: проект выбирается списком (значок папки, галочка у выбранного); под полем Worktree · режим · агент · модель · усилие', () => {
   assert.match(view, /class: 'project-picker', role: 'listbox'/);
   assert.match(view, /icon\(doc, 'i-folder', 'project-icon'\)/);
   assert.match(view, /class: 'project-check' \}, checked \? icon\(doc, 'i-check'\)/);
@@ -139,8 +139,8 @@ test('новая сессия: проект выбирается списком 
   assert.ok(!/draft-project|draftBar/.test(view), 'прежнего выпадающего списка проекта нет');
   assert.ok(!/Choose environment/.test(view + read('strings.js')), 'выбора окружения нет');
   const row = view.match(/const status = h\(doc, 'div', \{ class: 'composer-status', [^}]*\}, ([^;]*)\);/)[1];
-  const order = ['projectButton', 'worktreeButton', 'routeButton', 'statusGroup'].map((n) => row.indexOf(n));
-  assert.ok(order.every((x) => x >= 0) && order.every((x, i) => i === 0 || order[i - 1] < x), 'порядок: проект, Worktree, режим, остальное справа');
+  const order = ['worktreeButton', 'routeButton', 'statusGroup'].map((n) => row.indexOf(n));
+  assert.ok(order.every((x) => x >= 0) && order.every((x, i) => i === 0 || order[i - 1] < x), 'порядок: Worktree, режим, остальное справа');
   assert.match(view, /worktreeButton\.setAttribute\('aria-pressed', String\(treeOn \|\| hasTree\)\)/);
   assert.match(view, /worktreeButton\.disabled = hasTree/);
   assert.match(view, /icon\(doc, 'i-branch'\), h\(doc, 'span', \{ text: t\('route\.worktree'\) \}\)/);
@@ -154,4 +154,27 @@ test('удаление сессии с не влитой работой: вла�
   assert.match(row, /handlers\.onDeleteSession\(session\.id, all \? 'drop' : 'keep'\)/);
   assert.match(row, /const work = task && task\.worktree \? task\.unmergedCommits : 0;/);
   assert.match(app, /onDeleteSession\(trace, branch = ''\) \{ send\('session_delete', trace, nextStep\(model, trace\), branch \? \{ branch \} : \{\}\); \}/);
+});
+
+test('задача 192.6: в строке нового чата нет меню проекта, подпись «где работа» вне строки чипов, чипы не сжимаются', () => {
+  assert.ok(!/projectButton|project-chip|toggleMenu\('project'\)|menuKind === 'project'/.test(view), 'меню проекта в строке настроек убрано');
+  const row = view.match(/const status = h\(doc, 'div', \{ class: 'composer-status', [^}]*\}, ([^;]*)\);/)[1];
+  assert.ok(!row.includes('whereNote'), 'подпись не в строке чипов');
+  assert.match(view, /voiceHint,\s*queueButton,\s*status,\s*whereNote\)/, 'подпись отдельной строкой под строкой настроек');
+  assert.match(view, /whereNote\.title = where/);
+  assert.match(css, /\.composer-status \.status-btn, \.composer-status \.status-model \{ flex: none; white-space: nowrap; \}/);
+  assert.match(css, /@media \(max-width: 760px\) \{ \.composer-status \{ flex-wrap: wrap;/);
+  assert.match(css, /\.where-note \{[^}]*overflow-wrap: anywhere/);
+  assert.ok(!/\.where-note \{[^}]*white-space: nowrap/.test(css), 'подпись переносится');
+});
+
+test('задача 192.6: шапка чата — только название, номер задачи и шеврон с меню действий; второй строки нет', () => {
+  assert.match(view, /const titleBlock = h\(doc, 'div', \{ class: 'title-block', hidden: true \}, title, headMenu\)/);
+  assert.match(view, /const title = h\(doc, 'h2', \{ class: 'title' \}, crumb, crumbSep, titleText, taskNo, titleInput\)/);
+  assert.ok(!/agentText|modelText|stateBadge|placeText|subRow|session-model-slot/.test(view), 'агента, модели, статуса, проекта и папки в шапке нет');
+  assert.ok(!/\.sub\b|\.place\b|session-model-slot/.test(css), 'стилей второй строки нет');
+  assert.match(read('session-row.js'), /function headButton\(session\)[\s\S]*icon\(doc, 'i-chevron-down'\)/);
+  assert.match(view, /sideKit\.menuFor\(headCtx\.session/);
+  assert.match(view, /sideKit\.headButton\(headCtx\.session\)/);
+  assert.match(css, /\.head-menu \.menu\.session-menu \{[^}]*max-width: calc\(100vw - 20px\)/);
 });

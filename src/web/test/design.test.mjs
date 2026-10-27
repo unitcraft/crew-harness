@@ -16,6 +16,5 @@ test('composer has no fake model/mode/effort selectors; the model slot has respo
   assert.doesNotMatch(view, /opt-model|opt-mode|opt-effort|modelField|modeField|effortField/);
   assert.doesNotMatch(mock, /MODELS|MODES|EFFORTS|model\.(?:base|fast|deep)/);
   assert.doesNotMatch(strings, /model\.(?:base|fast|deep)|composer\.model_label/);
-  assert.match(css, /\.session-model-slot/);
   assert.match(css, /@media\s*\(max-width:\s*799px\)/);
 });

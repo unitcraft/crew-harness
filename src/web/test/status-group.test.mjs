@@ -22,7 +22,7 @@ test('у каждого чипа title и aria-label; группа прижат�
     assert.match(line, /title: t\('(status\.agent|menu\.mode|status\.model|menu\.effort)'\), 'aria-label': t\('(status\.agent|menu\.mode|status\.model|menu\.effort)'\)/, name);
   }
   assert.match(css, /\.status-group \{[^}]*margin-left: auto/);
-  assert.match(css, /@media \(max-width: 560px\)[^\r\n]*\.status-group \{ margin-left: 0/);
+  assert.match(css, /@media \(max-width: 760px\)[^\r\n]*\.status-group \{ margin-left: 0/);
 });
 
 test('модель и усилие — два независимых чипа; разделитель «·» лежит вне подложки чипа', () => {

@@ -54,7 +54,6 @@ export const S = Object.freeze({
   'chat.rename': 'Переименовать',
   'chat.draft_project': 'Проект новой сессии',
   'chat.draft_folder': 'Папка',
-  'chat.project_pick': 'Проект',
   'chat.project_none': 'Без проекта',
   'sessions.time_title': '{state}. Последнее событие: {time}',
 
@@ -569,7 +568,6 @@ export const S = Object.freeze({
   'crewtask.choice_forget': 'Забыть',
   'crewtask.apply': 'Применить: {work} в работу · {discuss} обсудить · {forget} забыть',
 
-  'session.place': 'Проект, папка и ветка сессии',
 });
 
 /** Подставить {имя} из vars; нет значения — остаётся как есть, чтобы пропуск был виден. */

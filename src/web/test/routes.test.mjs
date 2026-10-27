@@ -494,7 +494,7 @@ test('заглушка: пропуск шага отмечает его проп
 test('проводка: чип режима первым в строке статуса, aria-label «Режим работы», без шеврона; меню вверх слева; страница шлёт сигналы', () => {
   assert.equal(S['route.label'], 'Режим работы');
   assert.match(view, /const routeButton = h\(doc, 'button', \{[^}]*'aria-label': t\('route\.label'\)/);
-  assert.match(view, /class: 'composer-status', 'data-empty': 'true' \}, projectButton, worktreeButton, whereNote, routeButton, h\(doc, 'span', \{ class: 'grow' \}\), statusGroup/);
+  assert.match(view, /class: 'composer-status', 'data-empty': 'true' \}, worktreeButton, routeButton, h\(doc, 'span', \{ class: 'grow' \}\), statusGroup/);
   assert.doesNotMatch(view, /routeButton\.replaceChildren\([^;]*icon\(/, 'шеврона у чипа нет');
   assert.match(view, /menu\.dataset\.side = 'left'/);
   assert.match(css, /\.menu\[data-side="left"\] \{ left: 0; \}/);
