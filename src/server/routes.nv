@@ -333,6 +333,7 @@ export type RouteSession {
     reviewing bool,
     task_open bool,
     task_closed bool,
+    by_crew bool,
     task_id str,
     number str,
     task_dir str,
@@ -373,16 +374,19 @@ export type RouteSession {
     last_msg str,
     last_imgs []str,
     last_names []str,
-    kick str,
+    kicks []str,
+    kick_ns []int,
+    focus int,
+    recent []str,
     marker_turn str
 }
 
 export fn route_session_new() -> RouteSession => {
     route: "interactive", told: false, states: []str.new(), running: false, current: -1, awaiting: false, reviewing: false,
-    task_open: false, task_closed: false, task_id: "", number: "", task_dir: "", task_shown: "", branch: "", worktree: "", title: "",
+    task_open: false, task_closed: false, by_crew: false, task_id: "", number: "", task_dir: "", task_shown: "", branch: "", worktree: "", title: "",
     messages: 0, subs: []SubRec.new(), merged_into: 0, force: "", last_state: "", last_check: 0, cwd_now: "", base: "", tstate: "active", tnote: "", unmerged: 0, unmerged_at: 0,
     job: "", attempt: 0, use_tree: true, active_at: 0, extra: task_extra_none(), testing: false, dirty: false, ci_at: 0, diff: []DiffRec.new(), ov_n: 0, ov_with: 0, ov_files: []str.new(), ov_until: 0, asked: []int.new(), conflict_files: []str.new(),
-    props: []Proposal.new(), prop_serial: 0, dismissed: []str.new(), last_msg: "", last_imgs: []str.new(), last_names: []str.new(), kick: "", marker_turn: ""
+    props: []Proposal.new(), prop_serial: 0, dismissed: []str.new(), last_msg: "", last_imgs: []str.new(), last_names: []str.new(), kicks: []str.new(), kick_ns: []int.new(), focus: 0, recent: []str.new(), marker_turn: ""
 }
 
 // The lines of a text (the files a subtask touches are kept one in a line).
@@ -433,6 +437,13 @@ export fn RouteSession @last_sub() -> int => if @subs.len() == 0 { 0 } else { @s
 export fn RouteSession @agent_dir(session_dir str) -> str {
     // a conflict is resolved, a task is published in the tree of the task, whatever the subtasks have
     if (@job.starts_with("resolve") || @job.starts_with("pub")) && @worktree.byte_len() > 0 { return @worktree }
+    // task 192.2: the agent works on the subtask the hub told it about (`focus`): in its tree, else in the tree of the task
+    if @focus > 0 && @sub_at(@focus) >= 0 {
+        ro mine = @subs[@sub_at(@focus)]
+        if mine.worktree.byte_len() > 0 && !mine.merged { return mine.worktree }
+        if @task_open && @worktree.byte_len() > 0 { return @worktree }
+        return session_dir
+    }
     if @subs.len() > 0 {
         ro last = @subs[@subs.len() - 1]
         if last.worktree.byte_len() > 0 && !last.merged { return last.worktree }
@@ -455,11 +466,13 @@ export fn RouteSession mut @normalize() -> () {
     @job = ""
     @cwd_now = ""
     @told = false
+    @focus = 0
 }
 
 fn RouteSession mut @reset_task() -> () {
     @task_open = false
     @task_closed = false
+    @by_crew = false
     @task_id = ""
     @number = ""
     @task_dir = ""
@@ -544,6 +557,7 @@ export fn RouteSession mut @apply(name str, text str) -> () {
     if op == "open" {
         @reset_task()
         @task_open = true
+        @by_crew = rj_int(o, "crew") == 1
         @task_id = jtext(o, "id")
         @number = jtext(o, "number")
         @task_dir = jtext(o, "dir")
@@ -728,6 +742,7 @@ export fn route_view_text(rt RouteSession, titles []str, progress []Progress, su
         jput(t, "branch", JsonValue.str(rt.branch))
         jput(t, "worktree", JsonValue.str(rt.worktree))
         jput(t, "closed", JsonValue.bool(rt.task_closed))
+        jput(t, "crew", JsonValue.bool(rt.by_crew))
         jput(t, "messages", JsonValue.int(rt.messages))
         jput(t, "state", JsonValue.str(rt.tstate))
         jput(t, "unmerged_commits", JsonValue.int(rt.unmerged))

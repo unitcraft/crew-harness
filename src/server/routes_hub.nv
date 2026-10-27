@@ -271,7 +271,7 @@ fn Hub mut @route_message_prelude(at int) Proc -> str {
     s.rt.told = true
     @sessions[at] = s
     // task 192.2: the list of the tasks of the session, so that the agent can say that a work belongs to one of them
-    ro tasks = tasks_hint(s.rt.task_shown, @ct_lines(s))
+    ro tasks = tasks_hint(s.rt.task_dir, @ct_lines(s))
     mut parts = []str.new()
     if text.byte_len() > 0 { parts.push(text) }
     if hint.byte_len() > 0 { parts.push(hint) }

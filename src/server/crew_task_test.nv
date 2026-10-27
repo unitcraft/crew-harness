@@ -301,3 +301,22 @@ test "crew_task: the journal rebuilds the subtasks with their files, the wait an
     assert(rt.subs[1].waits == 0)
     assert(!rt.subs[1].queued)
 }
+
+test "crew_task: the agent works in the tree of the subtask it was told about, else in the tree of the task; a task of the list is marked" {
+    mut rt = route_session_new()
+    rt.apply("route_task", "{\"op\":\"open\",\"id\":\"001-x\",\"number\":\"001\",\"dir\":\"d\",\"shown\":\"s\",\"title\":\"A\",\"worktree\":\"W\",\"crew\":1}")
+    assert(rt.by_crew)
+    rt.apply("route_task", "{\"op\":\"subtask\",\"n\":2,\"title\":\"B\"}")
+    rt.apply("route_task", "{\"op\":\"sub_worktree\",\"n\":2,\"branch\":\"b2\",\"worktree\":\"W2\"}")
+    assert(rt.agent_dir("S") == "W2")
+    rt.focus = 1
+    assert(rt.agent_dir("S") == "W")
+    rt.focus = 2
+    assert(rt.agent_dir("S") == "W2")
+    rt.normalize()
+    assert(rt.focus == 0)
+    ro view = ctj(route_view_text(rt, []str.new(), [Progress { done: 0, total: 0, items: []ProgressItem.new() }, Progress { done: 0, total: 0, items: []ProgressItem.new() }], false, 0, task_extra_none()))
+    assert(ct_get(ct_get(view, "task"), "crew").bool() == Some(true))
+    rt.apply("route_task", "{\"op\":\"new\"}")
+    assert(!rt.by_crew)
+}

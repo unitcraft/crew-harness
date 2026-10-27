@@ -40,6 +40,8 @@ fn Hub @ct_view(at int, base str) -> str {
 fn Hub mut @ct_remember(at int, text str, files []AcpImage) -> () {
     mut s = @sessions[at]
     s.rt.last_msg = text
+    s.rt.recent.push(text)
+    if s.rt.recent.len() > 3 { s.rt.recent.remove(0) }
     mut paths = []str.new()
     mut names = []str.new()
     for f in files {
@@ -74,9 +76,10 @@ fn Hub mut @ct_drop(at int, id int, refuse bool) -> () {
 }
 
 // A note to the agent for the next service turn.
-fn Hub mut @ct_kick(at int, note str) -> () {
+fn Hub mut @ct_kick(at int, n int, note str) -> () {
     mut s = @sessions[at]
-    s.rt.kick = if s.rt.kick.byte_len() == 0 { note } else { "${s.rt.kick}\n\n${note}" }
+    s.rt.kicks.push(note)
+    s.rt.kick_ns.push(n)
     @sessions[at] = s
 }
 
@@ -181,6 +184,7 @@ fn Hub mut @ct_create(at int, p Proposal, how str, queued bool) Proc Detach Time
         js(o, "base", made.base)
         js(o, "title", subtask_title(p.title))
         js(o, "touches", touched)
+        ji(o, "crew", 1)
         @rt_task_op(at, "open", o)
     } else {
         if s0.rt.tstate != "active" { @rt_state(at, "active", "") }
@@ -208,14 +212,14 @@ fn Hub mut @ct_create(at int, p Proposal, how str, queued bool) Proc Detach Time
     @ct_drop(at, p.id, false)
     if waits > 0 || queued {
         @ct_note(at, if waits > 0 { "▸ подзадача ${n} «${p.title}» ждёт подзадачу ${waits}" } else { "▸ подзадача ${n} «${p.title}» в очереди: в работе уже ${running.len()}" })
-        @ct_kick(at, decision_note("queued", n, p.title, s.rt.task_shown))
+        @ct_kick(at, n, decision_note("queued", n, p.title, s.rt.task_dir))
         @route_broadcast(at, true)
         return
     }
     // two works at once: the new one gets a tree of its own (when the task has one)
     if !fresh && (how == "parallel" || running.len() > 0) && s.rt.worktree.byte_len() > 0 { @route_subtree(at, n) }
     @ct_note(at, "▸ ${if fresh { "задача ${s.rt.number}" } else { "подзадача ${n}" }} «${p.title}» начата")
-    if !@ct_has_steps(s) { @ct_kick(at, decision_note("new", n, p.title, s.rt.task_shown)) }
+    if !@ct_has_steps(s) { @ct_kick(at, n, decision_note("new", n, p.title, s.rt.task_dir)) }
     @route_broadcast(at, true)
 }
 
@@ -235,7 +239,7 @@ fn Hub mut @ct_extend(at int, p Proposal, n int) Proc Detach Time -> () {
     @rt_task_op(at, "extend", o)
     @ct_drop(at, p.id, false)
     @ct_note(at, "▸ подзадача ${n} «${title}» дополнена (message.${n}.md)")
-    if !@ct_has_steps(s) { @ct_kick(at, decision_note("extend", n, title, s.rt.task_shown)) }
+    if !@ct_has_steps(s) { @ct_kick(at, n, decision_note("extend", n, title, s.rt.task_dir)) }
     @route_broadcast(at, true)
 }
 
@@ -283,7 +287,7 @@ fn Hub mut @ct_do(at int, p Proposal, action str) Proc Detach Time -> () {
     if action == "dismiss" {
         @ct_drop(at, p.id, true)
         @ct_note(at, "▸ «${p.title}»: это не задача")
-        @ct_kick(at, decision_note("no", 0, p.title, ""))
+        @ct_kick(at, 0, decision_note("no", 0, p.title, ""))
         @route_broadcast(at, true)
         return
     }
@@ -355,7 +359,7 @@ fn Hub mut @ct_queue(at int) Proc Detach Time -> () {
                 @rt_task_op(at, "sub_start", o)
                 if running.len() > 0 && s.rt.worktree.byte_len() > 0 { @route_subtree(at, sub.n) }
                 @ct_note(at, "▸ подзадача ${sub.n} «${sub.title}» начата: место освободилось")
-                if !@ct_has_steps(s) { @ct_kick(at, decision_note("new", sub.n, sub.title, s.rt.task_shown)) }
+                if !@ct_has_steps(s) { @ct_kick(at, sub.n, decision_note("new", sub.n, sub.title, s.rt.task_dir)) }
                 @route_broadcast(at, true)
                 return
             }
@@ -371,14 +375,18 @@ fn Hub mut @ct_pump(at int) Proc Detach Time -> () {
     if !@takes_message_at(at) { return }
     @ct_marker(at)
     ro me = @sessions[at]
-    if me.rt.kick.byte_len() == 0 { return }
+    if me.rt.kicks.len() == 0 { return }
+    // one decision for a turn: the agent works in the folder of that subtask (its tree, else the tree of the task)
     mut d = @sessions[at]
-    ro note = d.rt.kick
-    d.rt.kick = ""
+    ro note = d.rt.kicks[0]
+    ro n = d.rt.kick_ns[0]
+    d.rt.kicks.remove(0)
+    d.rt.kick_ns.remove(0)
+    if n > 0 { d.rt.focus = n }
     @sessions[at] = d
     ro prelude = @route_message_prelude(at)
     ro text = if prelude.byte_len() > 0 { "${prelude}\n\n${note}" } else { note }
-    ro reason = @route_agent_turn(at, "Решение по задаче", text)
+    ro reason = @route_agent_turn(at, if n > 0 { "Решение по задаче (подзадача ${n})" } else { "Решение по задаче" }, text)
     if reason.byte_len() > 0 {
         @tell_error(0, me.id, me.engine.step_number(), "", "решение по задаче не передано агенту: ${reason}")
     }
@@ -411,6 +419,8 @@ fn Hub mut @ct_list_offer(at int, items []Proposal) Proc Detach Time -> int {
         mut cur = @sessions[at]
         cur.rt.prop_serial += 1
         p.id = cur.rt.prop_serial
+        // the works of a list come from the talk: the last messages of the owner are the source
+        p.source = cut_text(joined(cur.rt.recent, "\n\n---\n\n"), 3000)
         cur.rt.props.push(p)
         @sessions[at] = cur
         added += 1
@@ -451,7 +461,7 @@ fn Hub mut @ct_recognize(trace str) Proc Detach Time -> () {
     for p in s.rt.props {
         if p.listed && p.choice == "discuss" { cands.push("- «${p.title}»") }
     }
-    ro request = recognize_request(tasks_hint(s.rt.task_shown, @ct_lines(s)), cands)
+    ro request = recognize_request(tasks_hint(s.rt.task_dir, @ct_lines(s)), cands)
     ro reason = @route_agent_turn(at, "Распознать задачи", request)
     if reason.byte_len() > 0 { @tell_error(0, trace, s.engine.step_number(), "", "распознавание не начато: ${reason}") }
 }
