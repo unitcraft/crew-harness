@@ -291,7 +291,10 @@ fn line_of(mut s Dialog, e Incoming) -> Option[str] {
     page_event(shown, s.turn)
 }
 
-fn meta_text(name str, agent str, folder str, project str, project_id str) -> str {
+fn meta_text(name str, agent str, folder str, project str, project_id str) -> str => meta_text_child(name, agent, folder, project, project_id, "", "")
+
+// Task 192.3: the session may be a child of another session (`parent` is the id of the parent, `parent_kind` "subtask", "epic" or "chat"); the page nests it under the parent.
+fn meta_text_child(name str, agent str, folder str, project str, project_id str, parent str, parent_kind str) -> str {
     mut o = JsonObject.new()
     jput(o, "name", JsonValue.str(name))
     jput(o, "agent", JsonValue.str(agent))
@@ -299,6 +302,10 @@ fn meta_text(name str, agent str, folder str, project str, project_id str) -> st
     if project.byte_len() > 0 { jput(o, "project", JsonValue.str(project)) }
     // the id of the project of the control panel (task 192m): only the id is kept in the journal, never the variables
     if project_id.byte_len() > 0 { jput(o, "project_id", JsonValue.str(project_id)) }
+    if parent.byte_len() > 0 {
+        jput(o, "parent", JsonValue.str(parent))
+        jput(o, "parent_kind", JsonValue.str(parent_kind))
+    }
     JsonValue.object(o).to_str()
 }
 
@@ -798,6 +805,24 @@ fn Hub mut @resume_session(id str) Proc Detach Time -> () {
             }
         }
     }
+}
+
+// Task 192.3: a child session of `parent` is made by the hub itself (the same record, the journal, the page is told); its agent is started later, when the child has work.
+fn Hub mut @cs_make_session(cid str, name str, agent str, folder str, project_id str, parent str, pkind str, route str) Proc Detach Time -> int {
+    ro pg = @settings.store == "pg"
+    ro root = @settings.data_dir
+    mut world = PgWorld.open(@settings.pg, cid)
+    ro engine = begin_session_engine(pg, root, world, @machine, cid)
+    mut s = Dialog { id: cid, name, agent, engine, world, clients: []AcpClient.new(), turn: "", lines: []str.new(), announced: false, model_announced: false, started_at: 0, slow_told: false, folder, project_id, has_rank: false, rank: 0, rt: route_session_new(), chosen: []SavedChoice.new() }
+    accept_in(pg, root, s, Incoming.signal("session_created", meta_text_child(name, agent, @cwd_of(folder), "", project_id, parent, pkind)))
+    @add_session(s)
+    ro at = @sessions.len() - 1
+    @drain(at)
+    mut place = JsonObject.new()
+    js(place, "route", route)
+    jput(place, "worktree", JsonValue.bool(true))
+    @rt_journal(at, "route_set", JsonValue.object(place).to_str())
+    at
 }
 
 fn prepare_none() -> Prepared => prepared_not("")
@@ -1482,7 +1507,11 @@ export fn Hub mut @handle(conn int, text str) Proc Detach Time -> () {
     } else if kind == "route_diff" {
         @route_diff(trace)
     } else if kind == "route_prop" {
-        @ct_answer(trace, jint(input, "id"), jtext(input, "action"))
+        @ct_answer(trace, jint(input, "id"), jtext(input, "action"), jtext(input, "agent"), jtext(input, "mode"), jint(input, "target"))
+    } else if kind == "route_children_merge" {
+        @cs_chain_signal(trace)
+    } else if kind == "route_epic" {
+        @cs_epic_signal(trace, jflag(input, "on"))
     } else if kind == "route_recognize" {
         @ct_recognize(trace)
     } else if kind == "route_quick" {

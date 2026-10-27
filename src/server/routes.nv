@@ -76,7 +76,11 @@ export fn parse_route_doc(route str, text str) -> RouteDoc {
 }
 
 /// The prompt of a step with `{N}` (the number of the subtask) and `{task}` (the folder of the files of the task) put in.
-export fn route_fill(text str, n int, task str) -> str => text.replace("{N}", "${n}").replace("{task}", task)
+export fn route_fill(text str, n int, task str) -> str {
+    // n == 0: a child session, its files are `message.md` and `progress.md`
+    if n == 0 { return text.replace("message.{N}.md", "message.md").replace("progress.{N}.md", "progress.md").replace("message.N.md", "message.md").replace("progress.N.md", "progress.md").replace("{N}", "").replace("{task}", task) }
+    text.replace("{N}", "${n}").replace("{task}", task)
+}
 
 // ----- the numbers and names of the tasks -----
 
@@ -297,7 +301,11 @@ export fn route_prelude(doc RouteDoc, with_instruction bool, task_shown str, n i
     mut parts = []str.new()
     if with_instruction && doc.instruction.byte_len() > 0 { parts.push("[crew] ${doc.instruction}") }
     if task_shown.byte_len() > 0 {
-        parts.push("[crew] Задача: ${task_shown}. Подзадача ${n}: сообщение — message.${n}.md, ведите progress.${n}.md, отмечая [x] выполненное.")
+        if n == 0 {
+            parts.push("[crew] Задача: ${task_shown}: сообщение — message.md, ведите progress.md, отмечая [x] выполненное.")
+        } else {
+            parts.push("[crew] Задача: ${task_shown}. Подзадача ${n}: сообщение — message.${n}.md, ведите progress.${n}.md, отмечая [x] выполненное.")
+        }
     }
     if step_prompt.byte_len() > 0 { parts.push("[crew] Задание шага режима:\n${step_prompt}") }
     joined(parts, "\n\n")
@@ -307,7 +315,8 @@ export fn route_prelude(doc RouteDoc, with_instruction bool, task_shown str, n i
 export fn route_files_hint(task_shown str, n int, has_assignment bool, has_images bool) -> str {
     if task_shown.byte_len() == 0 { return "" }
     mut parts = []str.new()
-    if has_assignment { parts.push("в конце ${task_shown}/message.${n}.md есть раздел «Задание» (задачу планировали): это и есть постановка") }
+    ro mname = if n == 0 { "message.md" } else { "message.${n}.md" }
+    if has_assignment { parts.push("в конце ${task_shown}/${mname} есть раздел «Задание» (задачу планировали): это и есть постановка") }
     if has_images { parts.push("картинки владельца лежат в ${task_shown}/images/, на них ссылки в сообщении") }
     if parts.len() == 0 { return "" }
     "[crew] ${joined(parts, "; ")}."
@@ -378,7 +387,23 @@ export type RouteSession {
     kick_ns []int,
     focus int,
     recent []str,
-    marker_turn str
+    marker_turn str,
+    kind str,
+    parent str,
+    parent_kind str,
+    parent_no str,
+    child_no int,
+    ptree str,
+    pbranch str,
+    waits_sib str,
+    waits_k int,
+    queued_c bool,
+    touches []str,
+    merged_c bool,
+    epic bool,
+    chain bool,
+    tbl str,
+    epic_no str
 }
 
 export fn route_session_new() -> RouteSession => {
@@ -386,7 +411,8 @@ export fn route_session_new() -> RouteSession => {
     task_open: false, task_closed: false, by_crew: false, task_id: "", number: "", task_dir: "", task_shown: "", branch: "", worktree: "", title: "",
     messages: 0, subs: []SubRec.new(), merged_into: 0, force: "", last_state: "", last_check: 0, cwd_now: "", base: "", tstate: "active", tnote: "", unmerged: 0, unmerged_at: 0,
     job: "", attempt: 0, use_tree: true, active_at: 0, extra: task_extra_none(), testing: false, dirty: false, ci_at: 0, diff: []DiffRec.new(), ov_n: 0, ov_with: 0, ov_files: []str.new(), ov_until: 0, asked: []int.new(), conflict_files: []str.new(),
-    props: []Proposal.new(), prop_serial: 0, dismissed: []str.new(), last_msg: "", last_imgs: []str.new(), last_names: []str.new(), kicks: []str.new(), kick_ns: []int.new(), focus: 0, recent: []str.new(), marker_turn: ""
+    props: []Proposal.new(), prop_serial: 0, dismissed: []str.new(), last_msg: "", last_imgs: []str.new(), last_names: []str.new(), kicks: []str.new(), kick_ns: []int.new(), focus: 0, recent: []str.new(), marker_turn: "",
+    kind: "", parent: "", parent_kind: "", parent_no: "", child_no: 0, ptree: "", pbranch: "", waits_sib: "", waits_k: 0, queued_c: false, touches: []str.new(), merged_c: false, epic: false, chain: false, tbl: "", epic_no: ""
 }
 
 // The lines of a text (the files a subtask touches are kept one in a line).
@@ -424,6 +450,15 @@ fn RouteSession @sub_at(n int) -> int {
     -1
 }
 
+/// The name of the file of the message of the owner: a child session has its own `message.md`, an old task `message.N.md` for the subtask N.
+export fn RouteSession @msg_file(n int) -> str => if @kind == "child" { "message.md" } else { "message.${n}.md" }
+
+/// The name of the file of the progress boxes: `progress.md` of a child session, `progress.N.md` of an old task.
+export fn RouteSession @prog_file(n int) -> str => if @kind == "child" { "progress.md" } else { "progress.${n}.md" }
+
+/// The number of the subtask the prompts speak of: 0 in a child session (it has one task, files without a number).
+export fn RouteSession @pn(n int) -> int => if @kind == "child" { 0 } else { n }
+
 /// The state of step `n` (from 1): pending until the journal says otherwise.
 export fn RouteSession @step_state(n int) -> str {
     if n < 1 || n > @states.len() { return "pending" }
@@ -436,6 +471,7 @@ export fn RouteSession @last_sub() -> int => if @subs.len() == 0 { 0 } else { @s
 /// The folder the agent works in: the tree of the last subtask if it has one, else the tree of the task, else the folder of the session.
 export fn RouteSession @agent_dir(session_dir str) -> str {
     // a conflict is resolved, a task is published in the tree of the task, whatever the subtasks have
+    if @job == "cresolve" && @ptree.byte_len() > 0 { return @ptree }
     if (@job.starts_with("resolve") || @job.starts_with("pub")) && @worktree.byte_len() > 0 { return @worktree }
     // task 192.2: the agent works on the subtask the hub told it about (`focus`): in its tree, else in the tree of the task
     if @focus > 0 && @sub_at(@focus) >= 0 {
@@ -567,6 +603,20 @@ export fn RouteSession mut @apply(name str, text str) -> () {
         @base = jtext(o, "base")
         @title = jtext(o, "title")
         @messages = 1
+        if jtext(o, "kind") == "child" {
+            @kind = "child"
+            @parent = jtext(o, "parent")
+            @parent_kind = jtext(o, "pkind")
+            @parent_no = jtext(o, "pno")
+            @epic_no = jtext(o, "epic_no")
+            @child_no = rj_int(o, "cno")
+            @ptree = jtext(o, "ptree")
+            @pbranch = jtext(o, "pbranch")
+            @waits_sib = jtext(o, "waits_sib")
+            @waits_k = rj_int(o, "waits_k")
+            @queued_c = rj_int(o, "queued") == 1
+            @touches = rt_lines(jtext(o, "touches"))
+        }
         @subs.push(SubRec { n: 1, title: if jtext(o, "sub_title").byte_len() > 0 { jtext(o, "sub_title") } else { @title }, branch: "", worktree: "", merged: false, done: false, conflict: "", side: false, touches: rt_lines(jtext(o, "touches")), waits: 0, queued: false })
     } else if op == "subtask" {
         ro n = rj_int(o, "n")
@@ -614,6 +664,22 @@ export fn RouteSession mut @apply(name str, text str) -> () {
         @change_sub(rj_int(o, "n"), "merged", "", true)
     } else if op == "sub_done" {
         @change_sub(rj_int(o, "n"), "done", "", true)
+    } else if op == "child_start" {
+        @waits_sib = ""
+        @waits_k = 0
+        @queued_c = false
+    } else if op == "child_merged" {
+        @merged_c = true
+        @task_closed = true
+        @tstate = "done"
+        @worktree = ""
+        @ptree = ""
+        if jtext(o, "dir").byte_len() > 0 {
+            @task_dir = jtext(o, "dir")
+            @task_shown = jtext(o, "shown")
+        }
+    } else if op == "epic" {
+        @epic = rj_int(o, "on") == 1
     } else if op == "sub_start" {
         @change_sub(rj_int(o, "n"), "start", "", false)
     }

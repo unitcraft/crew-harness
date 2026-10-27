@@ -1,0 +1,272 @@
+// child.nv - task 192.3: the child sessions; the pure part.
+//
+// A work that the owner takes "в работу" is not a subtask inside the session of its parent: it is a session of its own (an agent of its own, a branch and a tree of its own, a folder
+// of the task `doc/tasks/NNN-slug/` with `task/message.md`), listed under the parent session (`parent` in the journal of the session). The number is a plain next number of the
+// repository (as in a tracker); the link to the parent lives in the data: the first line of `message.md` (`Родитель: NNN` for a subtask of a task, `Эпик: NNN` for a task of an epic),
+// the table `task/children.md` in the folder of the parent, which the hub keeps and reads back. The child merges into the branch of its parent when the parent has a branch and a tree,
+// else into main by its own button.
+//
+// What is here (no disk, no sockets): the slug of a child, the text of its `message.md`, the table `children.md` and its parser, the words of the states, the view for the page.
+// The hub side (the sessions, the trees, the merge, the queue) is `child_hub.nv`.
+module crew_harness.server
+
+import std.encoding.json.{Json, JsonValue, JsonObject}
+
+/// ChildRow: a row of the table of the children. `k` is the order of the child in its parent (1, 2, ...), `waits` the order of the sibling it waits for (0 - none).
+/// `kind` is "подзадача", "задача эпика" or "задача"; `state` is "идёт", "ждёт K", "готово" or "слита".
+export type ChildRow { k int, number str, kind str, title str, folder str, branch str, session str, state str, waits int, touches []str, done int, total int }
+
+export const CHILD_RUNNING = "идёт"
+export const CHILD_READY = "готово"
+export const CHILD_MERGED = "слита"
+
+/// The slug of a child: the number of its DIRECT parent (whole), the slug of the parent cut to 20 characters, the slug of the child's own title: `232-privet-panel` for the title
+/// "Панель" of the parent 232 "Привет" (so the folder is `233-232-privet-panel`). A task without a parent (`parent_no` empty): the plain slug.
+export fn child_slug(parent_no str, parent_slug str, title str) -> str {
+    ro own = task_slug(title)
+    if parent_no.byte_len() == 0 { return own }
+    mut ps = parent_slug
+    if ps.byte_len() > 20 { ps = ps[..20] }
+    while ps.ends_with("-") { ps = ps[..ps.byte_len() - 1] }
+    if ps.byte_len() == 0 { return "${parent_no}-${own}" }
+    "${parent_no}-${ps}-${own}"
+}
+
+/// The number of a task from its branch `task/NNN-slug` (`fallback` when the branch is not of that form).
+export fn branch_number(branch str, fallback str) -> str {
+    if !branch.starts_with("task/") { return fallback }
+    ro digits = rt_digits(branch["task/".byte_len()..])
+    if digits.byte_len() == 0 { return fallback }
+    digits
+}
+
+/// The kind of the child by the type of its parent: "epic" (a task of an epic), "subtask" (a subtask of a task), "chat" (the parent has no task: a plain task).
+export fn child_kind_word(pkind str) -> str {
+    if pkind == "epic" { return "задача эпика" }
+    if pkind == "subtask" { return "подзадача" }
+    "задача"
+}
+
+/// The state word of the table: "ждёт K" for a child that waits for the sibling K (a queue place: "ждёт очереди").
+export fn child_state_word(state str, waits int) -> str {
+    if state == "merged" { return CHILD_MERGED }
+    if state == "ready" { return CHILD_READY }
+    if state == "waits" { return if waits > 0 { "ждёт ${waits}" } else { "ждёт очереди" } }
+    CHILD_RUNNING
+}
+
+/// The state of the page ("running", "waits", "ready", "merged") from the word of the table.
+export fn child_state_key(word str) -> str {
+    if word == CHILD_MERGED { return "merged" }
+    if word == CHILD_READY { return "ready" }
+    if word.starts_with("ждёт") { return "waits" }
+    "running"
+}
+
+fn ch_cell(text str) -> str => text.replace("|", "/").replace("\r", " ").replace("\n", " ").trim_ascii()
+
+/// The first line of the file `message.md` of a child: "Эпик: NNN" (a task of an epic), "Родитель: NNN" (a subtask), nothing for a plain task.
+export fn child_first_line(pkind str, parent_no str) -> str {
+    if pkind == "epic" { return "Эпик: ${parent_no}" }
+    if pkind == "subtask" { return "Родитель: ${parent_no}" }
+    ""
+}
+
+/// The text of `task/message.md` of a child: the first line that says whose child it is (the method), the title, the date, the summary of the agent and the words of the owner.
+export fn child_message_text(pkind str, parent_no str, title str, summary str, source str, ms int) -> str {
+    mut lines = []str.new()
+    ro first = child_first_line(pkind, parent_no)
+    if first.byte_len() > 0 {
+        lines.push(first)
+        lines.push("")
+    }
+    lines.push("# Задание: ${title}")
+    lines.push("")
+    lines.push("Дата: ${civil_stamp(ms)}")
+    lines.push("")
+    lines.push(summary.trim_ascii())
+    if source.trim_ascii().byte_len() > 0 && source.trim_ascii() != summary.trim_ascii() {
+        lines.push("")
+        lines.push("## Сообщение владельца")
+        lines.push("")
+        lines.push(source.trim_ascii())
+    }
+    "${joined(lines, "\n")}\n"
+}
+
+/// The type of a child by the first line of its `message.md` ("задача эпика", "подзадача", "задача").
+export fn child_kind_of_message(text str) -> str {
+    for line in text.lines() {
+        ro t = line.trim_ascii()
+        if t.byte_len() == 0 { continue }
+        if t.starts_with("Эпик:") { return "задача эпика" }
+        if t.starts_with("Родитель:") { return "подзадача" }
+        return "задача"
+    }
+    "задача"
+}
+
+const CH_HEAD = "| Номер | Тип | Название | Папка | Ветка | Сессия | Состояние | Затрагивает |"
+const CH_RULE = "|---|---|---|---|---|---|---|---|"
+
+/// The table `task/children.md` of the parent: a row for each child; the hub writes it at the creation, at a change of the state and at the merge, a hand may edit it.
+export fn children_table_text(parent_no str, rows []ChildRow) -> str {
+    mut lines = []str.new()
+    lines.push("# Дети задачи ${parent_no}")
+    lines.push("")
+    lines.push("Таблицу ведёт хаб (создание, состояние, слияние); правится руками, разбирается обратно. Состояние: идёт / ждёт K / готово / слита. Прогресс родителя — слитые из всех.")
+    lines.push("")
+    lines.push(CH_HEAD)
+    lines.push(CH_RULE)
+    for r in rows {
+        lines.push("| ${ch_cell(r.number)} | ${ch_cell(r.kind)} | ${ch_cell(r.title)} | [doc/tasks/${ch_cell(r.folder)}](../../${ch_cell(r.folder)}) | ${ch_cell(r.branch)} | ${ch_cell(r.session)} | ${ch_cell(r.state)} | ${ch_cell(joined(r.touches, ", "))} |")
+    }
+    "${joined(lines, "\n")}\n"
+}
+
+fn ch_cells(line str) -> []str {
+    mut cells = []str.new()
+    for raw in line.split("|") { cells.push(raw.trim_ascii()) }
+    // the line starts and ends with "|": the first and the last piece are empty
+    mut out = []str.new()
+    mut at = 0
+    for c in cells {
+        if at > 0 && at < cells.len() - 1 { out.push(c) }
+        at += 1
+    }
+    out
+}
+
+// The folder name of the link cell `[text](url)`: the last piece of the text, without `doc/tasks/`.
+fn ch_folder(cell str) -> str {
+    mut text = cell
+    if cell.starts_with("[") && cell.contains("]") { text = cell[1..].until("]") }
+    if text.contains("doc/tasks/") { return text.after("doc/tasks/").trim_ascii() }
+    text.trim_ascii()
+}
+
+fn ch_int(text str) -> int {
+    match text.trim_ascii().to_int() {
+        Ok(n) => n
+        Err(e) => 0
+    }
+}
+
+/// The rows of a table back (also a table edited by hand); the head, the rule and any line that is not a row are skipped. `k` is the order of the row, `waits` is read from "ждёт K" (the number of the sibling).
+export fn children_parse(text str) -> []ChildRow {
+    mut out = []ChildRow.new()
+    for line in text.lines() {
+        ro t = line.trim_ascii()
+        if !t.starts_with("|") { continue }
+        ro cells = ch_cells(t)
+        if cells.len() < 7 { continue }
+        if cells[0] == "Номер" || cells[0].starts_with("---") || cells[0].starts_with(":--") { continue }
+        ro state = cells[6]
+        mut waits = 0
+        if state.starts_with("ждёт ") { waits = ch_int(state["ждёт ".byte_len()..]) }
+        mut touches = []str.new()
+        if cells.len() > 7 {
+            for f in cells[7].split(",") {
+                if f.trim_ascii().byte_len() > 0 { touches.push(f.trim_ascii()) }
+            }
+        }
+        out.push(ChildRow { k: out.len() + 1, number: cells[0], kind: cells[1], title: cells[2], folder: ch_folder(cells[3]), branch: cells[4], session: cells[5], state, waits, touches, done: 0, total: 0 })
+    }
+    out
+}
+
+/// How many rows are merged / how many in all: the progress of the parent.
+export type ChildCount { merged int, total int }
+
+export fn children_count(rows []ChildRow) -> ChildCount {
+    mut merged = 0
+    for r in rows { if r.state == CHILD_MERGED { merged += 1 } }
+    ChildCount { merged, total: rows.len() }
+}
+
+/// The numbers of the children that are not merged yet (the parent cannot go to main before them).
+export fn children_unmerged(rows []ChildRow) -> []str {
+    mut out = []str.new()
+    for r in rows { if r.state != CHILD_MERGED { out.push(r.number) } }
+    out
+}
+
+/// The note to the agent of a child that starts: whose child it is, where the task is, where it merges to.
+export fn child_note(number str, title str, shown str, pkind str, parent_no str, target str) -> str {
+    ro whose = if pkind == "epic" { " Это задача эпика ${parent_no}." } else if pkind == "subtask" { " Это подзадача задачи ${parent_no}." } else { "" }
+    "[crew] Владелец взял в работу «${title}»: это твоя задача ${number}, папка ${shown}.${whose} Постановка — ${shown}/message.md (краткое изложение и сообщения владельца, картинки в images/); чеклист — progress.md. Прочитай её и выполни работу в рабочем каталоге (ветка и дерево твои). ${target} В конце коротко скажи, что сделано."
+}
+
+/// The note to the agent of a child whose task is extended (the owner took "Дополнить").
+export fn child_extend_note(number str, title str, shown str) -> str =>
+    "[crew] Владелец дополнил твою задачу ${number} «${title}»: новое — в конце ${shown}/message.md, раздел «Дополнение». Прочитай его и продолжай в рабочем каталоге."
+
+fn ch_strings(items []str) -> JsonValue {
+    mut out = []JsonValue.new()
+    for x in items { out.push(JsonValue.str(x)) }
+    JsonValue.array(out)
+}
+
+fn ch_row_view(r ChildRow) -> JsonValue {
+    mut o = JsonObject.new()
+    mput(o, "k", JsonValue.int(r.k))
+    mput(o, "number", JsonValue.str(r.number))
+    mput(o, "kind", JsonValue.str(r.kind))
+    mput(o, "title", JsonValue.str(r.title))
+    mput(o, "folder", JsonValue.str(r.folder))
+    mput(o, "branch", JsonValue.str(r.branch))
+    mput(o, "session", JsonValue.str(r.session))
+    mput(o, "state", JsonValue.str(child_state_key(r.state)))
+    mput(o, "state_text", JsonValue.str(r.state))
+    mput(o, "waits_for", JsonValue.int(r.waits))
+    mput(o, "touches", ch_strings(r.touches))
+    mput(o, "done", JsonValue.int(r.done))
+    mput(o, "total", JsonValue.int(r.total))
+    JsonValue.object(o)
+}
+
+/// ChildInfo: what a child session says of itself to the page (`parent` empty: it is not a child).
+export type ChildInfo { parent str, parent_name str, kind str, parent_no str, k int, target str }
+
+/// The state of the mode for the page with the children added: `children` (the rows), `children_merged`, `children_total`, `children_block` (the numbers that hold the merge of the parent),
+/// `child` (null or the info of a child session), `epic` (the session is an epic), `targets` (the tasks a new work may be a part of).
+/// ChildTarget: a task a new work may be a part of (a subtask of it, a task of it as an epic): the number, the title, the session, whether it is an epic.
+export type ChildTarget { number int, title str, session str, epic bool }
+
+export fn children_view_extend(base str, rows []ChildRow, block []str, info ChildInfo, epic bool, targets []ChildTarget) -> str {
+    mut o = match Json.parse(base) {
+        Ok(v) => v.object() ?? JsonObject.new()
+        Err(e) => JsonObject.new()
+    }
+    mut list = []JsonValue.new()
+    for r in rows { list.push(ch_row_view(r)) }
+    ro count = children_count(rows)
+    mput(o, "children", JsonValue.array(list))
+    mput(o, "children_merged", JsonValue.int(count.merged))
+    mput(o, "children_total", JsonValue.int(count.total))
+    mput(o, "children_block", ch_strings(block))
+    mput(o, "epic", JsonValue.bool(epic))
+    mut tl = []JsonValue.new()
+    for tg in targets {
+        mut to = JsonObject.new()
+        mput(to, "number", JsonValue.int(tg.number))
+        mput(to, "title", JsonValue.str(tg.title))
+        mput(to, "session", JsonValue.str(tg.session))
+        mput(to, "epic", JsonValue.bool(tg.epic))
+        tl.push(JsonValue.object(to))
+    }
+    mput(o, "targets", JsonValue.array(tl))
+    if info.parent.byte_len() > 0 {
+        mut c = JsonObject.new()
+        mput(c, "parent", JsonValue.str(info.parent))
+        mput(c, "parent_name", JsonValue.str(info.parent_name))
+        mput(c, "kind", JsonValue.str(info.kind))
+        mput(c, "parent_no", JsonValue.str(info.parent_no))
+        mput(c, "k", JsonValue.int(info.k))
+        mput(c, "target", JsonValue.str(info.target))
+        mput(o, "child", JsonValue.object(c))
+    } else {
+        mput(o, "child", JsonValue.null())
+    }
+    JsonValue.object(o).to_str()
+}

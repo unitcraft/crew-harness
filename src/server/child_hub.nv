@@ -1,0 +1,614 @@
+// child_hub.nv - task 192.3: the hub side of the child sessions (the pure part is `child.nv`).
+//
+// "В работу" (a card of the recognised works, or "Начать" of a single proposal) makes a CHILD SESSION: a session of the hub with an agent of its own, a branch and a tree of its own
+// (cut from the head of the parent when the parent has a tree, else from main), a folder `doc/tasks/NNN-slug/` with `task/message.md` and `task/progress.md`, and `parent` in its journal.
+// The parent keeps the table of its children `task/children.md` (the hub writes it at the creation, at a change of the state and at the merge). A child merges into the branch of its parent
+// (the parent has a branch and a tree) by its own button, a conflict is resolved by the agent of the child; a child of a parent with no branch (an epic, a talk) merges into main by "Слить в main".
+// The parent goes to main last: while a child is not merged the button is held ("не слиты подзадачи"), and "Слить подзадачи по порядку" merges them one after another.
+module crew_harness.server
+
+import crew_harness.acp.{AcpImage}
+import std.encoding.json.{Json, JsonValue, JsonObject}
+
+// ----- who is whose -----
+
+// The indices of the sessions that are children of `parent_id`.
+fn Hub @cs_kids(parent_id str) -> []int {
+    mut out = []int.new()
+    mut i = 0
+    while i < @sessions.len() {
+        if @sessions[i].rt.kind == "child" && @sessions[i].rt.parent == parent_id { out.push(i) }
+        i += 1
+    }
+    out
+}
+
+// The state of a child: "merged", "waits", "ready" or "running".
+fn Hub @cs_state(i int) -> str {
+    ro s = @sessions[i]
+    if s.rt.merged_c || s.rt.tstate == "done" { return "merged" }
+    if s.rt.waits_sib.byte_len() > 0 || s.rt.queued_c { return "waits" }
+    if s.rt.tstate == "ready" { return "ready" }
+    for sub in s.rt.subs { if sub.done { return "ready" } }
+    "running"
+}
+
+// The works in work now in the whole hub: the subtasks of the old kind and the children that go on (the limit `route_max_active` counts them all).
+fn Hub @cs_active_all() -> int {
+    mut n = 0
+    mut i = 0
+    while i < @sessions.len() {
+        n += @ct_running_old(@sessions[i]).len()
+        if @sessions[i].rt.kind == "child" && @cs_state(i) == "running" { n += 1 }
+        i += 1
+    }
+    n
+}
+
+// The folder names taken for the next number: the folders of the tasks of the repository, the task branches, the tasks of every session of the hub.
+fn Hub @cs_taken_names(s Dialog) -> []str {
+    mut names = []str.new()
+    ro base = @route_repo_dir(s.id)
+    if tk_is_repo(base) {
+        for n in dir_names("${base}/doc/tasks") { names.push(n) }
+        for n in tk_branch_names(base) { names.push(n) }
+    } else {
+        for n in dir_names("${@settings.data_dir}/${s.id}/tasks") { names.push(n) }
+    }
+    for x in @sessions {
+        if x.rt.task_id.byte_len() > 0 { names.push(x.rt.task_id) }
+    }
+    names
+}
+
+// The rows of the table of the children of a parent: the live sessions, then the rows of the file for the children whose session is gone. `progress`: read the boxes of each child.
+fn Hub @cs_rows(parent_id str, progress bool) -> []ChildRow {
+    mut rows = []ChildRow.new()
+    for i in @cs_kids(parent_id) {
+        ro c = @sessions[i]
+        ro st = @cs_state(i)
+        mut done = 0
+        mut total = 0
+        if progress {
+            ro prog = parse_progress(read_file("${c.rt.task_dir}/progress.md") ?? "")
+            done = prog.done
+            total = prog.total
+        }
+        rows.push(ChildRow { k: c.rt.child_no, number: c.rt.number, kind: child_kind_word(c.rt.parent_kind), title: c.rt.title, folder: c.rt.task_id, branch: c.rt.branch, session: c.id, state: child_state_word(st, c.rt.waits_k), waits: c.rt.waits_k, touches: c.rt.touches, done, total })
+    }
+    // by the order of the creation
+    mut a = 0
+    while a < rows.len() {
+        mut b = a + 1
+        while b < rows.len() {
+            if rows[b].k < rows[a].k {
+                ro tmp = rows[a]
+                rows[a] = rows[b]
+                rows[b] = tmp
+            }
+            b += 1
+        }
+        a += 1
+    }
+    ro pat = @find(parent_id)
+    if pat >= 0 && @sessions[pat].rt.task_open && @sessions[pat].rt.task_dir.byte_len() > 0 {
+        mut top = 0
+        for r in rows { if r.k > top { top = r.k } }
+        for old in children_parse(read_file("${@sessions[pat].rt.task_dir}/children.md") ?? "") {
+            mut live = false
+            for r in rows { if r.number == old.number { live = true } }
+            if !live {
+                // a session that was deleted: the row stays as it was written
+                top += 1
+                rows.push(ChildRow { k: top, number: old.number, kind: old.kind, title: old.title, folder: old.folder, branch: old.branch, session: old.session, state: old.state, waits: old.waits, touches: old.touches, done: 0, total: 0 })
+            }
+        }
+    }
+    rows
+}
+
+// The numbers of the children that hold the merge of the parent: they merge into its branch and are not merged yet.
+fn Hub @cs_block(s Dialog) -> []str {
+    mut out = []str.new()
+    if s.rt.worktree.byte_len() == 0 { return out }
+    for i in @cs_kids(s.id) {
+        if @sessions[i].rt.ptree.byte_len() > 0 && @cs_state(i) != "merged" { out.push(@sessions[i].rt.number) }
+    }
+    out
+}
+
+/// The state of the page with the children, the info of a child and the mark of an epic added (called from `ct_view`).
+fn Hub @cs_view(at int, base str) -> str {
+    ro s = @sessions[at]
+    ro rows = @cs_rows(s.id, true)
+    mut info = ChildInfo { parent: "", parent_name: "", kind: "", parent_no: "", k: 0, target: "" }
+    if s.rt.kind == "child" {
+        ro pat = @find(s.rt.parent)
+        info = ChildInfo { parent: s.rt.parent, parent_name: if pat >= 0 { @sessions[pat].name } else { "" }, kind: s.rt.parent_kind, parent_no: s.rt.parent_no, k: s.rt.child_no, target: if s.rt.ptree.byte_len() > 0 { "parent" } else { "main" } }
+    }
+    mut targets = []ChildTarget.new()
+    for x in @sessions {
+        if x.rt.task_open && !x.rt.task_closed && x.rt.number.byte_len() > 0 {
+            targets.push(ChildTarget { number: cs_number_int(x.rt.number), title: x.rt.title, session: x.id, epic: x.rt.epic })
+        }
+    }
+    children_view_extend(base, rows, @cs_block(s), info, s.rt.epic, targets)
+}
+
+// ----- the table in the folder of the parent -----
+
+// The table `task/children.md` is written when it changed (the hub keeps it; a hand may edit it, the rows are read back).
+fn Hub mut @cs_sync(at int) Proc Detach Time -> () {
+    ro s = @sessions[at]
+    if !s.rt.task_open || s.rt.task_dir.byte_len() == 0 { return }
+    if @cs_kids(s.id).len() == 0 { return }
+    ro text = children_table_text(s.rt.number, @cs_rows(s.id, false))
+    if text == s.rt.tbl { return }
+    ro wrote = write_file("${s.rt.task_dir}/children.md", text)
+    if !wrote { @say_log("the table of the children cannot be written in ${s.rt.task_dir}") }
+    mut me = @sessions[at]
+    me.rt.tbl = text
+    @sessions[at] = me
+}
+
+// ----- the creation -----
+
+fn Hub @cs_target_text(c Dialog) -> str {
+    if c.rt.ptree.byte_len() > 0 { return "Твоя ветка вливается в ветку родителя (кнопка владельца), конфликт слияния решаешь ты." }
+    "Твоя ветка сливается в main кнопкой владельца «Слить в main»."
+}
+
+// The session id of a child: the id of the parent and the order.
+fn Hub @cs_new_id(parent_id str, k int) -> str {
+    mut n = k
+    while @find("${parent_id}-c${n}") >= 0 { n += 1 }
+    "${parent_id}-c${n}"
+}
+
+fn Hub mut @cs_epic_open(at int) Proc Detach Time -> () {
+    ro s = @sessions[at]
+    // the folder of the epic lives in the repository (in a tree of its own, like any task): the guard of the folders wants the folder of the parent in `doc/tasks`
+    ro made = @route_make_task(s.id, s.rt.route, s.name, s.rt.use_tree)
+    if !made.ok { return }
+    mut o = JsonObject.new()
+    js(o, "id", made.id)
+    js(o, "number", made.number)
+    js(o, "dir", made.dir)
+    js(o, "shown", made.shown)
+    js(o, "branch", made.branch)
+    js(o, "worktree", made.worktree)
+    js(o, "base", made.base)
+    js(o, "title", subtask_title(s.name))
+    ji(o, "crew", 1)
+    @rt_task_op(at, "open", o)
+    ro wrote = write_file("${made.dir}/message.md", "# Эпик: ${s.name}\n\nТип: эпик\n\nДети эпика — в `children.md`; журнал эпика — рядом, в папке задачи.\n")
+}
+
+// The index of the session whose open task has this number (0 and below: -1).
+fn Hub @cs_find_number(n int) -> int {
+    if n <= 0 { return -1 }
+    mut i = 0
+    while i < @sessions.len() {
+        ro s = @sessions[i]
+        if s.rt.task_open && !s.rt.task_closed && s.rt.number.byte_len() > 0 {
+            match s.rt.number.to_int() {
+                Ok(v) => { if v == n { return i } }
+                Err(e) => ()
+            }
+        }
+        i += 1
+    }
+    -1
+}
+
+fn cs_number_int(text str) -> int {
+    match text.to_int() {
+        Ok(v) => v
+        Err(e) => 0
+    }
+}
+
+// The tasks in work in the whole hub, as the list for the agent and the page.
+fn Hub @cs_task_lines() -> []SubLine {
+    mut out = []SubLine.new()
+    for s in @sessions {
+        if s.rt.task_open && !s.rt.task_closed && s.rt.number.byte_len() > 0 {
+            ro state = if s.rt.epic { "эпик" } else if s.rt.tstate == "ready" { "готово" } else { "идёт" }
+            out.push(SubLine { n: cs_number_int(s.rt.number), title: s.rt.title, state, waits: 0, file: "doc/tasks/${s.rt.task_id}" })
+        }
+    }
+    out
+}
+
+// The tasks that go on now (a session that works), by the number of the task: for the clash of the files.
+fn Hub @cs_running_all() -> []RunSub {
+    mut out = []RunSub.new()
+    mut i = 0
+    while i < @sessions.len() {
+        if @sessions[i].rt.kind == "child" && @cs_state(i) == "running" { out.push(RunSub { n: cs_number_int(@sessions[i].rt.number), touches: @sessions[i].rt.touches }) }
+        i += 1
+    }
+    out
+}
+
+/// The work is taken: a session of its own (an agent, a branch and a tree, the folder of the task). By default it is a task of its own (no parent, a top-level session); a subtask of the task
+/// `p.parent` or a task of the epic `p.epic` only when the card or the agent said so. It starts at once, or waits (`how` "wait", `queued`).
+fn Hub mut @cs_spawn(at int, p Proposal, how str, queued bool) Proc Detach Time -> () {
+    ro cur = @sessions[at]
+    // where the work belongs
+    mut pat = -1
+    mut ptype = ""
+    if p.kind == "subtask" {
+        pat = @cs_find_number(p.parent)
+        ptype = "subtask"
+    }
+    if p.kind == "epic_task" {
+        pat = @cs_find_number(p.epic)
+        ptype = "epic"
+    }
+    if pat < 0 { ptype = "" }
+    if pat >= 0 && ptype == "epic" && !@sessions[pat].rt.epic {
+        mut mark = JsonObject.new()
+        ji(mark, "on", 1)
+        @rt_task_op(pat, "epic", mark)
+    }
+    ro par = if pat >= 0 { @sessions[pat] } else { cur }
+    ro parent_no = if pat >= 0 { par.rt.number } else { "" }
+    ro parent_slug = if pat < 0 { "" } else if par.rt.kind == "child" { task_slug(par.rt.title) } else { task_slug_of(par.rt.task_id) }
+    ro number = task_number_text(next_task_number(@cs_taken_names(cur)))
+    ro slug = child_slug(parent_no, parent_slug, p.title)
+    ro folder = "${number}-${slug}"
+    mut k = 0
+    if pat >= 0 {
+        for row in @cs_rows(par.id, false) { if row.k > k { k = row.k } }
+        k += 1
+    }
+    ro route = if cur.rt.route == "planning" { "interactive" } else { cur.rt.route }
+    // the tree: cut from the head of the parent when it has one, else from main
+    ro base = @route_repo_dir(cur.id)
+    mut tree = TkTree { ok: false, branch: "", worktree: "", base: "", text: "" }
+    if tk_is_repo(base) && cur.rt.use_tree {
+        tree = if pat >= 0 && par.rt.worktree.byte_len() > 0 { tk_subtask_tree(par.rt.worktree, number, slug, k) } else { tk_task_tree(base, number, slug) }
+        if !tree.ok { @say_log("the tree of the task ${folder} cannot be made: ${tree.text}") }
+    }
+    ro cid = @cs_new_id(cur.id, @sessions.len() + 1)
+    ro in_tree = tree.ok && dir_there("${tree.worktree}/doc/tasks")
+    ro dir = if in_tree { "${tree.worktree}/doc/tasks/${folder}/task" } else { "${@settings.data_dir}/${cid}/tasks/${folder}/task" }
+    ro shown = if in_tree { "doc/tasks/${folder}/task" } else { dir }
+    // the family of the session: the one chosen on the card, else the one of the session where the talk is
+    ro agent = if p.agent.byte_len() > 0 && @agent_ids().contains(p.agent) { p.agent } else { cur.agent }
+    mut sib = ""
+    mut sib_no = 0
+    if how == "wait" {
+        ro sat = @cs_find_number(p.with_n)
+        if sat >= 0 {
+            sib = @sessions[sat].id
+            sib_no = p.with_n
+        }
+    }
+    ro cat = @cs_make_session(cid, p.title, agent, cur.folder, cur.project_id, if pat >= 0 { par.id } else { "" }, ptype, route)
+    ro has_ptree = pat >= 0 && tree.ok && par.rt.worktree.byte_len() > 0
+    mut o = JsonObject.new()
+    js(o, "id", folder)
+    js(o, "number", number)
+    js(o, "dir", dir)
+    js(o, "shown", shown)
+    js(o, "branch", tree.branch)
+    js(o, "worktree", tree.worktree)
+    js(o, "base", tree.base)
+    js(o, "title", subtask_title(p.title))
+    js(o, "touches", joined(p.touches, "\n"))
+    ji(o, "crew", 1)
+    js(o, "kind", "child")
+    js(o, "parent", if pat >= 0 { par.id } else { "" })
+    js(o, "pkind", ptype)
+    js(o, "pno", parent_no)
+    ji(o, "cno", k)
+    js(o, "ptree", if has_ptree { par.rt.worktree } else { "" })
+    js(o, "pbranch", if has_ptree { par.rt.branch } else { "" })
+    js(o, "waits_sib", sib)
+    ji(o, "waits_k", sib_no)
+    ji(o, "queued", if queued { 1 } else { 0 })
+    @rt_task_op(cat, "open", o)
+    ro doc = @route_doc(route)
+    ro wrote = write_file("${dir}/message.md", child_message_text(ptype, parent_no, p.title, p.summary, p.source, now_millis()))
+    ro made_progress = write_file("${dir}/progress.md", progress_template(1, doc.steps))
+    if !wrote || !made_progress { @say_log("the files of the task ${folder} cannot be written in ${dir}") }
+    mut files = []AcpImage.new()
+    mut j = 0
+    while j < p.images.len() {
+        files.push(AcpImage { path: p.images[j], mime: "", name: if j < p.image_names.len() { p.image_names[j] } else { "image" } })
+        j += 1
+    }
+    @route_save_images(cat, files)
+    @ct_drop(at, p.id, false)
+    ro c = @sessions[cat]
+    @rt_note(cat, if pat >= 0 { "▸ задача ${number}: ${child_kind_word(ptype)} задачи ${parent_no}, родитель «${par.name}»" } else { "▸ задача ${number}: самостоятельная" })
+    if sib.byte_len() > 0 || queued {
+        @ct_note(at, if sib.byte_len() > 0 { "▸ «${p.title}» (задача ${number}) ждёт задачу ${p.with_n}" } else { "▸ «${p.title}» (задача ${number}) в очереди: в работе уже ${@cs_active_all()}" })
+    } else {
+        @ct_note(at, "▸ «${p.title}» (задача ${number}) взята в работу: ${if pat >= 0 { child_kind_word(ptype) } else { "самостоятельная сессия" }}")
+        if !@ct_has_steps(c) { @ct_kick(cat, 1, child_note(number, p.title, shown, ptype, parent_no, @cs_target_text(c))) }
+    }
+    if pat >= 0 {
+        @cs_sync(pat)
+        @route_broadcast(pat, true)
+    }
+    @route_broadcast(cat, true)
+    @route_broadcast(at, true)
+}
+
+/// "Дополнить K": the summary goes to the message file of the task K (the session of that task) and its agent gets a service turn. false - there is no task K here.
+fn Hub mut @cs_extend(at int, p Proposal, k int) Proc Detach Time -> bool {
+    if !@settings.route_children { return false }
+    ro found = @cs_find_number(k)
+    if found < 0 { return false }
+    ro c = @sessions[found]
+    ro added = append_file("${c.rt.task_dir}/${c.rt.msg_file(c.rt.last_sub())}", crew_addition_text(p.summary, p.source, now_millis()))
+    if c.rt.tstate != "active" { @rt_state(found, "active", "") }
+    @ct_drop(at, p.id, false)
+    @ct_note(at, "▸ задача ${c.rt.number} «${c.rt.title}» дополнена")
+    @rt_note(found, "▸ задача дополнена владельцем")
+    if !@ct_has_steps(c) { @ct_kick(found, c.rt.last_sub(), child_extend_note(c.rt.number, c.rt.title, c.rt.task_shown)) }
+    @route_broadcast(found, true)
+    @route_broadcast(at, true)
+    true
+}
+
+// ----- the queue, the table, the epic -----
+
+// A waiting child starts when the sibling it waits for is ready (or merged) and the limit allows; one start for a look.
+fn Hub mut @cs_start_waiting() Proc Detach Time -> () {
+    mut i = 0
+    while i < @sessions.len() {
+        ro c = @sessions[i]
+        if c.rt.kind == "child" && (c.rt.waits_sib.byte_len() > 0 || c.rt.queued_c) && !c.rt.merged_c {
+            mut free = true
+            if c.rt.waits_sib.byte_len() > 0 {
+                ro j = @find(c.rt.waits_sib)
+                if j >= 0 {
+                    ro st = @cs_state(j)
+                    if st != "ready" && st != "merged" { free = false }
+                }
+            }
+            if free && !limit_reached(@cs_active_all(), @settings.route_max_active) {
+                mut o = JsonObject.new()
+                @rt_task_op(i, "child_start", o)
+                @rt_note(i, "▸ задача ${c.rt.number} начата: дождалась своей очереди")
+                if !@ct_has_steps(c) { @ct_kick(i, 1, child_note(c.rt.number, c.rt.title, c.rt.task_shown, c.rt.parent_kind, c.rt.parent_no, @cs_target_text(c))) }
+                ro pat = @find(c.rt.parent)
+                if pat >= 0 { @ct_note(pat, "▸ задача ${c.rt.number} «${c.rt.title}» начата") }
+                @route_broadcast(i, true)
+                return
+            }
+        }
+        i += 1
+    }
+}
+
+// Once in a while (with the observer): the table is written; an epic whose tasks are all merged is ready.
+fn Hub mut @cs_observe(at int) Proc Detach Time -> () {
+    @cs_sync(at)
+    ro s = @sessions[at]
+    if s.rt.epic && s.rt.task_open && s.rt.tstate == "active" {
+        ro kids = @cs_kids(s.id)
+        if kids.len() > 0 {
+            mut all = true
+            for i in kids { if @cs_state(i) != "merged" { all = false } }
+            if all {
+                @rt_state(at, "ready", "")
+                @rt_note(at, "▸ эпик: все задачи слиты")
+                @route_broadcast(at, true)
+            }
+        }
+    }
+}
+
+fn Hub mut @cs_epic_signal(trace str, on bool) Proc Detach Time -> () {
+    ro at = @find(trace)
+    if at < 0 { return }
+    mut o = JsonObject.new()
+    ji(o, "on", if on { 1 } else { 0 })
+    @rt_task_op(at, "epic", o)
+    // an epic has a folder of its own (and the table of its tasks): made when the mark is put
+    if on && !(@sessions[at].rt.task_open && !@sessions[at].rt.task_closed) { @cs_epic_open(at) }
+    @route_broadcast(at, true)
+}
+
+fn Hub mut @cs_chain_signal(trace str) Proc Detach Time -> () {
+    ro at = @find(trace)
+    if at < 0 { return }
+    if @cs_block(@sessions[at]).len() == 0 { return }
+    mut me = @sessions[at]
+    me.rt.chain = true
+    @sessions[at] = me
+    @rt_note(at, "▸ подзадачи вливаются по порядку")
+    @route_broadcast(at, true)
+}
+
+// The chain "Слить подзадачи по порядку": the next child that is not merged is merged when the previous one is done; a child that cannot be merged stops the chain.
+fn Hub mut @cs_chain(at int) Proc Detach Time -> () {
+    ro s = @sessions[at]
+    if !s.rt.chain { return }
+    mut next = -1
+    mut best = 1000000
+    for i in @cs_kids(s.id) {
+        ro c = @sessions[i]
+        if c.rt.job == "cmerge" || c.rt.job == "cresolve" { return }
+        if c.rt.ptree.byte_len() > 0 && @cs_state(i) != "merged" && c.rt.child_no < best {
+            next = i
+            best = c.rt.child_no
+        }
+    }
+    if next < 0 {
+        mut done = @sessions[at]
+        done.rt.chain = false
+        @sessions[at] = done
+        @rt_note(at, "▸ все подзадачи влиты в ветку задачи")
+        @route_broadcast(at, true)
+        return
+    }
+    ro c = @sessions[next]
+    if c.rt.running || c.rt.job.byte_len() > 0 || c.rt.awaiting { return }
+    if c.clients.len() > 0 && !@takes_message_at(next) { return }
+    ro started = @cs_merge(next)
+    if !started {
+        mut stop = @sessions[at]
+        stop.rt.chain = false
+        @sessions[at] = stop
+    }
+}
+
+// ----- the merge into the branch of the parent -----
+
+fn Hub mut @cs_fail(cat int, why str) Proc Detach Time -> () {
+    mut me = @sessions[cat]
+    me.rt.job = ""
+    me.rt.attempt = 0
+    @sessions[cat] = me
+    @rt_state(cat, "ready", why)
+    @rt_note(cat, "▸ слияние в ветку родителя остановлено: ${why}")
+    ro pat = @find(me.rt.parent)
+    if pat >= 0 {
+        mut p = @sessions[pat]
+        p.rt.chain = false
+        @sessions[pat] = p
+        @route_broadcast(pat, true)
+    }
+    @route_broadcast(cat, true)
+}
+
+fn Hub mut @cs_merged(cat int) Proc Detach Time -> () {
+    ro s = @sessions[cat]
+    @route_close_agent_in(cat, s.rt.worktree)
+    ro removed = tk_subtree_remove(s.rt.ptree, s.rt.worktree, s.rt.branch)
+    if !removed.ok { @say_log("the tree of the child ${s.rt.task_id} is not removed: ${removed.text}") }
+    ro merged_dir = "${s.rt.ptree}/doc/tasks/${s.rt.task_id}/task"
+    mut o = JsonObject.new()
+    if dir_there(merged_dir) {
+        js(o, "dir", merged_dir)
+        js(o, "shown", "doc/tasks/${s.rt.task_id}/task")
+    }
+    @rt_task_op(cat, "child_merged", o)
+    mut me = @sessions[cat]
+    me.rt.job = ""
+    me.rt.attempt = 0
+    me.rt.unmerged = 0
+    @sessions[cat] = me
+    @rt_note(cat, "▸ задача ${s.rt.number} влита в ветку родителя")
+    ro pat = @find(s.rt.parent)
+    if pat >= 0 {
+        @rt_note(pat, "▸ задача ${s.rt.number} «${s.rt.title}» влита в ветку задачи")
+        @cs_sync(pat)
+        @route_broadcast(pat, true)
+    }
+    @route_broadcast(cat, true)
+}
+
+/// The button "Влить в родителя" of a child: what the agent left is committed, the branch is merged into the tree of the parent; a conflict is resolved by the agent of the child.
+/// true - the merge is done or the resolving has started, false - it did not start (the owner was told why).
+fn Hub mut @cs_merge(cat int) Proc Detach Time -> bool {
+    ro s = @sessions[cat]
+    if s.rt.running || s.rt.job.byte_len() > 0 {
+        @tell_error(0, s.id, s.engine.step_number(), "", "идёт другая работа: дождитесь её конца")
+        return false
+    }
+    if s.clients.len() > 0 && !@takes_message_at(cat) {
+        @tell_error(0, s.id, s.engine.step_number(), "", "ход ещё идёт: влить можно между ходами")
+        return false
+    }
+    ro pat = @find(s.rt.parent)
+    if pat < 0 {
+        @tell_error(0, s.id, s.engine.step_number(), "", "родительская сессия не найдена: влить некуда")
+        return false
+    }
+    // one merge at a time into the tree of the parent
+    for i in @cs_kids(s.rt.parent) {
+        if @sessions[i].rt.job == "cmerge" || @sessions[i].rt.job == "cresolve" {
+            @tell_error(0, s.id, s.engine.step_number(), "", "идёт слияние другой подзадачи: подождите")
+            return false
+        }
+    }
+    ro auto = tk_autocommit(s.rt.worktree, s.rt.number, task_slug_of(s.rt.task_id))
+    if auto.status == "error" {
+        @cs_fail(cat, "изменения не закоммичены: ${auto.text}")
+        return false
+    }
+    ro rel = "doc/tasks/${s.rt.task_id}"
+    if path_there("${s.rt.worktree}/${rel}") {
+        ro why = tk_commit_task_files(s.rt.worktree, rel, s.rt.number)
+        if why.byte_len() > 0 {
+            @cs_fail(cat, "файлы задачи не закоммичены: ${why}")
+            return false
+        }
+    }
+    @route_close_agent_in(cat, s.rt.worktree)
+    ro r = tk_merge(s.rt.ptree, s.rt.branch, "${s.rt.number} ${s.rt.title}")
+    if r.status == "merged" {
+        @cs_merged(cat)
+        return true
+    }
+    if r.status == "conflict" {
+        mut me = @sessions[cat]
+        me.rt.job = "cresolve"
+        me.rt.attempt = 1
+        me.rt.conflict_files = r.files
+        @sessions[cat] = me
+        @cs_resolve_turn(cat, r.files)
+        return true
+    }
+    @cs_fail(cat, r.text)
+    false
+}
+
+fn Hub mut @cs_resolve_turn(cat int, files []str) Proc Detach Time -> () {
+    ro reason = @route_agent_turn(cat, "Служебный ход: разрешение конфликта слияния в ветку родителя", "[crew] ${tk_resolve_text(files)}")
+    if reason.byte_len() > 0 {
+        ro dropped = tk_merge_abort(@sessions[cat].rt.ptree)
+        @cs_fail(cat, "агент не смог начать ход: ${reason}")
+    }
+}
+
+// The agent of the child has worked on the conflict of the merge into the parent: finish it, or try again.
+fn Hub mut @cs_after_resolve(cat int) Proc Detach Time -> () {
+    ro s = @sessions[cat]
+    ro verdict = tests_verdict(answer_of(s.lines, s.turn))
+    if verdict == "green" {
+        ro r = tk_merge_finish(s.rt.ptree)
+        if r.status == "merged" {
+            @cs_merged(cat)
+            return
+        }
+        if s.rt.attempt < @settings.route_fix_attempts && r.status == "still" {
+            @cs_again(cat, r.files)
+            return
+        }
+        ro dropped = tk_merge_abort(s.rt.ptree)
+        @cs_fail(cat, if r.text.byte_len() > 0 { r.text } else { "конфликт не разрешён: ${joined(r.files, ", ")}" })
+        return
+    }
+    if s.rt.attempt < @settings.route_fix_attempts {
+        @cs_again(cat, s.rt.conflict_files)
+        return
+    }
+    ro dropped = tk_merge_abort(s.rt.ptree)
+    @cs_fail(cat, "агент не подтвердил зелёные тесты за ${s.rt.attempt} попыток")
+}
+
+fn Hub mut @cs_again(cat int, files []str) Proc Detach Time -> () {
+    mut s = @sessions[cat]
+    s.rt.attempt += 1
+    s.rt.conflict_files = files
+    @sessions[cat] = s
+    @cs_resolve_turn(cat, files)
+}
+
+/// The pump of the child sessions: a waiting child starts, the chain of the merge goes on.
+fn Hub mut @cs_pump() Proc Detach Time -> () {
+    @cs_start_waiting()
+    mut at = 0
+    while at < @sessions.len() {
+        @cs_chain(at)
+        at += 1
+    }
+}

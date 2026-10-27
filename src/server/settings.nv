@@ -62,7 +62,8 @@ export type ServerSettings {
     route_over_limit_word str,
     route_max_active int,
     route_tool bool,
-    route_auto_propose bool
+    route_auto_propose bool,
+    route_children bool
 }
 
 fn st_text(o JsonObject, key str, fallback str) -> Result[str, str] {
@@ -244,6 +245,7 @@ export fn parse_server_settings(text str) -> Result[ServerSettings, str] {
     ro route_max_active = st_number(o, "route_max_active", 3)?
     ro route_tool = st_flag(o, "route_tool", true)?
     ro route_auto_propose = st_flag(o, "route_auto_propose", false)?
+    ro route_children = st_flag(o, "route_children", true)?
     mut hub_program = "target/crew-hub.exe"
     mut hub_args = []str.new()
     match o.get("hub") {
@@ -257,7 +259,7 @@ export fn parse_server_settings(text str) -> Result[ServerSettings, str] {
         }
         None => ()
     }
-    Ok(ServerSettings { port, data_dir, store, pg, agents, idle_term_ms: idle_seconds * 1000, workdir, web_dir, machines_dir, hub_program, hub_args, acp_trace, ask_form, ask_timeout_ms: ask_seconds * 1000, stt_url, stt_language, max_image_bytes, routes_dir, route_reviewer_order, route_task_limit, route_task_messages, route_fix_attempts, route_worktree_ask, route_overlap_seconds, route_keep_days, route_confirm_word, route_over_limit_word, route_max_active, route_tool, route_auto_propose })
+    Ok(ServerSettings { port, data_dir, store, pg, agents, idle_term_ms: idle_seconds * 1000, workdir, web_dir, machines_dir, hub_program, hub_args, acp_trace, ask_form, ask_timeout_ms: ask_seconds * 1000, stt_url, stt_language, max_image_bytes, routes_dir, route_reviewer_order, route_task_limit, route_task_messages, route_fix_attempts, route_worktree_ask, route_overlap_seconds, route_keep_days, route_confirm_word, route_over_limit_word, route_max_active, route_tool, route_auto_propose, route_children })
 }
 
 fn st_env(key str) Os -> Option[str] {
@@ -393,7 +395,8 @@ export fn server_settings(file str) Os Fs -> Result[ServerSettings, str] {
         route_over_limit_word: base.route_over_limit_word,
         route_max_active: base.route_max_active,
         route_tool: base.route_tool,
-        route_auto_propose: base.route_auto_propose
+        route_auto_propose: base.route_auto_propose,
+        route_children: base.route_children
     }
     if merged.store != "files" && merged.store != "pg" { return Err("the store must be files or pg") }
     if merged.port < 1 || merged.port > 65535 { return Err("the port must be 1 to 65535") }

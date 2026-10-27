@@ -86,7 +86,7 @@ fn Hub @route_state_text(at int) -> str {
     ro doc = @route_doc(s.rt.route)
     mut progress = []Progress.new()
     for sub in s.rt.subs {
-        progress.push(parse_progress(read_file("${s.rt.task_dir}/progress.${sub.n}.md") ?? ""))
+        progress.push(parse_progress(read_file("${s.rt.task_dir}/${s.rt.prog_file(sub.n)}") ?? ""))
     }
     ro suggest = task_too_big(s.rt.subs.len(), s.rt.messages, @settings.route_task_limit, @settings.route_task_messages)
     @ct_view(at, route_view_text(s.rt, @route_titles(doc), progress, suggest, now_millis(), s.rt.extra))
@@ -228,7 +228,7 @@ fn Hub mut @route_on_message(at int, text str) Proc Detach Time -> str {
     if s0.rt.tstate != "active" { @rt_state(at, "active", "") }
     ro s = @sessions[at]
     ro last = s.rt.last_sub()
-    ro prog = parse_progress(read_file("${s.rt.task_dir}/progress.${last}.md") ?? "")
+    ro prog = parse_progress(read_file("${s.rt.task_dir}/${s.rt.prog_file(last)}") ?? "")
     mut marked = false
     for sub in s.rt.subs {
         if sub.n == last && (sub.done || sub.merged) { marked = true }
@@ -236,7 +236,7 @@ fn Hub mut @route_on_message(at int, text str) Proc Detach Time -> str {
     // A mode without steps keeps no journal of messages: a later message neither adds a subtask nor writes `message.N.md` (the agent recognises real work, task 192).
     if prog.total == 0 && s.rt.force == "" { return "" }
     if subtask_extends(s.rt.force, last > 0, prog.total, prog.done, marked) {
-        ro appended = append_file("${s.rt.task_dir}/message.${last}.md", message_addition_text(text, now_millis()))
+        ro appended = append_file("${s.rt.task_dir}/${s.rt.msg_file(last)}", message_addition_text(text, now_millis()))
         mut o = JsonObject.new()
         ji(o, "n", last)
         @rt_task_op(at, "extend", o)
@@ -267,7 +267,7 @@ fn Hub mut @route_message_prelude(at int) Proc -> str {
     mut s = @sessions[at]
     ro hint = @route_files_hint_of(s)
     ro doc = @route_doc(s.rt.route)
-    ro text = route_prelude(doc, !s.rt.told, s.rt.task_shown, s.rt.last_sub(), "")
+    ro text = route_prelude(doc, !s.rt.told, s.rt.task_shown, s.rt.pn(s.rt.last_sub()), "")
     s.rt.told = true
     @sessions[at] = s
     // task 192.2: the list of the tasks of the session, so that the agent can say that a work belongs to one of them
@@ -282,8 +282,8 @@ fn Hub mut @route_message_prelude(at int) Proc -> str {
 // The note about a planned task and its pictures ("" when there is nothing to say).
 fn Hub @route_files_hint_of(s Dialog) -> str {
     if !s.rt.task_open || s.rt.last_sub() == 0 { return "" }
-    ro msg = read_file("${s.rt.task_dir}/message.${s.rt.last_sub()}.md") ?? ""
-    route_files_hint(s.rt.task_shown, s.rt.last_sub(), msg.contains("## Задание"), dir_there("${s.rt.task_dir}/images"))
+    ro msg = read_file("${s.rt.task_dir}/${s.rt.msg_file(s.rt.last_sub())}") ?? ""
+    route_files_hint(s.rt.task_shown, s.rt.pn(s.rt.last_sub()), msg.contains("## Задание"), dir_there("${s.rt.task_dir}/images"))
 }
 
 // The pictures of a message of the owner go beside the task: `images/` of its folder, and a line `![name](images/file)` for each is added to the message file of the subtask.
@@ -305,7 +305,7 @@ fn Hub mut @route_save_images(at int, files []AcpImage) Proc -> () {
         }
     }
     if lines.len() > 0 {
-        ro done = append_file("${s.rt.task_dir}/message.${s.rt.last_sub()}.md", "\n${joined(lines, "\n")}\n")
+        ro done = append_file("${s.rt.task_dir}/${s.rt.msg_file(s.rt.last_sub())}", "\n${joined(lines, "\n")}\n")
     }
 }
 
@@ -329,7 +329,7 @@ fn Hub mut @route_set(trace str, route str) Proc Detach Time -> () {
         ro s = @sessions[at]
         if s.rt.task_open && s.rt.last_sub() > 0 {
             ro n = s.rt.last_sub()
-            ro path = "${s.rt.task_dir}/progress.${n}.md"
+            ro path = "${s.rt.task_dir}/${s.rt.prog_file(n)}"
             if parse_progress(read_file(path) ?? "").total == 0 {
                 ro wrote = write_file(path, progress_template(n, @route_doc(route).steps))
             }
@@ -346,7 +346,7 @@ fn Hub mut @route_leave_planning(at int) Proc Detach Time -> () {
     if s.rt.use_tree && s.rt.worktree.byte_len() == 0 { ro made = @route_attach_tree(at) }
     ro me = @sessions[at]
     ro n = me.rt.last_sub()
-    ro wrote = write_file("${me.rt.task_dir}/progress.${n}.md", progress_template(n, @route_doc(me.rt.route).steps))
+    ro wrote = write_file("${me.rt.task_dir}/${me.rt.prog_file(n)}", progress_template(n, @route_doc(me.rt.route).steps))
 }
 
 // A task that was made without a tree gets one: the branch `task/NNN-slug`, the folder of the task goes into it whole (with `images/`) and from now on lives there, the agent works in the tree.
@@ -520,7 +520,7 @@ fn Hub mut @route_parallel(trace str, n int, on bool) Proc Detach Time -> () {
 fn Hub mut @route_mark_progress(at int, title str, skipped bool) -> () {
     ro s = @sessions[at]
     if !s.rt.task_open || s.rt.last_sub() == 0 { return }
-    ro path = "${s.rt.task_dir}/progress.${s.rt.last_sub()}.md"
+    ro path = "${s.rt.task_dir}/${s.rt.prog_file(s.rt.last_sub())}"
     match read_file(path) {
         Some(old) => { ro wrote = write_file(path, progress_mark(old, title, skipped)) }
         None => ()
@@ -564,8 +564,8 @@ fn Hub mut @route_next_step(at int) Proc Detach Time -> () {
     }
     if !@takes_message_at(at) { return }
     ro n = s.rt.last_sub()
-    ro prompt = route_fill(step.prompt, n, s.rt.task_shown)
-    ro prelude = route_prelude(doc, !s.rt.told, s.rt.task_shown, n, prompt)
+    ro prompt = route_fill(step.prompt, s.rt.pn(n), s.rt.task_shown)
+    ro prelude = route_prelude(doc, !s.rt.told, s.rt.task_shown, s.rt.pn(n), prompt)
     @rt_step(at, next + 1, "running")
     ro reason = @route_agent_turn(at, "Шаг режима: ${step.title}", prelude)
     if reason.byte_len() > 0 {
@@ -628,6 +628,8 @@ fn Hub mut @route_turn_done(at int) Proc Detach Time -> () {
     ro job = s.rt.job
     if job == "step" {
         @route_step_finished(at, s.rt.current)
+    } else if job == "cresolve" {
+        @cs_after_resolve(at)
     } else if job.starts_with("resolve") {
         @route_after_resolve(at)
     } else if job == "pub_resolve" {
@@ -705,7 +707,7 @@ fn Hub mut @route_start_review(at int, index int, step RouteStep) Proc Detach Ti
         }
         Ok(client) => {
             ro n = s.rt.last_sub()
-            ro message = read_file("${s.rt.task_dir}/message.${n}.md") ?? "(файл постановки не найден)"
+            ro message = read_file("${s.rt.task_dir}/${s.rt.msg_file(n)}") ?? "(файл постановки не найден)"
             ro status = git_run(cwd, ["status", "--short"])
             ro diff = git_run(cwd, ["diff", "HEAD"])
             ro answer = answer_of(s.lines, s.turn)
@@ -830,7 +832,7 @@ fn Hub mut @route_pump_reviews() Proc Detach Time -> () {
 // ----- the observer: the progress files, the trees -----
 
 // The place of the subtask in the list of the tasks that go on: the files it says it touches, from its progress file.
-fn Hub @route_touches(s Dialog, n int) -> []str => tk_touches(read_file("${s.rt.task_dir}/progress.${n}.md") ?? "")
+fn Hub @route_touches(s Dialog, n int) -> []str => tk_touches(read_file("${s.rt.task_dir}/${s.rt.prog_file(n)}") ?? "")
 
 fn Hub mut @route_observe(at int) Proc Detach Time -> () {
     mut s = @sessions[at]
@@ -916,7 +918,8 @@ fn Hub mut @route_subtree(at int, n int) Proc Detach Time -> () {
     for sub in s.rt.subs {
         if sub.n == n && sub.worktree.byte_len() > 0 { return }
     }
-    ro tree = tk_subtask_tree(s.rt.worktree, s.rt.number, task_slug_of(s.rt.task_id), n)
+    ro fresh = task_number_text(next_task_number(@cs_taken_names(s)))
+    ro tree = tk_subtask_tree(s.rt.worktree, fresh, task_slug_of(s.rt.task_id), n)
     if !tree.ok {
         @tell_error(0, s.id, s.engine.step_number(), "", "дерево подзадачи ${n} не создано: ${tree.text}")
         return
@@ -1006,7 +1009,7 @@ fn Hub mut @route_subtask_done(trace str, n int) Proc Detach Time -> () {
         return
     }
     @route_close_agent_in(at, tree)
-    ro r = tk_merge(s.rt.worktree, branch, "${s.rt.number}.${n}: ${subtask_title_of(s, n)}")
+    ro r = tk_merge(s.rt.worktree, branch, "${branch_number(branch, s.rt.number)} ${subtask_title_of(s, n)}")
     if r.status == "merged" {
         @route_subtask_merged(at, n)
     } else if r.status == "conflict" {
@@ -1190,6 +1193,17 @@ fn Hub mut @route_merge(trace str) Proc Detach Time -> () {
         @tell_error(0, trace, s.engine.step_number(), "", "ход ещё идёт: сливать можно между ходами")
         return
     }
+    // task 192.3: a child of a parent with a branch merges into that branch
+    if s.rt.kind == "child" && s.rt.ptree.byte_len() > 0 {
+        ro merged = @cs_merge(at)
+        return
+    }
+    // the parent goes to main last
+    ro held = @cs_block(s)
+    if held.len() > 0 {
+        @tell_error(0, trace, s.engine.step_number(), "", "не слиты подзадачи: ${joined(held, ", ")}")
+        return
+    }
     // what the agent changed and did not commit goes into one commit (nothing changed - nothing to commit)
     ro auto = tk_autocommit(s.rt.worktree, s.rt.number, task_slug_of(s.rt.task_id))
     if auto.status == "error" {
@@ -1276,7 +1290,7 @@ fn Hub @route_tests_prompt(s Dialog) -> str {
     ro doc = @route_doc(s.rt.route)
     mut prompt = "Прогони тесты затронутой части проекта и проверки репозитория (команды — в AGENTS.md или README проекта)."
     for st in doc.steps {
-        if st.kind == "self" && st.prompt.contains("ТЕСТЫ: ЗЕЛЁНЫЕ") { prompt = route_fill(st.prompt, s.rt.last_sub(), s.rt.task_shown) }
+        if st.kind == "self" && st.prompt.contains("ТЕСТЫ: ЗЕЛЁНЫЕ") { prompt = route_fill(st.prompt, s.rt.pn(s.rt.last_sub()), s.rt.task_shown) }
     }
     "${prompt}\nФайлы проекта не меняй. Последней строкой ответа напиши ровно «ТЕСТЫ: ЗЕЛЁНЫЕ» или «ТЕСТЫ: КРАСНЫЕ»."
 }
@@ -1350,12 +1364,14 @@ fn Hub mut @route_pump() Proc Detach Time -> () {
         @ct_pump(at)
         at += 1
     }
+    @cs_pump()
     if @reviews.len() > 0 { @route_pump_reviews() }
     if now_millis() - @route_obs >= OBSERVE_MS {
         @route_obs = now_millis()
         mut k = 0
         while k < @sessions.len() {
             @route_observe(k)
+            @cs_observe(k)
             k += 1
         }
     }

@@ -12,17 +12,27 @@ import std.encoding.json.{Json, JsonValue, JsonObject}
 
 // The subtasks of the session as lines for the agent and the page.
 fn Hub @ct_lines(s Dialog) -> []SubLine {
+    // task 192.3: the works in work are the tasks of the hub, each in a session of its own
+    if @settings.route_children { return @cs_task_lines() }
     mut out = []SubLine.new()
     for sub in s.rt.subs {
         ro state = if sub.merged { "слита" } else if sub.done { "готово" } else if sub.waits > 0 || sub.queued { "ждёт" } else { "идёт" }
-        out.push(SubLine { n: sub.n, title: sub.title, state, waits: sub.waits })
+        out.push(SubLine { n: sub.n, title: sub.title, state, waits: sub.waits, file: "" })
     }
     out
 }
 
 // The subtasks that are in work now (not done, not waiting); a task that is ready, finishing or done has none.
 fn Hub @ct_running(s Dialog) -> []RunSub {
+    mut out = @ct_running_old(s)
+    if @settings.route_children { for r in @cs_running_all() { out.push(r) } }
+    out
+}
+
+// The subtasks of the old kind (inside the session) that are in work.
+fn Hub @ct_running_old(s Dialog) -> []RunSub {
     mut out = []RunSub.new()
+    if s.rt.kind == "child" { return out }
     if !s.rt.task_open || s.rt.task_closed || s.rt.tstate != "active" { return out }
     for sub in s.rt.subs {
         if !sub.done && !sub.merged && sub.waits == 0 && !sub.queued { out.push(RunSub { n: sub.n, touches: sub.touches }) }
@@ -33,7 +43,7 @@ fn Hub @ct_running(s Dialog) -> []RunSub {
 /// The state of the mode for the page with the cards and the numbers of the tasks in work (called from `route_state_text`).
 fn Hub @ct_view(at int, base str) -> str {
     ro s = @sessions[at]
-    crew_view_extend(base, s.rt.props, @ct_lines(s), @ct_running(s).len(), @settings.route_max_active, @settings.route_confirm_word, @settings.route_over_limit_word)
+    @cs_view(at, crew_view_extend(base, s.rt.props, @ct_lines(s), @cs_active_all(), @settings.route_max_active, @settings.route_confirm_word, @settings.route_over_limit_word))
 }
 
 // The message of the owner and its pictures, kept for the card that the agent may propose in this turn.
@@ -85,20 +95,30 @@ fn Hub mut @ct_kick(at int, n int, note str) -> () {
 
 // ----- the call of the tool -----
 
+// A proposal whose target is not there (the task to extend, the parent, the epic) is a task of its own.
+fn Hub @ct_fix_kind(at int, p0 Proposal) -> Proposal {
+    mut p = proposal_copy(p0)
+    ro s = @sessions[at]
+    if p.kind == "extend" {
+        mut found = @settings.route_children && @cs_find_number(p.extends) >= 0
+        for sub in s.rt.subs { if sub.n == p.extends && !@settings.route_children { found = true } }
+        if !found {
+            p.kind = "new"
+            p.extends = 0
+        }
+    }
+    if p.kind == "subtask" && !(@settings.route_children && @cs_find_number(p.parent) >= 0) { p.kind = "new" }
+    if p.kind == "epic_task" && !(@settings.route_children && @cs_find_number(p.epic) >= 0) { p.kind = "new" }
+    p
+}
+
 fn Hub mut @ct_offer(at int, p0 Proposal) Proc Detach Time -> str {
     mut p = proposal_copy(p0)
     ro s = @sessions[at]
     if s.rt.route == "planning" { return NOT_NEEDED_TEXT }
     if was_refused(s.rt.dismissed, p.title) { return REFUSED_TEXT }
     if has_proposal(s.rt.props, p.title) { return SHOWN_TEXT }
-    if p.kind == "extend" {
-        mut found = false
-        for sub in s.rt.subs { if sub.n == p.extends { found = true } }
-        if !found {
-            p.kind = "new"
-            p.extends = 0
-        }
-    }
+    p = @ct_fix_kind(at, p)
     mut me = @sessions[at]
     me.rt.prop_serial += 1
     p.id = me.rt.prop_serial
@@ -159,8 +179,13 @@ fn Hub mut @ct_note(at int, text str) Proc Detach Time -> () {
 
 fn Hub @ct_has_steps(s Dialog) -> bool => @route_doc(s.rt.route).steps.len() > 0
 
-// The task or the subtask is made. `how`: "" (nothing in the way), "wait" (after subtask `with_n`), "parallel" (a tree of its own); `queued`: waits for a place under the limit.
+// Task 192.3: the work becomes a child session (`child_hub.nv`); with the setting `route_children` off the old way (a subtask inside the session) is kept.
 fn Hub mut @ct_create(at int, p Proposal, how str, queued bool) Proc Detach Time -> () {
+    if @settings.route_children { @cs_spawn(at, p, how, queued) } else { @ct_create_old(at, p, how, queued) }
+}
+
+// The task or the subtask is made. `how`: "" (nothing in the way), "wait" (after subtask `with_n`), "parallel" (a tree of its own); `queued`: waits for a place under the limit.
+fn Hub mut @ct_create_old(at int, p Proposal, how str, queued bool) Proc Detach Time -> () {
     ro s0 = @sessions[at]
     ro running = @ct_running(s0)
     ro waits = if how == "wait" { p.with_n } else { 0 }
@@ -225,6 +250,7 @@ fn Hub mut @ct_create(at int, p Proposal, how str, queued bool) Proc Detach Time
 
 // The work extends subtask `n`: the summary is added to its file with the date.
 fn Hub mut @ct_extend(at int, p Proposal, n int) Proc Detach Time -> () {
+    if @cs_extend(at, p, n) { return }
     ro s = @sessions[at]
     mut title = ""
     for sub in s.rt.subs { if sub.n == n { title = sub.title } }
@@ -260,7 +286,7 @@ fn Hub mut @ct_try(at int, p0 Proposal, how str, over bool, queue bool) Proc Det
             return
         }
     }
-    if how != "wait" && !queue && !over && limit_reached(running.len(), @settings.route_max_active) {
+    if how != "wait" && !queue && !over && limit_reached(@cs_active_all(), @settings.route_max_active) {
         p.state = "limit"
         p.how = how
         @ct_store(at, p)
@@ -303,12 +329,25 @@ fn Hub mut @ct_do(at int, p Proposal, action str) Proc Detach Time -> () {
 }
 
 /// The signal of the page `route_prop {id, action}`: a button of a card.
-fn Hub mut @ct_answer(trace str, id int, action str) Proc Detach Time -> () {
+fn Hub mut @ct_answer(trace str, id int, action str, agent str, mode str, target int) Proc Detach Time -> () {
     ro at = @find(trace)
     if at < 0 { return }
     ro k = proposal_at(@sessions[at].rt.props, id)
     if k < 0 { return }
-    @ct_do(at, @sessions[at].rt.props[k], action)
+    mut p = proposal_copy(@sessions[at].rt.props[k])
+    // the family for the child session chosen on the card (an unknown one is ignored)
+    if agent.byte_len() > 0 && @agent_ids().contains(agent) { p.agent = agent }
+    // the way chosen on the card: a task of its own, a subtask of the task `target`, a task of the epic `target`, an addition to the task `target`
+    if mode == "new" || mode == "subtask" || mode == "epic_task" || mode == "extend" {
+        p.kind = mode
+        if mode == "subtask" { p.parent = target }
+        if mode == "epic_task" { p.epic = target }
+        if mode == "extend" { p.extends = target }
+        p = @ct_fix_kind(at, p)
+        @ct_store(at, p)
+    }
+    ro act = if mode == "extend" && p.kind == "extend" && action == "start" { "extend" } else { action }
+    @ct_do(at, p, act)
 }
 
 /// The owner wrote the code word instead of pressing a button: it answers the last card and is not sent to the agent. false - the message is an ordinary one.
@@ -408,14 +447,7 @@ fn Hub mut @ct_list_offer(at int, items []Proposal) Proc Detach Time -> int {
         mut p = proposal_copy(p0)
         if was_refused(@sessions[at].rt.dismissed, p.title) { continue }
         if has_proposal(@sessions[at].rt.props, p.title) { continue }
-        if p.kind == "extend" {
-            mut found = false
-            for sub in @sessions[at].rt.subs { if sub.n == p.extends { found = true } }
-            if !found {
-                p.kind = "new"
-                p.extends = 0
-            }
-        }
+        p = @ct_fix_kind(at, p)
         mut cur = @sessions[at]
         cur.rt.prop_serial += 1
         p.id = cur.rt.prop_serial

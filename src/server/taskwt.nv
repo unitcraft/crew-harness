@@ -1,7 +1,7 @@
 // taskwt.nv - task 192r: the git operations of the tasks of the control panel.
 //
-// A task lives in a tree of its own (`<worktrees>/<repo>-NNN-slug`, branch `task/NNN-slug`), a subtask of an agent in a tree beside it
-// (`<project>-NNN.N-slug`, branch `task/NNN.N-slug`). The functions below start `git` as a child process (every call has a time limit, no prompt, no
+// A task lives in a tree of its own (`<worktrees>/<repo>-NNN-slug`, branch `task/NNN-slug`); a child task (task 192.3) is a task like any other with a number of its own,
+// its tree stands beside the tree of its parent and is cut from the head of the parent (`<project>-NNN-slug`, branch `task/NNN-slug`). The functions below start `git` as a child process (every call has a time limit, no prompt, no
 // editor), return values instead of printing, and never write a secret to a log: a text that comes back from git passes `tw_redact`
 // (the user and the password of a URL are cut off). The module never touches the files or the branch of the main copy, except for the
 // one fast-forward after a published task (see `publish`).
@@ -366,8 +366,9 @@ export fn task_tree_create(repo str, nnn str, slug str) Proc Os Fs -> Result[Tas
     Ok(TaskTree { branch, path, base, created, note })
 }
 
-/// Make the tree of the subtask number `n` beside the tree of the task: branch `task/NNN.N-slug`, folder `<project>-NNN.N-slug` beside the tree of the task, cut from the
-/// current head of the task. A tree that is there already is reused.
+/// Make the tree of a child task beside the tree of its parent: `nnn` and `slug` are the number and the slug of the CHILD (a number of its own, flat as in a tracker), branch
+/// `task/NNN-slug`, folder `<project>-NNN-slug` beside the tree of the parent, cut from the current head of the parent. A tree that is there already is reused. `n` is the order
+/// of the child in its parent (1 or more).
 export fn subtask_tree_create(task_tree_path str, nnn str, slug str, n int) Proc Os Fs -> Result[SubtaskTree, str] {
     ro dir = tw_norm(task_tree_path)
     if !tw_is_repo(dir) { return Err("not a git repository") }
@@ -376,12 +377,18 @@ export fn subtask_tree_create(task_tree_path str, nnn str, slug str, n int) Proc
     if n < 1 { return Err("the number of the subtask must be 1 or more") }
     ro base = tw_head_sha(dir)
     if base.byte_len() == 0 { return Err("the tree of the task has no head") }
-    ro branch = "task/${nnn}.${n}-${slug}"
-    // the folder is beside the tree of the task: `<project>-NNN.N-slug` (the tree of the task is `<project>-NNN-slug`)
-    ro own = tw_base_name(dir)
-    ro tail = "-${nnn}-${slug}"
-    ro project = if own.ends_with(tail) { own[..own.byte_len() - tail.byte_len()] } else { own }
-    ro path = "${tw_parent(dir)}/${project}-${nnn}.${n}-${slug}"
+    ro branch = "task/${nnn}-${slug}"
+    // the folder is beside the tree of the parent; the name of that tree is `<project>-<number>-<slug>`: the project is what stands before the first all-digits part
+    mut keep = []str.new()
+    mut seen = false
+    mut k = 0
+    for part in tw_base_name(dir).split("-") {
+        if !seen && k > 0 && tw_digits_ok(part) { seen = true }
+        if !seen { keep.push(part) }
+        k += 1
+    }
+    ro project = if seen { keep.join("-") } else { tw_base_name(dir) }
+    ro path = "${tw_parent(dir)}/${project}-${nnn}-${slug}"
     ro created = match tw_tree_ensure(dir, path, branch, base) {
         Ok(c) => c
         Err(e) => return Err(e)
