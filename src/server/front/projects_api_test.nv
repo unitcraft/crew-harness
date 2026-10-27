@@ -8,14 +8,14 @@ import std.text
 
 test "projects api: a listing is {path, parent, entries[{name, dir}], truncated, recent}" {
     ro listing = Listing { path: "C:/work", parent: "C:/", has_parent: true, names: ["alpha", ".git"], cut: false }
-    ro text = fs_list_json(listing, ["C:/a", "C:/b"])
-    assert(text == "{\"path\":\"C:/work\",\"parent\":\"C:/\",\"entries\":[{\"name\":\"alpha\",\"dir\":true},{\"name\":\".git\",\"dir\":true}],\"truncated\":false,\"recent\":[\"C:/a\",\"C:/b\"]}")
+    ro text = fs_list_json(listing, ["C:/a", "C:/b"], "")
+    assert(text == "{\"path\":\"C:/work\",\"parent\":\"C:/\",\"entries\":[{\"name\":\"alpha\",\"dir\":true},{\"name\":\".git\",\"dir\":true}],\"truncated\":false,\"recent\":[\"C:/a\",\"C:/b\"],\"last\":\"\"}")
     assert(match Json.parse(text) { Ok(v) => v.is_object(), Err(e) => false })
 }
 
 test "projects api: a root has a null parent, a cut listing says so" {
     ro listing = Listing { path: "C:/", parent: "", has_parent: false, names: [], cut: true }
-    ro text = fs_list_json(listing, [])
+    ro text = fs_list_json(listing, [], "")
     assert(text.contains("\"parent\":null"))
     assert(text.contains("\"truncated\":true"))
     assert(text.contains("\"entries\":[]"))

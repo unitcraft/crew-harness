@@ -12,7 +12,7 @@
 // ORACLE-WORKAROUND(25): the module is declared `module server.front` (without the package prefix) and imported as `crew_harness.server.front`: a module two folders under the source root cannot be declared with the full path; declare it with the prefix when item 25 is fixed
 module server.front
 
-import crew_harness.projects.{Project, StoreFail, Listing, GitState, projects_load, projects_get, projects_create, projects_replace, projects_reorder, projects_delete, projects_list_json, project_json, recent_folders, normalize_folder_path, list_folders, list_roots, git_state}
+import crew_harness.projects.{Project, StoreFail, Listing, GitState, projects_load, projects_get, projects_create, projects_replace, projects_reorder, projects_delete, projects_list_json, project_json, recent_folders, normalize_folder_path, list_folders, list_roots, git_state, last_dir_load, last_dir_save, last_dir_of_body, existing_ancestor}
 import polaris.{ServerRequest, ServerResponse}
 import std.encoding.json.{Json, JsonValue, JsonObject}
 import std.text
@@ -39,6 +39,12 @@ fn api_body(req ServerRequest) -> Result[JsonObject, str] {
 
 fn api_put(mut o JsonObject, key str, value JsonValue) -> () {
     ro replaced = o.insert(key, value)
+}
+
+// The parent of the folder chosen last is where the picker opens next time (one value for every page).
+fn remember_dir(data_dir str, body JsonObject) -> () {
+    ro dir = last_dir_of_body(body)
+    if dir.byte_len() > 0 { last_dir_save(data_dir, dir) }
 }
 
 fn projects_list_route(data_dir str, port int) -> fn(ServerRequest) -> ServerResponse {
@@ -68,6 +74,7 @@ fn projects_post_route(data_dir str, port int) -> fn(ServerRequest) -> ServerRes
             Err(reason) => api_error(400, reason)
             Ok(body) => match projects_create(data_dir, body) {
                 Ok(id) => {
+                    remember_dir(data_dir, body)
                     mut o = JsonObject.new()
                     api_put(o, "id", JsonValue.str(id))
                     json_reply(201, JsonValue.object(o).to_str())
@@ -84,7 +91,10 @@ fn projects_put_route(data_dir str, port int) -> fn(ServerRequest) -> ServerResp
         match api_body(req) {
             Err(reason) => api_error(400, reason)
             Ok(body) => match projects_replace(data_dir, req.param("id") ?? "", body) {
-                Ok(done) => json_reply(200, "{\"ok\":true}")
+                Ok(done) => {
+                    remember_dir(data_dir, body)
+                    json_reply(200, "{\"ok\":true}")
+                }
                 Err(f) => api_fail(f)
             }
         }
@@ -147,7 +157,7 @@ fn recent_of(data_dir str) -> []str {
 }
 
 /// The answer for a path: `{"path","parent","entries":[{"name","dir":true}],"truncated","recent"}`; no path - the roots as the entries.
-fn fs_list_json(listing Listing, recent []str) -> str {
+fn fs_list_json(listing Listing, recent []str, last str) -> str {
     mut rows = []JsonValue.new()
     for name in listing.names { rows.push(entry_json(name)) }
     mut o = JsonObject.new()
@@ -156,6 +166,7 @@ fn fs_list_json(listing Listing, recent []str) -> str {
     api_put(o, "entries", JsonValue.array(rows))
     api_put(o, "truncated", JsonValue.bool(listing.cut))
     api_put(o, "recent", strings_json(recent))
+    api_put(o, "last", JsonValue.str(last))
     JsonValue.object(o).to_str()
 }
 
@@ -175,11 +186,21 @@ fn fs_list_route(data_dir str, port int) -> fn(ServerRequest) -> ServerResponse 
     fn(req ServerRequest) -> ServerResponse {
         if !origin_allowed(req, port) { return api_error(403, "origin not allowed") }
         ro asked = (req.query_param("path") ?? "").trim_ascii()
-        if asked.byte_len() == 0 { return json_reply(200, fs_roots_json(recent_of(data_dir))) }
+        if asked.byte_len() == 0 {
+            // no path: the remembered folder (or its nearest existing parent), else the roots
+            ro last = existing_ancestor(last_dir_load(data_dir))
+            if last.byte_len() > 0 {
+                match list_folders(last) {
+                    Ok(listing) => return json_reply(200, fs_list_json(listing, recent_of(data_dir), last))
+                    Err(reason) => ()
+                }
+            }
+            return json_reply(200, fs_roots_json(recent_of(data_dir)))
+        }
         match normalize_folder_path(asked) {
             Err(reason) => api_error(400, reason)
             Ok(path) => match list_folders(path) {
-                Ok(listing) => json_reply(200, fs_list_json(listing, recent_of(data_dir)))
+                Ok(listing) => json_reply(200, fs_list_json(listing, recent_of(data_dir), ""))
                 Err(reason) => api_error(404, reason)
             }
         }

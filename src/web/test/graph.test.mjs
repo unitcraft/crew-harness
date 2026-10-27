@@ -40,10 +40,11 @@ test('index.html заранее просит все модули страниц�
   assert.ok(preload.length >= 20);
 });
 
-test('front: предел соединений поднят (по умолчанию Polaris их 16, и несколько вкладок исчерпывали его), Keep-Alive короче простоя сервера, живые страницы пингуются', () => {
+test('front: предел соединений поднят (по умолчанию Polaris их 16, и несколько вкладок исчерпывали его), одно соединение — один запрос (чистый FIN, без Keep-Alive), живые страницы пингуются', () => {
   const front = fs.readFileSync(new URL('../../server/front/front.nv', import.meta.url), 'utf8');
   assert.match(front, /policy\.max_inflight\(1024\)/);
-  assert.match(front, /resp\.header\("Keep-Alive", "timeout=50"\)/);
+  assert.ok(!front.includes('resp.header("Keep-Alive"'));
+  assert.ok(front.includes('policy.max_requests_per_conn(1)'));
   assert.match(front, /const PING_EVERY_MS = 25000/);
   assert.match(front, /ws_out\(4, ""\)/);
   assert.match(front, /frame_bytes\(OpCode\.Ping, \[\]u8\.new\(\)\)/);

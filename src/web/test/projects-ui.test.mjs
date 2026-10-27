@@ -238,3 +238,12 @@ test('проект, которого нет: заметка об ошибке, �
   assert.equal(s.layers().length, 0);
   assert.match(s.log.notices[0][0], /Не удалось открыть проект: проект не найден/);
 });
+
+test('выбор папки открывается без пути: сервер отдаёт родителя последней выбранной папки (last), страница показывает то, что пришло', async () => {
+  const fs = await import('node:fs');
+  const ui = fs.readFileSync(new URL('../projects-ui.js', import.meta.url), 'utf8');
+  const api = fs.readFileSync(new URL('../projects-api.js', import.meta.url), 'utf8');
+  assert.equal((ui.match(/await pickFolder\(''\)/g) || []).length, 2, 'оба выбора начинают с пустого пути');
+  assert.match(ui, /state = \{ path: r\.path, parent: r\.parent/);
+  assert.match(api, /last: typeof b\.last === 'string' \? normalizePath\(b\.last\) : ''/);
+});

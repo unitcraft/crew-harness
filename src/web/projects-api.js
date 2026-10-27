@@ -49,6 +49,7 @@ export function createProjectsApi(fetchFn, failText = 'Нет связи с се
         path: typeof b.path === 'string' ? normalizePath(b.path) : '',
         parent: typeof b.parent === 'string' ? normalizePath(b.parent) : null,
         entries: (Array.isArray(b.entries) ? b.entries : []).filter((e) => e && typeof e.name === 'string' && e.dir !== false),
+        last: typeof b.last === 'string' ? normalizePath(b.last) : '',
         recent: (Array.isArray(b.recent) ? b.recent : []).filter((p) => typeof p === 'string').map(normalizePath),
       };
     },

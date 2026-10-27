@@ -2,6 +2,7 @@
 module crew_harness.projects
 
 import std.fs.{Fs, real_fs, Path, write_text, remove_dir_all, create_dir_all}
+import std.encoding.json.{Json, JsonObject}
 import std.os.{Os, real_os, temp_dir, pid}
 import std.text
 
@@ -142,4 +143,23 @@ test "browse: a folder outside any repository is not a repo" {
     // the temporary folder is not inside a repository; if a machine keeps one there the test cannot say
     assert(!s.is_repo || s.branch.byte_len() > 0)
     assert(!git_state("relative").is_repo)
+}
+
+test "last folder: the picker opens in the parent of the last chosen folder, a vanished folder climbs to the nearest parent that is there" {
+    ro root = slash(browse_fresh("last"))
+    dir_in(root, "folder1/folder2")
+    ro body = match Json.parse("{\"folders\":[{\"path\":\"${root}/folder1/folder2\"}]}") {
+        Ok(v) => v.object() ?? JsonObject.new()
+        Err(e) => panic("json")
+    }
+    assert(last_dir_of_body(body) == "${root}/folder1")
+    assert(last_dir_of_body(JsonObject.new()) == "")
+    assert(last_dir_load(root) == "")
+    last_dir_save(root, "${root}/folder1")
+    assert(last_dir_load(root) == "${root}/folder1")
+    assert(existing_ancestor("${root}/folder1") == "${root}/folder1")
+    // the folder is gone: the nearest existing parent
+    assert(existing_ancestor("${root}/folder1/gone/deeper") == "${root}/folder1")
+    assert(existing_ancestor("${root}/nothing/gone") == root)
+    assert(existing_ancestor("") == "")
 }

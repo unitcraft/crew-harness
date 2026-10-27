@@ -378,3 +378,62 @@ export fn project_has_folder(p Project, path str) -> bool {
     }
     false
 }
+
+// ----- the last folder the owner browsed (task 192) -----
+// One value for the whole panel (every page): the PARENT of the folder chosen last when a project was made or a folder was added. The picker opens there.
+// It is in `<data_dir>/last_dir.txt` (a line of text), not in projects.json: saving the projects does not touch it.
+
+fn last_dir_file(root str) -> Path => Path.from_bytes(root.bytes()).join("last_dir.txt")
+
+/// The remembered folder, "" when nothing was chosen yet.
+export fn last_dir_load(root str) -> str {
+    with Fs = real_fs() {
+        ro there = match try_exists(last_dir_file(root)) {
+            Ok(b) => b
+            Err(e) => false
+        }
+        if !there { return "" }
+        match read_text(last_dir_file(root)) {
+            Ok(t) => t.trim_ascii()
+            Err(e) => ""
+        }
+    }
+}
+
+/// Remember the folder (best effort: a failure to write loses only the convenience).
+export fn last_dir_save(root str, dir str) -> () {
+    with Fs = real_fs() {
+        match create_dir_all(Path.from_bytes(root.bytes())) {
+            Ok(done) => ()
+            Err(e) => return
+        }
+        match write_atomic(last_dir_file(root), dir.bytes()) {
+            Ok(done) => ()
+            Err(e) => ()
+        }
+    }
+}
+
+/// The parent of the last folder of the body of a project (`{folders:[{path}]}`), "" when it has none or the folder is a root.
+export fn last_dir_of_body(body JsonObject) -> str {
+    ro list = match body.get("folders") {
+        Some(v) => v.array() ?? []JsonValue.new()
+        None => []JsonValue.new()
+    }
+    if list.len() == 0 { return "" }
+    ro item = list[list.len() - 1]
+    ro raw = match item.object() {
+        Some(o) => match o.get("path") {
+            Some(p) => p.str() ?? ""
+            None => ""
+        }
+        None => item.str() ?? ""
+    }
+    match normalize_folder_path(raw) {
+        Ok(path) => match parent_of(path) {
+            Some(up) => up
+            None => path
+        }
+        Err(reason) => ""
+    }
+}

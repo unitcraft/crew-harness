@@ -198,3 +198,19 @@ export fn git_state(path str) -> GitState {
     }
     state
 }
+
+/// The nearest folder that is there: `path` itself, else its nearest existing parent; "" when none (the caller shows the roots).
+export fn existing_ancestor(path str) -> str {
+    mut cur = path
+    while cur.byte_len() > 0 {
+        match list_folders(cur) {
+            Ok(listing) => return listing.path
+            Err(reason) => ()
+        }
+        match parent_of(cur) {
+            Some(up) => { cur = up }
+            None => return ""
+        }
+    }
+    ""
+}
