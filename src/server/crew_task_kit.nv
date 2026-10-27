@@ -1,0 +1,137 @@
+// crew_task_kit.nv - task 192.2: the scenario of the recognition of the tasks over a hub with the fake ACP agent (the helpers are in `routes_kit.nv`).
+module crew_harness.server
+
+import std.encoding.json.{Json, JsonValue, JsonObject}
+
+/// The settings of the scenario of the recognition: a plain folder, the limit of two tasks in work, the agent may propose a task by itself too (`crew_task`).
+export fn kit_routes_recognize(name str) -> ServerSettings {
+    mut settings = kit_routes(name)
+    settings.route_max_active = 2
+    settings.route_auto_propose = true
+    settings
+}
+
+fn rk_users_with(lines []str, text str) -> int {
+    mut n = 0
+    for line in lines {
+        if line_field(line, "kind") == "user_message" && line_input(line, "text") == text { n += 1 }
+    }
+    n
+}
+
+// The tail of the feed of the page, for the message of a failed check.
+fn rk_dbg(rig Rig) -> str {
+    ro lines = rig.all_lines_for(1)
+    mut parts = []str.new()
+    mut at = if lines.len() > 8 { lines.len() - 8 } else { 0 }
+    while at < lines.len() {
+        ro line = lines[at]
+        parts.push(cut_text(line, 160))
+        at += 1
+    }
+    joined(parts, " | ")
+}
+
+fn rk_sub_state(st JsonObject, at int) -> str => jtext(rk_sub(st, at), "state")
+
+fn rk_state(rig Rig) -> JsonObject => rk_last(rig.all_lines_for(1), "route_state")
+
+/// The agent recognises the works by the button, the owner answers with the buttons, the quick answer and the code words: a task is made only then; a work that touches the files of a running one
+/// waits for it; over the limit the word "сверх" or the queue; "Забыть" is remembered; a work that extends a task is added to its file.
+export fn scenario_route_recognize(settings ServerSettings) Proc Detach Time Net Fs Os -> str {
+    mut c = kit_check()
+    mut rig = rig_open(settings)
+    rig.attach(1)
+    rig.page(1, "session_created", "s-r7", "{\"name\":\"Распознавание\",\"agent\":\"opencode\"}")
+    c.expect(rig.until("\"kind\":\"session_created\"", 5000), "the session is shown")
+    // a question and a talk: no task, no card, no file
+    rig.page(1, "user_message", "s-r7", "{\"turn\":\"t0\",\"text\":\"что такое хаб?\"}")
+    c.expect(rig.until(KIT_DONE, 20000), "a question is answered")
+    rig.run(300)
+    ro st0 = rk_state(rig)
+    c.expect(rk_task_is_null(st0) && rk_cards(st0).len() == 0, "a question makes no task and no card")
+    c.expect(jtext(st0, "confirm_word") == "задача" && jtext(st0, "over_word") == "сверх", "the page is told the code words")
+    c.expect(rk_number(st0, "max_active") == 2, "and the limit")
+
+    // the list of three works: a card with three rows, still no task
+    c.expect(rig.list_tasks("s-r7", "t1", [rk_item("new", "Работа А", 0, ["src/a.js"]), rk_item("new", "Работа Б", 0, ["src/b.js"]), rk_item("new", "Работа В", 0, ["doc/"])], "Работа А"), "the list of the agent is shown as cards")
+    ro st1 = rk_state(rig)
+    c.expect(rk_cards(st1).len() == 3 && rk_task_is_null(st1), "three rows and no task before the answer")
+    // the quick answer: 1 into work, 3 to be discussed
+    rig.page(1, "route_quick", "s-r7", "{\"text\":\"1 в работу; 3 обсудить дальше\"}")
+    rig.run(2500)
+    ro st2 = rk_state(rig)
+    ro id = jtext(rk_task(st2), "id")
+    ro dir = "${settings.data_dir}/s-r7/tasks/${id}/task"
+    c.expect(id.starts_with("001-"), "the task is made: ${id}")
+    c.expect(rk_text("${dir}/message.1.md").contains("сделать: Работа А"), "message.1.md holds the summary of the agent")
+    c.expect(rk_card_state(st2, "Работа А") == "none" && rk_card_state(st2, "Работа В") == "open", "the started work is not a card any more, the discussed one stays")
+    c.expect(rk_number(st2, "candidates") == 1 && rk_cards(st2).len() == 2, "one candidate and one open row")
+    c.expect(kit_with(rig.lines_for(1), "Решение по задаче") >= 1, "the agent is told the decision by a service turn")
+    // forget: the work goes and is not offered again
+    rig.page(1, "route_quick", "s-r7", "{\"text\":\"1 забыть\"}")
+    rig.run(300)
+    c.expect(rk_card_state(rk_state(rig), "Работа Б") == "none", "the forgotten work is gone")
+    ro again = rig.list_tasks("s-r7", "t2", [rk_item("new", "Работа Б", 0, ["src/b.js"])], "Работа Б")
+    c.expect(!again, "a forgotten work is not offered again")
+    // a quick answer that is not understood applies nothing
+    rig.page(1, "route_quick", "s-r7", "{\"text\":\"сделай что-нибудь\"}")
+    c.expect(rig.until("Формат", 5000), "a quick answer that is not understood is answered with the format")
+    c.expect(rk_array(rk_task(rk_state(rig)), "subtasks").len() == 1, "and nothing is applied")
+
+    // the single proposal and the code word: the word answers the card and is not sent to the agent
+    rig.page(1, "user_message", "s-r7", rk_tasktool_page("t3", rk_item("new", "Кодовое", 0, ["z.txt"])))
+    c.expect(rig.until(KIT_DONE, 20000), "the agent proposes a work by crew_task")
+    rig.run(300)
+    c.expect(rk_card_state(rk_state(rig), "Кодовое") == "open", "the card of the single proposal is shown")
+    rig.page(1, "user_message", "s-r7", "{\"turn\":\"t4\",\"text\":\"Задача!\"}")
+    rig.run(2500)
+    ro st3 = rk_state(rig)
+    c.expect(rk_array(rk_task(st3), "subtasks").len() == 2 && rk_card_state(st3, "Кодовое") == "none", "the code word starts the work: a second subtask")
+    c.expect(rk_users_with(rig.lines_for(1), "Задача!") == 0, "the code word is not sent to the agent")
+
+    // a work that touches the files of a running one: the card asks, the owner waits
+    c.expect(rig.list_tasks("s-r7", "t5", [rk_item("new", "Пересекается", 0, ["src/a.js"])], "Пересекается"), "a work on the same file is listed: ${rk_dbg(rig)}")
+    rig.press("s-r7", "Пересекается", "start")
+    ro st4 = rk_state(rig)
+    c.expect(rk_card_state(st4, "Пересекается") == "overlap", "an overlap with the running subtask 1 is asked about: ${rk_card_state(st4, "Пересекается")}")
+    rig.press("s-r7", "Пересекается", "wait")
+    rig.run(300)
+    ro st5 = rk_state(rig)
+    c.expect(rk_sub_state(st5, 2) == "waits" && rk_number(rk_sub(st5, 2), "waits_for") == 1, "the subtask waits for subtask 1: ${rk_sub_state(st5, 2)}")
+    c.expect(rk_number(st5, "active") == 2, "two are in work")
+    // the one it waits for is done: it starts by itself
+    rig.page(1, "route_subtask_done", "s-r7", "{\"n\":1}")
+    rig.run(3500)
+    c.expect(rk_sub_state(rk_state(rig), 2) != "waits", "the waiting subtask starts when subtask 1 is done: ${rk_sub_state(rk_state(rig), 2)}")
+
+    // the limit: two are in work; a third needs the word "сверх"
+    c.expect(rig.list_tasks("s-r7", "t6", [rk_item("new", "Сверх лимита", 0, ["e.txt"])], "Сверх лимита"), "a work over the limit is listed: ${rk_dbg(rig)}")
+    rig.press("s-r7", "Сверх лимита", "start")
+    c.expect(rk_card_state(rk_state(rig), "Сверх лимита") == "limit", "the limit is reached: the card asks")
+    rig.page(1, "user_message", "s-r7", "{\"turn\":\"t7\",\"text\":\"сверх\"}")
+    rig.run(2500)
+    ro st6 = rk_state(rig)
+    c.expect(rk_array(rk_task(st6), "subtasks").len() == 4 && rk_sub_state(st6, 3) != "waits", "the word starts the work over the limit")
+    c.expect(rk_users_with(rig.lines_for(1), "сверх") == 0, "the word is not sent to the agent")
+    // the queue: the next one waits for a free place and starts by itself
+    c.expect(rig.list_tasks("s-r7", "t8", [rk_item("new", "В очередь", 0, ["f.txt"])], "В очередь"), "one more work is listed: ${rk_dbg(rig)}")
+    rig.press("s-r7", "В очередь", "start")
+    rig.press("s-r7", "В очередь", "queue")
+    rig.run(300)
+    c.expect(rk_sub_state(rk_state(rig), 4) == "waits", "the work waits in the queue")
+    rig.page(1, "route_subtask_done", "s-r7", "{\"n\":2}")
+    rig.page(1, "route_subtask_done", "s-r7", "{\"n\":3}")
+    rig.run(3500)
+    c.expect(rk_sub_state(rk_state(rig), 4) != "waits", "a place is free: the queue starts the work: ${rk_sub_state(rk_state(rig), 4)}")
+
+    // a work that extends a task is added to its file
+    c.expect(rig.list_tasks("s-r7", "t9", [rk_item("extend", "Дополнение к А", 1, ["src/a.js"])], "Дополнение к А"), "a work that extends subtask 1 is listed")
+    rig.press("s-r7", "Дополнение к А", "extend")
+    rig.run(500)
+    ro file = rk_text("${dir}/message.1.md")
+    c.expect(file.contains("## Дополнение") && file.contains("сделать: Дополнение к А"), "the summary is appended to message.1.md with the date")
+    c.expect(rk_array(rk_task(rk_state(rig)), "subtasks").len() == 5, "no new subtask was made for it")
+    rig.shut()
+    c.report()
+}

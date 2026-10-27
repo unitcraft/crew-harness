@@ -104,7 +104,10 @@ async function prompt(id, params) {
     hinted = true;
     text = text.slice(text.indexOf("\n\n") + 2);
   }
-  const word = text.split(" ")[0];
+  // the notes of the hub ("[crew] ..." paragraphs) come before the words of the owner: the command word is the first word after them
+  let plain = text;
+  while (plain.startsWith("[crew]") && plain.includes("\n\n")) plain = plain.slice(plain.indexOf("\n\n") + 2);
+  const word = plain.split(" ")[0];
   // the modes of work (task 192q): the hub asks to resolve conflicts (the files are resolved here, in the folder of the process) and to run the tests
   if (text.includes("Разреши конфликты")) {
     const files = execFileSync("git", ["diff", "--name-only", "--diff-filter=U"], { encoding: "utf8" }).split("\n").filter(Boolean);
@@ -197,6 +200,34 @@ async function prompt(id, params) {
       const told = answer && answer.result ? JSON.stringify(answer.result) : "no-answer";
       chunk("ask: " + told);
       return respond(id, { stopReason: answer && answer.result && answer.result.action === "cancel" ? "cancelled" : "end_turn" });
+    }
+    case "tasklist":
+    case "tasktool": {
+      // task 192.2: calls crew_task_list / crew_task of the MCP server of the hub with the JSON after the word
+      if (mcpServers.length === 0) {
+        chunk(word + ": no-server");
+        return respond(id, { stopReason: "end_turn" });
+      }
+      const server = mcpServers[0];
+      const headers = { "content-type": "application/json", accept: "application/json, text/event-stream" };
+      for (const h of server.headers || []) headers[h.name] = h.value;
+      const post = async (body) => {
+        const res = await fetch(server.url, { method: "POST", headers, body: JSON.stringify(body) });
+        const t = await res.text();
+        return { status: res.status, body: t ? JSON.parse(t) : null };
+      };
+      try {
+        await post({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-03-26", capabilities: {}, clientInfo: { name: "fake-agent", version: "0" } } });
+        const tools = await post({ jsonrpc: "2.0", id: 2, method: "tools/list" });
+        const names = ((tools.body && tools.body.result && tools.body.result.tools) || []).map((t) => t.name).join(",");
+        const args = JSON.parse(plain.slice(plain.indexOf(" ") + 1));
+        const called = await post({ jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: word === "tasklist" ? "crew_task_list" : "crew_task", arguments: args } });
+        const content = called.body && called.body.result && called.body.result.content;
+        chunk(word + ": " + names + " | " + (content && content[0] ? content[0].text : JSON.stringify(called.body)));
+      } catch (e) {
+        chunk(word + ": error " + (e && e.message));
+      }
+      return respond(id, { stopReason: "end_turn" });
     }
     case "askmcp": {
       if (mcpServers.length === 0) {

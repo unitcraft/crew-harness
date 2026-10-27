@@ -7,13 +7,30 @@ import std.fs.{Fs, real_fs, remove_dir_all}
 import std.os.{Os, real_os, temp_dir, pid}
 
 // The settings of a hub that works in `workdir` (the folder of the session) and reads the modes from `doc/routes` of this repository; the reviewer is the second fake agent.
+// The agents of the kit; `opencode` takes an HTTP MCP server (`--ask` of the fake agent), so that it can call the tools of the recognition of the tasks (task 192.2).
+fn rk_agents(agents []AgentSpec) -> []AgentSpec {
+    mut out = []AgentSpec.new()
+    for a in agents {
+        if a.id == "opencode" {
+            mut args = []str.new()
+            for word in a.args { args.push(word) }
+            args.push("--ask")
+            out.push(AgentSpec { id: a.id, label: a.label, program: a.program, args, ask: a.ask })
+        } else {
+            out.push(a)
+        }
+    }
+    out
+}
+
 fn rk_settings(name str, workdir str) -> ServerSettings {
     ro base = kit_files(name, 30000)
     ServerSettings {
-        port: base.port, data_dir: base.data_dir, store: base.store, pg: base.pg, agents: base.agents, idle_term_ms: 30000, workdir,
+        port: base.port, data_dir: base.data_dir, store: base.store, pg: base.pg, agents: rk_agents(base.agents), idle_term_ms: 30000, workdir,
         web_dir: base.web_dir, hub_program: "", hub_args: []str.new(), acp_trace: false, ask_form: base.ask_form, ask_timeout_ms: base.ask_timeout_ms, max_image_bytes: base.max_image_bytes, stt_url: base.stt_url, stt_language: base.stt_language,
         routes_dir: "${kit_repo_root().display()}/doc/routes", route_reviewer_order: ["second"], route_task_limit: 12, route_task_messages: 40,
-        route_fix_attempts: 2, route_worktree_ask: true, route_overlap_seconds: 30, route_keep_days: 30
+        route_fix_attempts: 2, route_worktree_ask: true, route_overlap_seconds: 30, route_keep_days: 30,
+        route_confirm_word: "задача", route_over_limit_word: "сверх", route_max_active: 3, route_tool: true, route_auto_propose: false
     }
 }
 
@@ -82,6 +99,95 @@ fn rk_text(path str) -> str => read_file(path) ?? ""
 
 fn rk_boxes_done(path str) -> int => parse_progress(rk_text(path)).done
 
+// ----- task 192.2: the tasks are recognised by the agent and started by the owner -----
+
+fn rk_item(kind str, title str, extends int, touches []str) -> JsonValue {
+    mut item = JsonObject.new()
+    jput(item, "kind", JsonValue.str(kind))
+    jput(item, "title", JsonValue.str(title))
+    jput(item, "summary", JsonValue.str("сделать: ${title}"))
+    jput(item, "extends", JsonValue.int(extends))
+    mut files = []JsonValue.new()
+    for f in touches { files.push(JsonValue.str(f)) }
+    jput(item, "touches", JsonValue.array(files))
+    JsonValue.object(item)
+}
+
+/// The page message that makes the fake agent call `crew_task_list` with the items.
+fn rk_tasklist_page(turn str, items []JsonValue) -> str {
+    mut list = JsonObject.new()
+    jput(list, "tasks", JsonValue.array(items))
+    mut o = JsonObject.new()
+    jput(o, "turn", JsonValue.str(turn))
+    jput(o, "text", JsonValue.str("tasklist ${JsonValue.object(list).to_str()}"))
+    JsonValue.object(o).to_str()
+}
+
+/// The page message that makes the fake agent call `crew_task` with one item.
+fn rk_tasktool_page(turn str, item JsonValue) -> str {
+    mut o = JsonObject.new()
+    jput(o, "turn", JsonValue.str(turn))
+    jput(o, "text", JsonValue.str("tasktool ${item.to_str()}"))
+    JsonValue.object(o).to_str()
+}
+
+fn rk_cards(st JsonObject) -> []JsonValue => rk_array(st, "proposals")
+
+/// The id of the card with this title, 0 - none.
+fn rk_card_id(st JsonObject, title str) -> int {
+    for p in rk_cards(st) {
+        ro o = p.object() ?? JsonObject.new()
+        if jtext(o, "title") == title { return (o.get("id") ?? JsonValue.null()).int() ?? 0 }
+    }
+    0
+}
+
+fn rk_card_state(st JsonObject, title str) -> str {
+    for p in rk_cards(st) {
+        ro o = p.object() ?? JsonObject.new()
+        if jtext(o, "title") == title { return jtext(o, "state") }
+    }
+    "none"
+}
+
+fn rk_number(o JsonObject, key str) -> int => (o.get(key) ?? JsonValue.null()).int() ?? 0
+
+/// The agent lists the works (a turn of the fake agent) and the card is shown: true when the card of the first title is there.
+fn Rig mut @list_tasks(session str, turn str, items []JsonValue, first_title str) Proc Detach Time -> bool {
+    // a service turn of the hub (the decision of the owner) may still be open: the message of the owner is then ignored, so it is sent again
+    mut attempt = 0
+    while attempt < 3 {
+        @run(1500)
+        @page(1, "user_message", session, rk_tasklist_page("${turn}-${attempt}", items))
+        if @until(KIT_DONE, 20000) {
+            @run(300)
+            if rk_card_id(rk_last(@all_lines_for(1), "route_state"), first_title) > 0 { return true }
+        }
+        attempt += 1
+    }
+    false
+}
+
+/// The owner presses a button of the card with this title.
+fn Rig mut @press(session str, title str, action str) Proc Detach Time -> () {
+    ro id = rk_card_id(rk_last(@all_lines_for(1), "route_state"), title)
+    @page(1, "route_prop", session, "{\"id\":${id},\"action\":\"${action}\"}")
+    @run(300)
+}
+
+/// A task as the owner makes it: the agent lists one work, the owner presses "В работу", the service turn of the decision ends. true when the task is there.
+fn Rig mut @seed_task(session str, turn str, title str, touches []str) Proc Detach Time -> bool {
+    if !@list_tasks(session, turn, [rk_item("new", title, 0, touches)], title) { return false }
+    @press(session, title, "start")
+    mut waited = 0
+    while waited < 30000 && rk_task_is_null(rk_last(@all_lines_for(1), "route_state")) {
+        @run(200)
+        waited += 200
+    }
+    @run(2500)
+    !rk_task_is_null(rk_last(@all_lines_for(1), "route_state"))
+}
+
 /// The mode "Fast task" in a plain folder: the task in the data folder, the instruction in front of the message, a message that extends the subtask, the run of the steps with the review
 /// of another family, the checklist, the restart.
 export fn scenario_route_fast(settings ServerSettings) Proc Detach Time Net Fs Os -> str {
@@ -98,7 +204,8 @@ export fn scenario_route_fast(settings ServerSettings) Proc Detach Time Net Fs O
     rig.page(1, "user_message", "s-r1", "{\"turn\":\"t0\",\"text\":\"привет\"}")
     c.expect(rig.until(KIT_DONE, 15000), "interactive: the turn ends")
     ro lines0 = rig.lines_for(1)
-    c.expect(answer_of(lines0, line_input(first_of(lines0, "user_message", 0), "turn")) == "Echo: привет", "interactive: the agent gets the message as it is")
+    ro echo0 = answer_of(lines0, line_input(first_of(lines0, "user_message", 0), "turn"))
+    c.expect(echo0.ends_with("привет") && echo0.contains("Режим «Интерактивный»"), "interactive: the agent gets the instruction of the mode and the message: ${echo0}")
     rig.run(300)
     c.expect(rk_task_is_null(rk_last(rig.all_lines_for(1), "route_state")), "interactive in a plain folder: no task")
 
@@ -271,8 +378,13 @@ export fn scenario_route_tree(settings ServerSettings) Proc Detach Time Net Fs O
     rig.attach(1)
     rig.page(1, "session_created", "s-r3", "{\"name\":\"Дерево\",\"agent\":\"opencode\"}")
     c.expect(rig.until("\"kind\":\"session_created\"", 5000), "the session is shown")
-    rig.page(1, "user_message", "s-r3", "{\"turn\":\"t1\",\"text\":\"pwd\"}")
-    c.expect(rig.until(KIT_DONE, 20000), "the first message is answered")
+    rig.page(1, "user_message", "s-r3", "{\"turn\":\"t0\",\"text\":\"привет\"}")
+    c.expect(rig.until(KIT_DONE, 20000), "a talk is answered")
+    rig.run(300)
+    c.expect(rk_task_is_null(rk_last(rig.all_lines_for(1), "route_state")), "a talk in a repository makes no task, no tree and no file (task 192.2)")
+    c.expect(rig.seed_task("s-r3", "t1", "Дерево", ["a.txt"]), "the agent lists a work, the owner starts it: the task is there")
+    rig.page(1, "user_message", "s-r3", "{\"turn\":\"t1p\",\"text\":\"pwd\"}")
+    c.expect(rig.until(KIT_DONE, 20000), "the message in the task is answered")
     rig.run(300)
     ro st = rk_last(rig.all_lines_for(1), "route_state")
     ro task = rk_task(st)
@@ -287,7 +399,7 @@ export fn scenario_route_tree(settings ServerSettings) Proc Detach Time Net Fs O
     c.expect(jtext(task, "state") == "active", "the task is active")
     c.expect(!((task.get("finish") ?? JsonValue.null()).bool() ?? false), "a tree with no work is not offered to finish (task 192)")
     ro lines = rig.lines_for(1)
-    ro answer = answer_of(lines, line_input(first_of(lines, "user_message", 0), "turn")).replace("\\", "/")
+    ro answer = answer_of(lines, rk_last_turn(lines)).replace("\\", "/")
     c.expect(answer.contains("/worktrees/repo-${id}"), "the agent works in the tree: ${answer}")
     c.expect(rk_git(settings.workdir, ["diff", "--quiet"]) && git_run(settings.workdir, ["status", "--porcelain"]).text.byte_len() == 0, "the repository is clean")
 
@@ -299,9 +411,7 @@ export fn scenario_route_tree(settings ServerSettings) Proc Detach Time Net Fs O
     c.expect(!dir_there(tree), "its empty tree is removed")
 
     // a new task with work in its tree: it is not dropped and not parked, the owner is told to finish it
-    rig.page(1, "user_message", "s-r3", "{\"turn\":\"t2\",\"text\":\"вторая работа\"}")
-    c.expect(rig.until(KIT_DONE, 20000), "the second task is answered")
-    rig.run(300)
+    c.expect(rig.seed_task("s-r3", "t2", "Вторая работа", ["b.txt"]), "the second task is started")
     ro st3 = rk_last(rig.all_lines_for(1), "route_state")
     ro id2 = jtext(rk_task(st3), "id")
     ro tree2 = jtext(rk_task(st3), "worktree")
@@ -417,11 +527,9 @@ export fn scenario_route_publish(settings ServerSettings) Proc Detach Time Net F
     rig.attach(1)
     rig.page(1, "session_created", "s-r4", "{\"name\":\"Публикация\",\"agent\":\"opencode\"}")
     c.expect(rig.until("\"kind\":\"session_created\"", 5000), "the session is shown")
-    rig.page(1, "user_message", "s-r4", "{\"turn\":\"t1\",\"text\":\"общая работа\"}")
-    c.expect(rig.until(KIT_DONE, 20000), "the first message is answered")
-    rig.page(1, "route_subtask_new", "s-r4", "{}")
-    rig.page(1, "user_message", "s-r4", "{\"turn\":\"t2\",\"text\":\"вторая часть\"}")
-    c.expect(rig.until(KIT_DONE, 20000), "the second message is answered")
+    c.expect(rig.seed_task("s-r4", "t1", "Общая работа", ["a.txt"]), "the first work is started")
+    // the second work touches other files: no overlap, so it goes on in a tree of its own at once (task 192.2)
+    c.expect(rig.seed_task("s-r4", "t2", "Вторая часть", ["b.txt"]), "the second work is started")
     rig.page(1, "route_subtask_worktree", "s-r4", "{\"n\":2}")
     rig.run(1500)
     ro st = rk_last(rig.all_lines_for(1), "route_state")
@@ -563,9 +671,7 @@ export fn scenario_route_notree(settings ServerSettings) Proc Detach Time Net Fs
     rig.page(1, "session_worktree", "s-r6", "{\"on\":true}")
     rig.run(300)
     c.expect((rk_last(rig.all_lines_for(1), "route_state").get("use_tree") ?? JsonValue.null()).bool() ?? false, "the switch is on")
-    rig.page(1, "user_message", "s-r6", "{\"turn\":\"t2\",\"text\":\"pwd\"}")
-    c.expect(rig.until(KIT_DONE, 20000), "the second message is answered")
-    rig.run(300)
+    c.expect(rig.seed_task("s-r6", "t2", "С деревом", ["a.txt"]), "the owner starts a work: the task is there")
     ro st = rk_last(rig.all_lines_for(1), "route_state")
     c.expect(jtext(rk_task(st), "worktree").byte_len() > 0, "the task has a tree now")
     // with a tree the switch cannot be turned off

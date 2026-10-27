@@ -1,7 +1,7 @@
 // routes_live_test.nv - the modes of work over a hub with the fake ACP agent (task 192q): the scenarios `scenario_route_*` of crew_harness.server/routes_kit.nv.
 module crew_harness.server_route_live
 
-import crew_harness.server.{kit_routes, kit_routes_git, kit_routes_remote, scenario_route_fast, scenario_route_nosteps, scenario_route_tree, scenario_route_publish, scenario_route_planning, scenario_route_notree}
+import crew_harness.server.{kit_routes, kit_routes_git, kit_routes_remote, scenario_route_fast, scenario_route_nosteps, scenario_route_tree, scenario_route_publish, scenario_route_planning, scenario_route_notree, kit_routes_recognize, scenario_route_recognize}
 
 fn route_clean(report str) -> () {
     if report.byte_len() > 0 { panic("NOT AS IT MUST BE: ${report}") }
@@ -30,4 +30,8 @@ test "files: the mode Planning: a numbered task without a tree, the steps, the f
 
 test "files: a session without Worktree works in the folder of the project, the switch gives the next task a tree" {
     route_clean(scenario_route_notree(kit_routes_git("route-notree")))
+}
+
+test "files: the recognition of the tasks: the list of the agent, the quick answer, the code words, the overlap, the limit, the queue, forget, extend" {
+    route_clean(scenario_route_recognize(kit_routes_recognize("route-recognize")))
 }
