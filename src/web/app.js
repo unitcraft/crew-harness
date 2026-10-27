@@ -83,6 +83,23 @@ async function loadProjects() {
   render();
 }
 
+// Задача 192.6: сессия, созданная первым сообщением, должна появиться; если сервер молчит — красная строка, а сообщение возвращается в поле нового черновика
+const CREATE_WAIT_MS = 10000;
+function watchCreated(trace, draft, text) {
+  timers.set(() => {
+    if (model.sessions[trace]) return;
+    flash(t('chat.create_timeout', { n: CREATE_WAIT_MS / 1000 }));
+    const id = newId();
+    model = addDraft(dropDrafts(model), { id, agent: draft.agent, projectId: draft.projectId || '', project: draft.project || '', folder: draft.folder || '', branch: draft.branch || '', now: Date.now() });
+    model = patchDraft(model, id, { route: draft.route, worktree: draft.worktree });
+    ui.awaiting = null;
+    ui.selected = id;
+    ui.pane = 'chat';
+    render();
+    if (view && view.putText) view.putText(id, text);
+  }, CREATE_WAIT_MS);
+}
+
 function draw() {
   if (!queued) return;
   queued = false;
@@ -252,7 +269,9 @@ const handlers = {
     const draft = model.sessions[trace];
     if (draft && draft.draft) {
       // первое сообщение черновика: сначала создаётся сессия (проект, папка, агент), потом уходит сообщение
-      const input = { name: nameFromText(text) || t('sessions.new_name_placeholder'), agent: draft.agent, route: normalizeRoute(draft.route), worktree: draft.worktree !== false };
+      const folderInfo = (((ui.projects || []).find((p) => p.id === draft.projectId) || { folders: [] }).folders).find((f) => f.path === draft.folder);
+      const treeOk = !(folderInfo && folderInfo.repo === false); // папка не git: сессия создаётся без дерева
+      const input = { name: nameFromText(text) || t('sessions.new_name_placeholder'), agent: draft.agent, route: normalizeRoute(draft.route), worktree: draft.worktree !== false && treeOk };
       if (draft.projectId) {
         input.project = draft.project;
         input.project_id = draft.projectId;
@@ -266,6 +285,7 @@ const handlers = {
         return false;
       }
       ui.awaiting = trace;
+      watchCreated(trace, draft, text);
     }
     if (images.length === 0) return send('user_message', trace, nextStep(model, trace), { turn: newId(), text });
     return uploadImages(trace, images, postImage).then((up) => {

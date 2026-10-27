@@ -121,6 +121,8 @@ export function envKeys(text) {
 export function makeFolder(raw) {
   const folder = { path: normalizePath(raw && raw.path), worktree: Boolean(raw && raw.worktree) };
   if (raw && typeof raw.branch === 'string' && raw.branch.trim() !== '') folder.branch = raw.branch.trim();
+  // задача 192.6: сервер говорит, что папка не git-репозиторий (repo=false); иного ответа нет (старый сервер, заглушка) — считаем, что репозиторий
+  if (raw && raw.repo === false) folder.repo = false;
   return folder;
 }
 

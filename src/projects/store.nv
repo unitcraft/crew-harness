@@ -178,11 +178,14 @@ export fn project_from_json(o JsonObject, id str) -> Result[Project, str] {
     Ok(Project { id, name, folders, env, worktrees_dir })
 }
 
-fn folder_json(f Folder) -> JsonValue {
+fn folder_json(f Folder) -> JsonValue => folder_row(f, false)
+
+fn folder_row(f Folder, with_repo bool) -> JsonValue {
     mut o = JsonObject.new()
     jput(o, "path", JsonValue.str(f.path))
     if f.branch.byte_len() > 0 { jput(o, "branch", JsonValue.str(f.branch)) }
     jput(o, "worktree", JsonValue.bool(f.worktree))
+    if with_repo { jput(o, "repo", JsonValue.bool(git_state(f.path).is_repo)) }
     JsonValue.object(o)
 }
 
@@ -203,12 +206,19 @@ export fn project_json(p Project) -> JsonValue {
     JsonValue.object(o)
 }
 
+// Task 192.6: the folders of the list say whether they are inside a git repository (`repo`): the page does not offer "Worktree" for a folder that is not one.
+fn folders_summary_json(p Project) -> JsonValue {
+    mut rows = []JsonValue.new()
+    for f in p.folders { rows.push(folder_row(f, true)) }
+    JsonValue.array(rows)
+}
+
 /// The project for the list: the NAMES of the variables, never the values.
 export fn project_summary_json(p Project) -> JsonValue {
     mut o = JsonObject.new()
     jput(o, "id", JsonValue.str(p.id))
     jput(o, "name", JsonValue.str(p.name))
-    jput(o, "folders", folders_json(p))
+    jput(o, "folders", folders_summary_json(p))
     jput(o, "worktrees_dir", JsonValue.str(p.worktrees_dir))
     mut keys = []JsonValue.new()
     for k in dotenv_keys(p.env) { keys.push(JsonValue.str(k)) }

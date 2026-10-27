@@ -121,7 +121,7 @@ test('новая сессия: режим по умолчанию — Интер
   assert.equal(m.sessions.d1.worktree, true);
   m = patchDraft(m, 'd1', { route: 'planning', worktree: false });
   assert.deepEqual([m.sessions.d1.route, m.sessions.d1.worktree], ['planning', false]);
-  assert.match(app, /const input = \{ name: nameFromText\(text\)[^}]*route: normalizeRoute\(draft\.route\), worktree: draft\.worktree !== false \}/);
+  assert.match(app, /const input = \{ name: nameFromText\(text\)[^}]*route: normalizeRoute\(draft\.route\), worktree: draft\.worktree !== false && treeOk \}/);
   assert.match(app, /if \(model\.sessions\[trace\] && model\.sessions\[trace\]\.draft\) \{ model = patchDraft\(model, trace, \{ route: normalizeRoute\(route\) \}\)/);
   assert.match(app, /onDraftWorktree\(trace, on\) \{ model = patchDraft\(model, trace, \{ worktree: on === true \}\)/);
   assert.match(app, /onWorktree\(trace, on\) \{ send\(\.\.\.signal\(trace, routeSignal\.worktree\(on\)\)\); \}/);
@@ -177,4 +177,17 @@ test('задача 192.6: шапка чата — только название,
   assert.match(view, /sideKit\.menuFor\(headCtx\.session/);
   assert.match(view, /sideKit\.headButton\(headCtx\.session\)/);
   assert.match(css, /\.head-menu \.menu\.session-menu \{[^}]*max-width: calc\(100vw - 20px\)/);
+});
+
+test('задача 192.6: папка не git — Worktree недоступен и сессия уходит без дерева; сервер молчит — красная строка и текст возвращается в поле', () => {
+  const app = read('app.js');
+  assert.match(read('projects.js'), /if \(raw && raw\.repo === false\) folder\.repo = false/);
+  assert.match(view, /worktreeButton\.disabled = hasTree \|\| noRepo/);
+  assert.match(view, /noRepo \? t\('route\.worktree_not_repo'\)/);
+  assert.match(app, /worktree: draft\.worktree !== false && treeOk/);
+  assert.match(app, /watchCreated\(trace, draft, text\)/);
+  assert.match(app, /flash\(t\('chat\.create_timeout'/);
+  assert.match(app, /view\.putText\(id, text\)/);
+  assert.match(view, /putText\(trace, text\) \{\s*drafts\.set\(trace, text\);/);
+  assert.match(read('strings.js'), /Папка проекта не git-репозиторий: Worktree недоступен/);
 });

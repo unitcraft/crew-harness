@@ -378,6 +378,11 @@ export function createView(doc, refs, deps) {
     row.addEventListener('click', () => { if (currentTrace) handlers.onDraftProject(currentTrace, id); });
     return row;
   }
+  // папка черновика из списка проектов страницы (с признаком repo) или null
+  function draftFolderInfo(session) {
+    const project = (projectsList ?? []).find((p) => p.id === session.projectId);
+    return project ? project.folders.find((f) => f.path === session.folder) || null : null;
+  }
   function syncProjectPicker(session) {
     const list = projectsList ?? [];
     const project = list.find((p) => p.id === session.projectId);
@@ -1509,10 +1514,14 @@ export function createView(doc, refs, deps) {
     worktreeButton.hidden = false;
     worktreeButton.dataset.draft = String(Boolean(session.draft));
     worktreeButton.setAttribute('aria-pressed', String(treeOn || hasTree));
-    worktreeButton.disabled = hasTree;
-    worktreeButton.title = hasTree ? t('route.worktree_locked') : (treeOn ? t('route.worktree_on') : t('route.worktree_off'));
+    // задача 192.6: папка проекта не git-репозиторий — дерево сделать нельзя, переключатель выключен и недоступен
+    const draftFolder0 = session.draft ? draftFolderInfo(session) : null;
+    const noRepo = Boolean(draftFolder0) && draftFolder0.repo === false;
+    worktreeButton.setAttribute('aria-pressed', String((treeOn && !noRepo) || hasTree));
+    worktreeButton.disabled = hasTree || noRepo;
+    worktreeButton.title = noRepo ? t('route.worktree_not_repo') : hasTree ? t('route.worktree_locked') : (treeOn ? t('route.worktree_on') : t('route.worktree_off'));
     routeButton.title = `${t('route.label')}: ${routeDescription(currentRoute)}`;
-    const where = whereText(session);
+    const where = session.draft && noRepo ? t('where.draft_folder') : whereText(session);
     whereNote.hidden = !where;
     whereNote.textContent = where;
     whereNote.title = where;
@@ -2122,6 +2131,11 @@ export function createView(doc, refs, deps) {
   let formSig = '';
   return {
     tick,
+    /** Вернуть текст в поле ввода сессии (черновик не создался: сообщение не теряется). */
+    putText(trace, text) {
+      drafts.set(trace, text);
+      if (currentTrace === trace) { input.value = text; fitInput(); }
+    },
     /** ui: { selected, projects, pane, flash, theme, pins }; status: { state, seconds? } */
     render(model, ui, status) {
       const session = ui.selected ? model.sessions[ui.selected] : undefined;

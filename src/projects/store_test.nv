@@ -313,3 +313,8 @@ test "projects: the folder of the trees (task 192.5) is empty, a name, or an abs
         Err(f) => assert(f.status == 400)
     }
 }
+
+test "projects: the list says whether a folder is a git repository (task 192.6)" {
+    ro text = projects_list_json([Project { id: "aaaaaa", name: "x", folders: [Folder { path: "/definitely/not/there/at/all", branch: "", worktree: false }], env: "", worktrees_dir: "" }])
+    assert(text.contains("\"repo\":false"))
+}

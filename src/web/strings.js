@@ -414,6 +414,8 @@ export const S = Object.freeze({
   'route.worktree': 'Worktree',
   'route.worktree_on': 'Worktree включён: для задачи создаётся дерево и ветка',
   'route.worktree_off': 'Worktree выключен: работаем в папке проекта на текущей ветке, без дерева',
+  'route.worktree_not_repo': 'Папка проекта не git-репозиторий: Worktree недоступен, работа пойдёт прямо в папке',
+  'chat.create_timeout': 'Сервер не подтвердил создание сессии за {n} с. Сообщение оставлено в поле ввода: отправьте его ещё раз.',
   'route.worktree_locked': 'У задачи уже есть дерево',
   'route.sub_none': 'Подзадач пока нет',
   'chat.to_bottom': 'Вниз',
