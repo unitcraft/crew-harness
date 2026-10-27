@@ -47,6 +47,13 @@
     ни один не пуст и «нет:» в них — с причиной (message-section), в разделе слов владельца есть дата ГГГГ-ММ-ДД в заголовке или
     теле, если раздел не «нет: …» (message-owner). Малая форма (малый маршрут, задача 191; признак — вторая строка «T: …»):
     три непустые строки — заголовок, «T: <оценка>» непустая, слова владельца с датой ГГГГ-ММ-ДД (message-small, message-owner).
+    дети задачи (ADR-0014; владелец, 2026-10-27): если первая непустая строка task/message.md — «Эпик: NNN» или «Родитель: NNN» (номер голый,
+    без ссылки и пояснений), в doc/tasks есть папка этого номера (parent-missing), а если у неё есть task/children.md — в таблице есть
+    строка этого ребёнка (children-row); сам task/children.md — таблица по форме хаба: шапка «Номер, Тип, Название, Папка, Ветка,
+    Сессия, Состояние, Затрагивает», строки из восьми ячеек, номер — три цифры и больше, тип — «подзадача», «задача эпика» или «задача»,
+    состояние — «идёт», «ждёт K», «ждёт очереди», «готово» или «слита» (children-table). Старые задачи без таких строк (в том числе дети
+    эпика 001 со ссылкой в строке «Эпик: …» не первой строкой) не судятся; родитель без children.md (прежний эпик с журналом) —
+    только проверка существования папки.
 Не проверяет: содержание документов, остальные файлы задач (result.md, profile.log, материалы
     task/), записи log.md без даты в начале строки, с датой раньше 2026-10-10 и вне индекса (в
     режимах дерева, коммита и CI добавленных строк нет), usage.log, вложенные папки задач, вторую строку plan.md (база ревизии); честность строки
@@ -145,6 +152,13 @@ NO_RESULT_LINE = re.compile(r"^[ \t]*(?:[-*][ \t]+)?«?нет: результа�
 LOG_STARTED = re.compile(r"^([0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}) ")
 # папка задачи с номером (задача 058): номер — цифры до первого дефиса
 TASK_FOLDER = re.compile(r"^(doc/tasks/([0-9]{3,})-[^/]+)/")
+# дети задачи (ADR-0014): первая строка task/message.md — «Эпик: NNN» или «Родитель: NNN», таблица детей родителя — task/children.md
+PARENT_LINE = re.compile(r"^(Эпик|Родитель):[ \t]*([0-9]{3,})[ \t]*$")
+CHILDREN_FILE = re.compile(r"^(doc/tasks/[^/]+)/task/children\.md$")
+CHILDREN_HEAD = ("Номер", "Тип", "Название", "Папка", "Ветка", "Сессия", "Состояние", "Затрагивает")
+CHILDREN_KINDS = ("подзадача", "задача эпика", "задача")
+CHILDREN_STATE = re.compile(r"^(идёт|готово|слита|ждёт очереди|ждёт [0-9]+)$")
+CHILDREN_RULE = "ADR-0014, doc/canon/process.md, «Дети задачи»"
 # образец задания task/message.md (слово владельца, 2026-10-17, чат оркестратора; задача 065): заголовок «# Задание: …», разделы второго
 # уровня по порядку, не пустые, «нет:» с причиной, дата в разделе слов владельца; судятся задачи, заведённые не раньше MESSAGE_FROM
 MESSAGE_FILE = re.compile(r"^(doc/tasks/[^/]+)/task/message\.md$")
@@ -614,12 +628,80 @@ def check_number_dup(source, changed, rep):
                     "переименуй одну из папок на свободный номер" % (number, " и ".join(names)))
 
 
+def children_cells(line):
+    pieces = [x.strip() for x in line.strip().split("|")]
+    return pieces[1:-1]
+
+
+def children_rows(text):
+    """Строки таблицы детей: (номер строки файла, ячейки); шапка и черта отброшены."""
+    rows = []
+    for number, line in enumerate(text_lines(text), 1):
+        if not line.strip().startswith("|"):
+            continue
+        cells = children_cells(line)
+        if tuple(cells) == CHILDREN_HEAD or (cells and all(set(c) <= set("-: ") for c in cells)):
+            continue
+        rows.append((number, cells))
+    return rows
+
+
+def check_children_table(path, text, rep):
+    """task/children.md: шапка, строки из восьми ячеек, номер, тип и состояние по списку (children-table)."""
+    lines = text_lines(text)
+    if not any(tuple(children_cells(line)) == CHILDREN_HEAD for line in lines if line.strip().startswith("|")):
+        rep.add(path, None, "children-table", "нет шапки таблицы «| %s |» (%s)" % (" | ".join(CHILDREN_HEAD), CHILDREN_RULE))
+        return
+    for number, cells in children_rows(text):
+        if len(cells) != len(CHILDREN_HEAD):
+            rep.add(path, number, "children-table", "в строке %d ячеек, нужно %d (%s)" % (len(cells), len(CHILDREN_HEAD), CHILDREN_RULE))
+        elif not re.match(r"^[0-9]{3,}$", cells[0]):
+            rep.add(path, number, "children-table", "номер «%s» — не три цифры и больше (%s)" % (cells[0], CHILDREN_RULE))
+        elif cells[1] not in CHILDREN_KINDS:
+            rep.add(path, number, "children-table", "тип «%s» не из списка: %s (%s)" % (cells[1], ", ".join(CHILDREN_KINDS), CHILDREN_RULE))
+        elif not CHILDREN_STATE.match(cells[6]):
+            rep.add(path, number, "children-table", "состояние «%s» не из списка: идёт, ждёт K, ждёт очереди, готово, слита (%s)" % (cells[6], CHILDREN_RULE))
+
+
+def check_parent_line(path, text, source, by_path, rep):
+    """Первая строка task/message.md «Эпик: NNN» или «Родитель: NNN»: папка родителя есть, а если у неё есть task/children.md — в таблице есть этот ребёнок."""
+    first = next((line.strip() for line in text_lines(text) if line.strip()), "")
+    m = PARENT_LINE.match(first)
+    if not m:
+        return
+    parent_no = int(m.group(2))
+    own = TASK_FOLDER.match(path.rsplit("/task/message.md", 1)[0] + "/")
+    folders = set()
+    for e in source.entries():
+        f = TASK_FOLDER.match(e.path)
+        if f and int(f.group(2)) == parent_no:
+            folders.add(f.group(1))
+    if not folders:
+        rep.add(path, 1, "parent-missing", "строка «%s: %s»: в doc/tasks нет папки задачи %s (%s)" % (m.group(1), m.group(2), m.group(2), CHILDREN_RULE))
+        return
+    for folder in sorted(folders):
+        table = by_path.get(folder + "/task/children.md")
+        data = source.read(table) if table is not None and table.mode != "160000" else None
+        if data is None:
+            continue
+        numbers = [cells[0] for _, cells in children_rows(data.decode("utf-8", "replace")) if cells]
+        if own and not any(n.isdigit() and int(n) == int(own.group(2)) for n in numbers):
+            rep.add(path, 1, "children-row", "в %s/task/children.md нет строки ребёнка %s: хаб пишет её при создании, руками — «| %s | подзадача | … |» (%s)" % (folder, own.group(2), own.group(2), CHILDREN_RULE))
+
+
 def judge(source, args, rep):
     count = 0
     check_number_dup(source, [e.path for e in source.changed()], rep)
     by_path = None
     started = {}
     for entry in source.changed():
+        cm = CHILDREN_FILE.match(entry.path)
+        if cm and entry.mode != "160000":
+            data = source.read(entry)
+            if data is not None:
+                count += 1
+                check_children_table(entry.path, data.decode("utf-8", "replace"), rep)
+            continue
         mm = MESSAGE_FILE.match(entry.path)
         if mm and entry.mode != "160000":
             if by_path is None:
@@ -629,6 +711,9 @@ def judge(source, args, rep):
             if data is not None:
                 count += 1
                 check_message(entry.path, data.decode("utf-8", "replace"), rep)
+            whole = source.read(entry)
+            if whole is not None:
+                check_parent_line(entry.path, whole.decode("utf-8", "replace"), source, by_path, rep)
             continue
         if LOG_FILE.match(entry.path) and entry.mode != "160000":
             data = source.read(entry)

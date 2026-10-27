@@ -832,6 +832,64 @@ def main():
              mm_check({mm_msg: small_text.replace("2026-10-25, ", "")}, [(mm_msg, "message-owner")]))
     pr.probe("красная", "задание: малая форма — четвёртая непустая строка",
              mm_check({mm_msg: small_text + "лишняя строка\n"}, [(mm_msg, "message-small")]))
+    # ------------------------------------------------------------------------------------------------
+    # дети задачи (ADR-0014; владелец, 2026-10-27): первая строка task/message.md «Эпик: NNN» / «Родитель: NNN» и таблица task/children.md
+    # ------------------------------------------------------------------------------------------------
+    pk = "doc/tasks/070-parent/"
+    ck = "doc/tasks/071-070-parent-panel/"
+    ck_msg = ck + "task/message.md"
+    pk_table = pk + "task/children.md"
+    head = "| Номер | Тип | Название | Папка | Ветка | Сессия | Состояние | Затрагивает |\n|---|---|---|---|---|---|---|---|\n"
+    row = "| 071 | подзадача | Панель | [doc/tasks/071-070-parent-panel](../../071-070-parent-panel) | task/071-070-parent-panel | s-1 | идёт | a.txt, b.txt |\n"
+    table = "# Дети задачи 070\n\nТаблицу ведёт хаб.\n\n" + head + row
+    child_text = "Родитель: 070\n\n# Задание: Панель\n\nсделать\n"
+    pc_good = dict(good)
+    pc_good.update({pk + "task/message.md": "# Задание: Родитель\n", pk_table: table, ck_msg: child_text})
+
+    def pc_check(change, expect_red=None, drop=()):
+        def fn():
+            files = dict(pc_good)
+            files.update(change)
+            for name in drop:
+                files.pop(name, None)
+            proc = check(fresh(files))
+            if expect_red is None:
+                assert proc.returncode == 0 and "FAIL" not in proc.out, proc.out
+            else:
+                stlib.expect(proc, 1, "FAIL: check-task-docs: %d нарушений" % len(expect_red))
+                for where, rule in expect_red:
+                    assert stlib.has_line(proc, "FAIL %s: %s:" % (where, rule)), proc.out
+        return fn
+
+    def pc_real_messages():
+        # настоящие task/message.md репозитория: дети эпика 001 пишут «Эпик: [001-…](…)» не голым номером и новым правилом не судятся
+        proc = stlib.run(("git", "ls-files", "-z", "--", "doc/tasks/*/task/message.md", "doc/tasks/*/task/children.md"), cwd=stlib.REPO, env=env)
+        names = [x for x in proc.out.split("\0") if x]
+        assert any(n.endswith("/task/message.md") for n in names), "мишень: отслеживаемых task/message.md нет"
+        files = {}
+        for name in names:
+            with open(os.path.join(stlib.REPO, *name.split("/")), "rb") as handle:
+                files[name] = handle.read()
+        out = check(fresh(files))
+        assert "parent-missing" not in out.out and "children-row" not in out.out and "children-table" not in out.out, out.out
+
+    pr.probe("законное", "дети: «Родитель: 070» первой строкой, папка родителя и строка в его children.md есть", pc_check({}))
+    pr.probe("законное", "дети: «Эпик: 070» — то же, что «Родитель»", pc_check({ck_msg: child_text.replace("Родитель", "Эпик"), pk_table: table.replace("подзадача", "задача эпика")}))
+    pr.probe("законное", "дети: у родителя нет children.md (прежний эпик с журналом) — только папка родителя", pc_check({}, drop=(pk_table,)))
+    pr.probe("законное", "дети: прежняя строка «Эпик: [001-…](…)» не голым номером не судится", pc_check({ck_msg: "# Задание: Старая\n\nЭпик: [001-crew-service](../../001-crew-service/) (дочерняя)\n"}))
+    pr.probe("законное", "дети: строка «Родитель: 999» не первой — не судится", pc_check({ck_msg: "# Задание: Панель\n\nРодитель: 999\n"}))
+    pr.probe("законное", "дети: самостоятельная задача без строки родителя", pc_check({ck_msg: "# Задание: Сама\n\nсделать\n"}))
+    pr.probe("законное", "дети: таблица со статусами «ждёт 071», «ждёт очереди», «готово», «слита» и типом «задача»",
+             pc_check({pk_table: table + row.replace("071", "072").replace("идёт", "ждёт 071") + row.replace("071", "073").replace("идёт", "ждёт очереди") + row.replace("071", "074").replace("идёт", "готово").replace("подзадача", "задача") + row.replace("071", "075").replace("идёт", "слита")}))
+    pr.probe("законное", "дети: настоящие task/message.md репозитория не судятся новым правилом", pc_real_messages)
+    pr.probe("красная", "дети: «Родитель: 999» — в doc/tasks нет такой папки", pc_check({ck_msg: child_text.replace("070", "999")}, [(ck_msg + ":1", "parent-missing")]))
+    pr.probe("красная", "дети: у родителя есть children.md, строки этого ребёнка в нём нет",
+             pc_check({pk_table: table.replace(row, row.replace("071", "072"))}, [(ck_msg + ":1", "children-row")]))
+    pr.probe("красная", "дети: children.md без шапки таблицы", pc_check({pk_table: table.replace(head, "")}, [(pk_table, "children-table")]))
+    pr.probe("красная", "дети: строка таблицы из семи ячеек", pc_check({pk_table: table.replace(" | a.txt, b.txt |", " |")}, [(pk_table + ":7", "children-table")]))
+    pr.probe("красная", "дети: тип не из списка", pc_check({pk_table: table.replace("подзадача", "кусочек")}, [(pk_table + ":7", "children-table")]))
+    pr.probe("красная", "дети: состояние не из списка", pc_check({pk_table: table.replace("идёт", "в пути")}, [(pk_table + ":7", "children-table")]))
+    pr.probe("красная", "дети: номер из двух цифр", pc_check({pk_table: table.replace("| 071 |", "| 71 |")}, [(pk_table + ":7", "children-table")]))
     return pr.done()
 
 
