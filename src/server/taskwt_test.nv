@@ -756,3 +756,78 @@ test "taskwt publish: a temporary file left in the tree does not hold up the pub
     assert(!tw_exists(tree.path))
     tt_rm(w.root)
 }
+
+test "taskwt wip: a tree wip/<name> is cut from a fresh origin/main beside the main copy; the call is idempotent; bad names and a foreign folder are refused" {
+    ro w = tt_world("wip")
+    // somebody else pushes: the tree must be cut from the news of origin, not from the local main
+    ro other = tt_other(w)
+    tt_commit(other, "news.txt", "news\n", "news")
+    tg(other, ["push", "origin", "main"])
+    ro head0 = tg(w.main, ["rev-parse", "HEAD"])
+    ro tree = match wip_tree_create(w.main, "ab12") {
+        Ok(t) => t
+        Err(e) => panic("wip_tree_create: ${e}")
+    }
+    assert(tree.branch == "wip/ab12")
+    assert(tree.path == "${w.root}/worktrees/crew-harness-wip-ab12")
+    assert(tree.base == "origin/main" && tree.created)
+    assert(tw_exists("${tree.path}/news.txt"))
+    assert(tw_current_branch(tree.path) == "wip/ab12")
+    assert(tg(w.main, ["rev-parse", "HEAD"]) == head0 && tw_current_branch(w.main) == "main")
+    assert(tw_git(tree.path, ["config", "branch.wip/ab12.remote"]).code != 0)
+    ro again = match wip_tree_create(w.main, "ab12") {
+        Ok(t) => t
+        Err(e) => panic("again: ${e}")
+    }
+    assert(!again.created && again.path == tree.path)
+    match wip_tree_create(w.main, "bad name") {
+        Ok(t) => panic("a bad name was taken")
+        Err(e) => assert(e.contains("letters"))
+    }
+    match wip_tree_create("${w.root}/nowhere", "x") {
+        Ok(t) => panic("a folder that is not a repository was taken")
+        Err(e) => assert(e.contains("not a git repository"))
+    }
+    tt_rm(w.root)
+}
+
+test "taskwt wip: the branch of a tree is renamed to task/NNN-slug, the tree stays; a name that is taken, a wrong old name and a folder that is not a repository are refused" {
+    ro w = tt_world("rename")
+    ro tree = match wip_tree_create(w.main, "ab12") {
+        Ok(t) => t
+        Err(e) => panic("wip_tree_create: ${e}")
+    }
+    tt_commit(tree.path, "w.txt", "w\n", "work")
+    match branch_rename(tree.path, "wip/other", "task/001-x") {
+        Ok(d) => panic("a wrong old name was renamed")
+        Err(e) => assert(e.contains("not on wip/other"))
+    }
+    tg(w.main, ["branch", "task/002-taken"])
+    match branch_rename(tree.path, "wip/ab12", "task/002-taken") {
+        Ok(d) => panic("a taken name was overwritten")
+        Err(e) => assert(e.contains("there already"))
+    }
+    match branch_rename("${w.root}/nowhere", "a", "b") {
+        Ok(d) => panic("a folder that is not a repository was renamed")
+        Err(e) => assert(e.contains("not a git repository"))
+    }
+    match branch_rename(tree.path, "wip/ab12", "task/001-x") {
+        Ok(d) => ()
+        Err(e) => panic("rename: ${e}")
+    }
+    assert(tw_current_branch(tree.path) == "task/001-x")
+    assert(!tt_branch_exists(w.main, "wip/ab12") && tt_branch_exists(w.main, "task/001-x"))
+    assert(tw_exists("${tree.path}/w.txt"))
+    // the renamed branch publishes as any task branch, and the tree is taken away by its path
+    ro done = publish(tree.path, w.main, tt_green)
+    match done {
+        Published { sha, main_copy, cleanup } => {
+            assert(cleanup == "")
+            assert(!tw_exists(tree.path))
+            assert(!tt_branch_exists(w.main, "task/001-x"))
+        }
+        Blocked { reason, step, conflict_files } => panic("blocked at ${step}: ${reason}")
+    }
+    assert(tg(w.origin, ["show", "main:w.txt"]) == "w")
+    tt_rm(w.root)
+}

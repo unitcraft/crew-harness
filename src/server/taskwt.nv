@@ -351,19 +351,43 @@ export fn task_tree_create(repo str, nnn str, slug str) Proc Os Fs -> Result[Tas
     if !tw_is_repo(dir) { return Err("not a git repository") }
     if !tw_digits_ok(nnn) { return Err("the number of the task must be digits: ${nnn}") }
     if !tw_name_ok(slug) { return Err("the slug of the task may hold letters, digits, - and _: ${slug}") }
+    tw_tree_from_main(dir, "task/${nnn}-${slug}", "${nnn}-${slug}")
+}
+
+/// The tree of a work that is not a task yet (task 192.4): `git fetch origin` (a failure is a note, not an error), then `git worktree add --no-track -b wip/<name> <worktrees>/<repo>-wip-<name> <base>`,
+/// the base being the same as for a task (`origin/main`, else the local `main`, else the branch of the main copy). The files and the branch of the main copy are not touched. A tree that is there already is reused.
+/// The branch is renamed to `task/NNN-slug` by `branch_rename` when the owner takes the work "в работу".
+export fn wip_tree_create(repo str, name str) Proc Os Fs -> Result[TaskTree, str] {
+    ro dir = tw_norm(repo)
+    if !tw_is_repo(dir) { return Err("not a git repository") }
+    if !tw_name_ok(name) { return Err("the name of the work may hold letters, digits, - and _: ${name}") }
+    tw_tree_from_main(dir, "wip/${name}", "wip-${name}")
+}
+
+fn tw_tree_from_main(dir str, branch str, suffix str) Proc Os Fs -> Result[TaskTree, str] {
     mut note = ""
     if tw_has_origin(dir) {
         ro f = tw_git_net(dir, ["fetch", "origin"])
         if f.code != 0 { note = "fetch failed: ${tw_why(f)}" }
     }
     ro base = tw_base_ref(dir)
-    ro branch = "task/${nnn}-${slug}"
-    ro path = "${worktrees_dir(dir)}/${tw_base_name(dir)}-${nnn}-${slug}"
+    ro path = "${worktrees_dir(dir)}/${tw_base_name(dir)}-${suffix}"
     ro created = match tw_tree_ensure(dir, path, branch, base) {
         Ok(c) => c
         Err(e) => return Err(e)
     }
     Ok(TaskTree { branch, path, base, created, note })
+}
+
+/// Rename the branch that stands in the tree `tree`: `git branch -m <from> <to>` (the tree stays where it is, its head follows the new name). Refused when `to` is a branch already.
+export fn branch_rename(tree str, from str, to str) Proc Os Fs -> Result[(), str] {
+    ro dir = tw_norm(tree)
+    if !tw_is_repo(dir) { return Err("not a git repository") }
+    if tw_current_branch(dir) != from { return Err("the tree stands on '${tw_current_branch(dir)}', not on ${from}") }
+    if tw_ref_exists(dir, "refs/heads/${to}") { return Err("the branch ${to} is there already") }
+    ro r = tw_git(dir, ["branch", "-m", from, to])
+    if r.code != 0 { return Err("git branch -m failed: ${tw_why(r)}") }
+    Ok(())
 }
 
 /// Make the tree of a child task beside the tree of its parent: `nnn` and `slug` are the number and the slug of the CHILD (a number of its own, flat as in a tracker), branch

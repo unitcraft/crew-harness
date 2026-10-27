@@ -71,6 +71,23 @@ export fn tk_task_tree(main_copy str, number str, slug str) Proc -> TkTree {
     }
 }
 
+/// A tree for a work that is not a task yet (task 192.4): branch `wip/<name>`, the folder `<repo>-wip-<name>` next to the others, cut from a fresh `origin/main`.
+export fn tk_wip_tree(main_copy str, name str) Proc -> TkTree {
+    ro made = with Os = real_os(), Fs = real_fs() { wip_tree_create(main_copy, name) }
+    match made {
+        Ok(t) => { ok: true, branch: t.branch, worktree: t.path, base: t.base, text: t.note }
+        Err(e) => tk_failed(e)
+    }
+}
+
+/// Rename the branch of a tree (`wip/<name>` to `task/NNN-slug`); the tree stays.
+export fn tk_branch_rename(tree str, from str, to str) Proc -> ShellOut {
+    match with Os = real_os(), Fs = real_fs() { branch_rename(tree, from, to) } {
+        Ok(done) => { ok: true, text: "" }
+        Err(e) => { ok: false, text: e }
+    }
+}
+
 /// A tree for the subtask `n`: branch `<task branch>-s<n>` from the head of the task, the folder `<tree of the task>-s<n>`.
 export fn tk_subtask_tree(task_tree str, number str, slug str, n int) Proc -> TkTree {
     ro made = with Os = real_os(), Fs = real_fs() { subtask_tree_create(task_tree, number, slug, n) }
