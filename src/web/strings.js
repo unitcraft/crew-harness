@@ -535,7 +535,7 @@ export const S = Object.freeze({
   'crewtask.way_extend': 'Дополнить {n} · {title}',
   'crewtask.agent_label': 'Агент для сессии новой задачи',
   'crewtask.agent_same': 'тот же агент',
-  'crewtask.parent_of': 'Родитель: {name}',
+  'crewtask.parent_of': 'Эпик: {name}',
   'crewtask.kids_title': 'Дочерние задачи: слито {merged} из {total}',
   'crewtask.epic_mark': 'Эпик: у него есть дочерние задачи, каждая — отдельная сессия под этой',
   'crewtask.merge_all': 'Влить все дочерние',
