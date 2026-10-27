@@ -39,7 +39,9 @@ tls = { git = "https://github.com/nv-lang/nova-tls", version = "0.2" }
 # Version 0.7 (task 225, the tag v0.7.0, commit d816e37) is Alula 2.25: the time is the stamp of the event (`event.at`, the Russian name `событие.момент`), the former function of the time is an error and the only standard
 # external function is `new_id`; the functions `time_to_text` and `text_to_time`; the package reads only the format 2.25, the tables of `machines/` are moved to it.
 # Version 0.8 (task 230; 0.8.0 renamed the checks, 0.8.1, the tag v0.8.1, commit ae6c943, adds the explicit refusal of the old name `*.scenario.test.json`) renames the checks of the package: the file `*.alula.test.json`, the format `test/0`, the types `Test` and `TestRun`, the functions `parse_test`, `run_test` and so on; the format of the language stays 2.25.
-alula = { git = "https://github.com/nv-lang/nova-alula", version = "0.8.1" }
+# Version 0.9 (task 240; the tag v0.9.0, commit 6444780) is Alula 2.26: the built-in library `контракт` (the type `КодСбоя`, the data of the engine, the events `ответ`, `сбой`, `часть`, `срок`, the column `части`), the libraries
+# `libs/` beside a machine instead of the fragments, the reads of a state derived by the check, the sections `## Выход` and `## Требует`; the package reads only the format 2.26, the tables of `machines/` are moved to it by its script `tools/migrate-alula-226.py`.
+alula = { git = "https://github.com/nv-lang/nova-alula", version = "0.9.0" }
 
 [package]
 name = "crew_harness"
