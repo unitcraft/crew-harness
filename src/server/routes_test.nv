@@ -492,3 +492,37 @@ test "routes: a changed file that is not committed is work: the card to finish i
     ro work = jchild(rt_obj(route_view_text(rt, ["Постановка"], [parse_progress("- [ ] Постановка\n")], false, 0, task_extra_none())), "task") ?? JsonObject.new()
     assert((work.get("finish") ?? JsonValue.null()).bool() ?? false)
 }
+
+test "routes: wip - the journal says the tree of a work that is not a task, the agent works in it, the task opened on that tree takes it over, the page is told where the work goes" {
+    mut rt = route_session_new()
+    // no tree: the folder of the session, and the page is told the branch of the folder
+    rt.where_branch = "main"
+    ro none = rt_obj(route_view_text(rt, [], [], false, 0, task_extra_none()))
+    assert(jtext(jchild(none, "where") ?? JsonObject.new(), "kind") == "folder")
+    assert(jtext(jchild(none, "where") ?? JsonObject.new(), "branch") == "main")
+    assert(rt.agent_dir("/repo") == "/repo")
+    rt.apply("route_task", "{\"op\":\"wip\",\"branch\":\"wip/ab12\",\"worktree\":\"/w/r-wip-ab12\",\"base\":\"origin/main\"}")
+    assert(rt.wip_tree == "/w/r-wip-ab12" && rt.wip_branch == "wip/ab12" && rt.wip_base == "origin/main")
+    assert(rt.agent_dir("/repo") == "/w/r-wip-ab12")
+    rt.wip_unmerged = 2
+    ro wip = rt_obj(route_view_text(rt, [], [], false, 0, task_extra_none()))
+    ro where = jchild(wip, "where") ?? JsonObject.new()
+    assert(jtext(where, "kind") == "wip" && jtext(where, "branch") == "wip/ab12" && jtext(where, "worktree") == "/w/r-wip-ab12")
+    assert(((where.get("work") ?? JsonValue.null()).bool() ?? false) && ((where.get("unmerged_commits") ?? JsonValue.null()).int() ?? 0) == 2)
+    // the first work of the session is taken: the task opens on the same tree under the new branch, the wip fields are cleared
+    rt.apply("route_task", "{\"op\":\"open\",\"id\":\"001-x\",\"number\":\"001\",\"dir\":\"/w/r-wip-ab12/doc/tasks/001-x/task\",\"shown\":\"doc/tasks/001-x/task\",\"branch\":\"task/001-x\",\"worktree\":\"/w/r-wip-ab12\",\"base\":\"origin/main\",\"title\":\"X\",\"kind\":\"child\"}")
+    assert(rt.wip_tree == "" && rt.wip_branch == "" && rt.worktree == "/w/r-wip-ab12" && rt.branch == "task/001-x")
+    assert(rt.agent_dir("/repo") == "/w/r-wip-ab12")
+    ro task = rt_obj(route_view_text(rt, [], [], false, 0, task_extra_none()))
+    assert((task.get("where") ?? JsonValue.null()).is_null())
+    // a task that was opened without the wip tree does not touch a wip tree of another path
+    mut other = route_session_new()
+    other.apply("route_task", "{\"op\":\"wip\",\"branch\":\"wip/q\",\"worktree\":\"/w/q\",\"base\":\"main\"}")
+    other.apply("route_task", "{\"op\":\"open\",\"id\":\"002-y\",\"number\":\"002\",\"dir\":\"/d\",\"shown\":\"d\",\"branch\":\"task/002-y\",\"worktree\":\"/w/y\",\"title\":\"Y\"}")
+    assert(other.wip_tree == "/w/q")
+    // the owner drops the wip tree: the empty fields clear it, the agent goes back to the folder
+    mut dropped = route_session_new()
+    dropped.apply("route_task", "{\"op\":\"wip\",\"branch\":\"wip/z\",\"worktree\":\"/w/z\",\"base\":\"main\"}")
+    dropped.apply("route_task", "{\"op\":\"wip\",\"branch\":\"\",\"worktree\":\"\",\"base\":\"\"}")
+    assert(dropped.wip_tree == "" && dropped.agent_dir("/repo") == "/repo")
+}

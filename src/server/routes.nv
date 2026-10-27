@@ -403,7 +403,16 @@ export type RouteSession {
     epic bool,
     chain bool,
     tbl str,
-    epic_no str
+    epic_no str,
+    wip_branch str,
+    wip_tree str,
+    wip_base str,
+    wip_unmerged int,
+    wip_dirty bool,
+    wip_idle int,
+    wip_stale bool,
+    wip_at int,
+    where_branch str
 }
 
 export fn route_session_new() -> RouteSession => {
@@ -412,7 +421,8 @@ export fn route_session_new() -> RouteSession => {
     messages: 0, subs: []SubRec.new(), merged_into: 0, force: "", last_state: "", last_check: 0, cwd_now: "", base: "", tstate: "active", tnote: "", unmerged: 0, unmerged_at: 0,
     job: "", attempt: 0, use_tree: true, active_at: 0, extra: task_extra_none(), testing: false, dirty: false, ci_at: 0, diff: []DiffRec.new(), ov_n: 0, ov_with: 0, ov_files: []str.new(), ov_until: 0, asked: []int.new(), conflict_files: []str.new(),
     props: []Proposal.new(), prop_serial: 0, dismissed: []str.new(), last_msg: "", last_imgs: []str.new(), last_names: []str.new(), kicks: []str.new(), kick_ns: []int.new(), focus: 0, recent: []str.new(), marker_turn: "",
-    kind: "", parent: "", parent_kind: "", parent_no: "", child_no: 0, ptree: "", pbranch: "", waits_sib: "", waits_k: 0, queued_c: false, touches: []str.new(), merged_c: false, epic: false, chain: false, tbl: "", epic_no: ""
+    kind: "", parent: "", parent_kind: "", parent_no: "", child_no: 0, ptree: "", pbranch: "", waits_sib: "", waits_k: 0, queued_c: false, touches: []str.new(), merged_c: false, epic: false, chain: false, tbl: "", epic_no: "",
+    wip_branch: "", wip_tree: "", wip_base: "", wip_unmerged: 0, wip_dirty: false, wip_idle: 0, wip_stale: false, wip_at: 0, where_branch: ""
 }
 
 // The lines of a text (the files a subtask touches are kept one in a line).
@@ -478,13 +488,15 @@ export fn RouteSession @agent_dir(session_dir str) -> str {
         ro mine = @subs[@sub_at(@focus)]
         if mine.worktree.byte_len() > 0 && !mine.merged { return mine.worktree }
         if @task_open && @worktree.byte_len() > 0 { return @worktree }
-        return session_dir
+        return if @wip_tree.byte_len() > 0 { @wip_tree } else { session_dir }
     }
     if @subs.len() > 0 {
         ro last = @subs[@subs.len() - 1]
         if last.worktree.byte_len() > 0 && !last.merged { return last.worktree }
     }
     if @task_open && @worktree.byte_len() > 0 { return @worktree }
+    // task 192.4: a work that is not a task yet lives in a tree of its own (branch `wip/<name>`)
+    if @wip_tree.byte_len() > 0 { return @wip_tree }
     session_dir
 }
 
@@ -603,6 +615,12 @@ export fn RouteSession mut @apply(name str, text str) -> () {
         @base = jtext(o, "base")
         @title = jtext(o, "title")
         @messages = 1
+        // the work of the session becomes this task: its tree and its branch (renamed) are the tree and the branch of the task
+        if @wip_tree.byte_len() > 0 && @worktree == @wip_tree {
+            @wip_branch = ""
+            @wip_tree = ""
+            @wip_base = ""
+        }
         if jtext(o, "kind") == "child" {
             @kind = "child"
             @parent = jtext(o, "parent")
@@ -651,6 +669,11 @@ export fn RouteSession mut @apply(name str, text str) -> () {
         @base = jtext(o, "base")
         @task_dir = jtext(o, "dir")
         @task_shown = jtext(o, "shown")
+    } else if op == "wip" {
+        // task 192.4: the tree of a work that is not a task yet (empty fields - there is none now)
+        @wip_branch = jtext(o, "branch")
+        @wip_tree = jtext(o, "worktree")
+        @wip_base = jtext(o, "base")
     } else if op == "sub_parallel" {
         @change_sub(rj_int(o, "n"), "parallel", "", rj_int(o, "on") == 1)
     } else if op == "force" {
@@ -792,6 +815,19 @@ export fn route_view_text(rt RouteSession, titles []str, progress []Progress, su
     jput(o, "running", JsonValue.bool(rt.running))
     jput(o, "suggest_new_task", JsonValue.bool(suggest))
     jput(o, "use_tree", JsonValue.bool(rt.use_tree))
+    // task 192.4: where the agent works while there is no task: a tree `wip/<name>` or the folder of the project on its branch
+    if !rt.task_open {
+        mut w = JsonObject.new()
+        ro in_wip = rt.wip_tree.byte_len() > 0
+        jput(w, "kind", JsonValue.str(if in_wip { "wip" } else { "folder" }))
+        jput(w, "branch", JsonValue.str(if in_wip { rt.wip_branch } else { rt.where_branch }))
+        jput(w, "worktree", JsonValue.str(rt.wip_tree))
+        jput(w, "unmerged_commits", JsonValue.int(rt.wip_unmerged))
+        jput(w, "work", JsonValue.bool(in_wip && (rt.wip_unmerged > 0 || rt.wip_dirty)))
+        jput(w, "idle_days", JsonValue.int(rt.wip_idle))
+        jput(w, "stale", JsonValue.bool(in_wip && rt.wip_stale))
+        jput(o, "where", JsonValue.object(w))
+    }
     jput(o, "next_subtask", JsonValue.str(if rt.force.byte_len() > 0 { rt.force } else { "auto" }))
     if rt.task_open {
         mut subs = []JsonValue.new()
