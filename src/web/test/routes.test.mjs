@@ -524,7 +524,7 @@ test('номер задачи сессии показывается без ре�
   const view = fs.readFileSync(new URL('../view.js', import.meta.url), 'utf8');
   const strings = fs.readFileSync(new URL('../strings.js', import.meta.url), 'utf8');
   assert.match(view, /const taskNo = h\(doc, 'span', \{ class: 'task-no', hidden: true \}\)/);
-  assert.match(view, /h\(doc, 'h2', \{ class: 'title' \}, titleText, taskNo, titleInput\)/);
+  assert.match(view, /h\(doc, 'h2', \{ class: 'title' \}, crumb, crumbSep, titleText, taskNo, titleInput\)/);
   assert.match(view, /class: 'task-no', text: taskInfo\.number/);
   assert.match(strings, /'route\.task_no_title': 'Задача \{number\}: \{title\}'/);
   assert.doesNotMatch(strings, /'[^']*#\{number\}/);

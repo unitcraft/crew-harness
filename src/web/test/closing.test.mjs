@@ -25,10 +25,10 @@ test('карточка «Закончить задачу»: три пути, «�
   const fast = card.indexOf("t('route.finish_fast')");
   const full = card.indexOf("t('route.finish_full')");
   assert.ok(merge > 0 && merge < fast && fast < full, 'порядок: слить, быстрая, полный путь');
-  assert.match(card, /button\(t\('route\.finish_merge'\), 'primary', \(\) => handlers\.onRouteMerge\(session\.id\)\)/);
+  assert.match(card, /button\(toParent \? t\('route\.finish_merge_parent'\) : t\('route\.finish_merge'\), 'primary', \(\) => handlers\.onRouteMerge\(session\.id\)\)/);
   assert.match(card, /button\(t\('route\.finish_fast'\), '', \(\) => handlers\.onRouteFinish\(session\.id, 'fast'\)\)/);
   assert.match(card, /button\(t\('route\.finish_full'\), '', \(\) => handlers\.onRouteFinish\(session\.id, 'full'\)\)/);
-  assert.match(card, /class: 'route-merge-note', text: t\('route\.finish_merge_note'\)/);
+  assert.match(card, /class: 'route-merge-note', text: toParent \? t\('route\.finish_merge_parent_note'\) : t\('route\.finish_merge_note'\)/);
   assert.equal(t('route.finish_merge'), 'Слить в main');
   assert.equal(t('route.finish_merge_note'), 'push в origin/main');
   assert.equal(t('route.finish_fast'), 'Шаги окончания как быстрая задача');

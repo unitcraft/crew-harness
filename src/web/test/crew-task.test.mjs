@@ -39,8 +39,8 @@ test('список: номера идут по порядку списка, од
 test('строки и кнопки: новая — «В работу», дополняет — «Дополнить K», пересечение и лимит — свои кнопки', () => {
   const crew = parseCrewTask(wire());
   const [a, b] = listedItems(crew);
-  assert.equal(rowText(a, 1), '1. Кнопка выхода — новая — затронет: src/web/view.js');
-  assert.match(rowText(b, 2), /дополняет подзадачу 3 \(message\.3\.md\)/);
+  assert.equal(rowText(a, 1), '1. Кнопка выхода — отдельная задача — затронет: src/web/view.js');
+  assert.match(rowText(b, 2), /дополняет задачу 3/);
   assert.deepEqual(rowActions(a).map((x) => x.action), ['start', 'discuss', 'forget']);
   assert.deepEqual(rowActions(b).map((x) => x.action), ['extend', 'discuss', 'forget']);
   assert.equal(rowActions(b)[0].label, 'Дополнить 3');
@@ -96,9 +96,9 @@ test('полоса и карточки: кнопка «Распознать за
   assert.deepEqual(log.pop(), ['recognize', 's1']);
   assert.equal(el.querySelectorAll('.crew-row').length, 2);
   byText('В работу')[0].click();
-  assert.deepEqual(log.pop(), ['prop', 's1', 1, 'start']);
+  assert.deepEqual(log.pop(), ['prop', 's1', 1, 'start', { mode: 'new', target: 0, agent: '' }]);
   byText('Дополнить 3')[0].click();
-  assert.deepEqual(log.pop(), ['prop', 's1', 2, 'extend']);
+  assert.deepEqual(log.pop(), ['prop', 's1', 2, 'extend', { mode: 'extend', target: 3, agent: '' }]);
   byText('Обсудить дальше')[0].click();
   assert.deepEqual(log.pop(), ['prop', 's1', 1, 'discuss']);
   byText('Это не задача')[0].click();

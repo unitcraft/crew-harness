@@ -33,7 +33,7 @@ import {
   markSent, buildAnswer, buildSkip, digitOption, otherIndex,
 } from './question.js';
 import {
-  STATE_KEYS, sessionList, splitBlocks, filterSessions, groupSessions, effectivePins, timeline, paragraphs, inlineSpans,
+  STATE_KEYS, sessionList, splitBlocks, filterSessions, groupSessions, descendantsOf, effectivePins, timeline, paragraphs, inlineSpans,
   workSummary, messageTime, groupThousands, ruForm, effortChoices, shownOf, familyOf, filterModels, groupModels, usagePercent, usageLevel, tokenParts, durationLabel, agoParts, fileParts, taskSummary,
 } from './state.js';
 import {
@@ -168,6 +168,7 @@ export function createView(doc, refs, deps) {
     handlers,
     projects: () => projectsList,
     confirm: (text, words = {}) => projectsUi.confirm({ title: t('session.delete_title'), text, ok: words.ok || t('session.delete_ok'), cancel: words.cancel || t('session.delete_cancel') }),
+    descendants: (id) => descendantsOf(sessionList(current.model), id),
     linkFor: (id) => {
       const loc = win && win.location;
       return `${loc ? loc.origin + loc.pathname : ''}#s=${encodeURIComponent(id)}`;
@@ -175,6 +176,7 @@ export function createView(doc, refs, deps) {
     render: () => { listSig = ''; if (current.ui) renderList(current.model, current.ui); },
   });
   let listSig = '';
+  const foldedParents = new Set(); // родители, чьи дочерние свёрнуты в списке
   let activeProject = null; // проект выбранной сессии или черновика ('' - без проекта), null - ничего не выбрано
   /** Номер и название задачи сессии, если у неё есть задача с номером; иначе null. */
   function sessionTask(s) {
@@ -182,7 +184,7 @@ export function createView(doc, refs, deps) {
     return task && task.number ? { number: task.number, title: task.title || '' } : null;
   }
 
-  function sessionRow({ session: s, depth }, ui, pins, gctx) {
+  function sessionRow({ session: s, depth, kids = 0, collapsed = false }, ui, pins, gctx) {
     const active = s.id === ui.selected;
     const pinned = pins.has(s.id);
     const unread = Boolean(ui.unread && ui.unread[s.id] === true);
@@ -196,7 +198,7 @@ export function createView(doc, refs, deps) {
       'aria-current': active ? 'true' : 'false',
       title: t('sessions.time_title', { state: stateLabel, time: formatTime(s.updatedAt) }),
     },
-    depth > 0 ? h(doc, 'span', { class: 'corner', 'aria-hidden': 'true' }) : false,
+    depth > 0 ? icon(doc, 'i-branch', 'child-mark') : false,
     depth > 0 ? h(doc, 'span', { class: 'sr', text: t('sessions.child') }) : false,
     unread ? h(doc, 'span', { class: 'unread', role: 'img', 'aria-label': t('session.unread'), title: t('session.unread') }) : false,
     taskInfo ? h(doc, 'span', { class: 'task-no', text: taskInfo.number, title: taskInfo.title ? t('route.task_no_title', { number: taskInfo.number, title: taskInfo.title }) : t('route.task_head_bare', { number: taskInfo.number }) }) : false,
@@ -207,7 +209,19 @@ export function createView(doc, refs, deps) {
     merge ? h(doc, 'span', { class: 'session-merge', 'data-kind': merge.kind, text: merge.text }) : false);
     if (!sideKit.isRenaming(s.id)) item.addEventListener('click', () => handlers.onSelect(s.id));
     const cls = ['session', active ? 'is-active' : '', pinned ? 'is-pinned' : '', unread ? 'is-unread' : ''].filter(Boolean).join(' ');
-    const li = h(doc, 'li', { class: cls, 'data-depth': Math.min(depth, 2) }, item, sideKit.moreButton(s), sideKit.menuFor(s, { pinned, unread }) || false);
+    // родитель с дочерними сворачивается: стрелка перед строкой, число скрытых видно в подсказке
+    let fold = false;
+    if (kids > 0) {
+      const label = collapsed ? t('sessions.unfold', { n: kids }) : t('sessions.fold');
+      fold = h(doc, 'button', { type: 'button', class: 'icon-btn small fold-btn', 'aria-expanded': String(!collapsed), 'aria-label': label, title: label }, icon(doc, collapsed ? 'i-chevron-right' : 'i-chevron-down'));
+      fold.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (foldedParents.has(s.id)) foldedParents.delete(s.id); else foldedParents.add(s.id);
+        listSig = '';
+        if (current.ui) renderList(current.model, current.ui);
+      });
+    }
+    const li = h(doc, 'li', { class: `${cls}${kids > 0 ? ' has-kids' : ''}`, 'data-depth': Math.min(depth, 2) }, fold, item, sideKit.moreButton(s), sideKit.menuFor(s, { pinned, unread }) || false);
     sideKit.rowDnd(li, { id: s.id, group: gctx.key, ids: gctx.ids, projectId: s.projectId || '', enabled: gctx.draggable });
     return li;
   }
@@ -279,8 +293,8 @@ export function createView(doc, refs, deps) {
     activeProject = selectedSession ? (selectedSession.projectId || '') : null;
     const pins = effectivePins(all, ui.pins);
     const filtered = filterSessions(all, query);
-    const groups = groupSessions(filtered, { pinned: pins, projects: projectsList, includeEmpty: query.trim() === '' });
-    const rowSig = (r) => [r.depth, r.session.id, r.session.name, r.session.state, r.session.updatedAt, r.session.rank, r.session.projectId, (sessionTask(r.session) || {}).number, ui.unread ? ui.unread[r.session.id] : undefined, Boolean(r.session.pendingQuestion), (mergeLabel(r.session.routeState && r.session.routeState.task) || {}).text];
+    const groups = groupSessions(filtered, { pinned: pins, projects: projectsList, includeEmpty: query.trim() === '', collapsed: foldedParents });
+    const rowSig = (r) => [r.depth, r.kids, r.collapsed, r.session.parent, r.session.id, r.session.name, r.session.state, r.session.updatedAt, r.session.rank, r.session.projectId, (sessionTask(r.session) || {}).number, ui.unread ? ui.unread[r.session.id] : undefined, Boolean(r.session.pendingQuestion), (mergeLabel(r.session.routeState && r.session.routeState.task) || {}).text];
     const sig = JSON.stringify([ui.selected, activeProject, query, groupMenu, sideKit.sig(), groups.pinned.map(rowSig), groups.projects.map((p) => [p.project, p.id, p.rows.map(rowSig)])]);
     const shown = groups.pinned.length + groups.projects.length;
     listEmpty.hidden = all.length > 0 || (projectsList !== null && projectsList.length > 0);
@@ -317,7 +331,11 @@ export function createView(doc, refs, deps) {
   const titleInput = h(doc, 'input', { class: 'title-input', type: 'text', maxlength: '200', autocomplete: 'off', 'aria-label': t('chat.rename'), hidden: true });
   // номер задачи сессии (если есть): приглушённо рядом с названием, без решётки
   const taskNo = h(doc, 'span', { class: 'task-no', hidden: true });
-  const title = h(doc, 'h2', { class: 'title' }, titleText, taskNo, titleInput);
+  // «родитель › ребёнок» (задача 192.3): у дочерней сессии перед названием стоит название родителя, клик открывает его чат
+  const crumb = h(doc, 'button', { type: 'button', class: 'title-parent', hidden: true });
+  const crumbSep = h(doc, 'span', { class: 'title-sep', 'aria-hidden': 'true', text: '›', hidden: true });
+  crumb.addEventListener('click', () => { if (crumb.dataset.parent) handlers.onSelect(crumb.dataset.parent); });
+  const title = h(doc, 'h2', { class: 'title' }, crumb, crumbSep, titleText, taskNo, titleInput);
   let renaming = false;
   function finishRename(save) {
     if (!renaming) return;
@@ -890,7 +908,10 @@ export function createView(doc, refs, deps) {
       deadline = overlapSeen.get(key);
     }
     const stale = stalePrompt(task) && !staleKept.has(`${session.id}:${task.id}`);
-    const sig = JSON.stringify([session.id, task && [task.id, task.number, task.branch, task.state, task.unmergedCommits, task.diff, task.tests, task.testsRunning, task.stale, task.idleDays], finish, ready, overlap, showDiff, deadline, stale]);
+    const kids = (session.routeState && session.routeState.kids) || { block: [], child: null };
+    const held = kids.block;
+    const toParent = Boolean(kids.child) && kids.child.target === 'parent';
+    const sig = JSON.stringify([session.id, task && [task.id, task.number, task.branch, task.state, task.unmergedCommits, task.diff, task.tests, task.testsRunning, task.stale, task.idleDays], finish, ready, overlap, showDiff, deadline, stale, held, toParent]);
     if (sig === cardsSig) return;
     cardsSig = sig;
     const cards = [];
@@ -912,10 +933,11 @@ export function createView(doc, refs, deps) {
       cards.push(h(doc, 'section', { class: 'route-card', 'data-card': 'finish' },
         h(doc, 'strong', { class: 'route-card-title', text: t('route.finish_title', { number: numberOf(task) }) }),
         testsBlock(),
+        held.length > 0 ? h(doc, 'span', { class: 'route-card-text', text: t('route.children_held', { list: held.join(', ') }) }) : false,
         h(doc, 'div', { class: 'route-actions' },
-          h(doc, 'span', { class: 'route-merge' },
-            button(t('route.finish_merge'), 'primary', () => handlers.onRouteMerge(session.id)),
-            h(doc, 'small', { class: 'route-merge-note', text: t('route.finish_merge_note') })),
+          held.length > 0 ? button(t('route.children_merge'), 'primary', () => handlers.onChildrenMerge(session.id)) : h(doc, 'span', { class: 'route-merge' },
+            button(toParent ? t('route.finish_merge_parent') : t('route.finish_merge'), 'primary', () => handlers.onRouteMerge(session.id)),
+            h(doc, 'small', { class: 'route-merge-note', text: toParent ? t('route.finish_merge_parent_note') : t('route.finish_merge_note') })),
           button(t('route.finish_fast'), '', () => handlers.onRouteFinish(session.id, 'fast')),
           button(t('route.finish_full'), '', () => handlers.onRouteFinish(session.id, 'full')))));
     }
@@ -944,10 +966,11 @@ export function createView(doc, refs, deps) {
         h(doc, 'span', { class: 'route-card-text', text: summary }),
         testsBlock(),
         showDiff ? h(doc, 'ul', { class: 'route-diff' }, ...files) : false,
+        held.length > 0 ? h(doc, 'span', { class: 'route-card-text', text: t('route.children_held', { list: held.join(', ') }) }) : false,
         h(doc, 'div', { class: 'route-actions' },
-          h(doc, 'span', { class: 'route-merge' },
-            button(t('route.ready_publish'), 'dark', () => handlers.onRouteMerge(session.id)),
-            h(doc, 'small', { class: 'route-merge-note', text: t('route.finish_merge_note') })),
+          held.length > 0 ? button(t('route.children_merge'), 'primary', () => handlers.onChildrenMerge(session.id)) : h(doc, 'span', { class: 'route-merge' },
+            button(toParent ? t('route.ready_publish_parent') : t('route.ready_publish'), 'dark', () => handlers.onRouteMerge(session.id)),
+            h(doc, 'small', { class: 'route-merge-note', text: toParent ? t('route.finish_merge_parent_note') : t('route.finish_merge_note') })),
           button(showDiff ? t('route.ready_hide') : t('route.ready_show'), '', () => {
             if (open.has(diffKey)) open.delete(diffKey); else open.add(diffKey);
             cardsSig = '';
@@ -967,7 +990,7 @@ export function createView(doc, refs, deps) {
     routeCards.hidden = cards.length === 0;
   }
 
-  const crewUi = createCrewTaskUi(doc, handlers);
+  const crewUi = createCrewTaskUi(doc, handlers, { agents: () => Object.keys((current.model && current.model.catalog) || {}).sort() });
   const routeOver = h(doc, 'div', { class: 'route-over' }, crewUi.el, routeCards, routeBanner, routeStrip);
 
   // форма вопросов агента (задача 192): элемент ленты сообщений, под сообщением владельца; прокручивается вместе с лентой
@@ -1450,6 +1473,12 @@ export function createView(doc, refs, deps) {
     title.hidden = Boolean(session.draft);
     subRow.hidden = Boolean(session.draft);
     if (!renaming) titleText.textContent = session.name;
+    const parentSession = session.parent ? model.sessions[session.parent] : undefined;
+    crumb.hidden = !parentSession;
+    crumbSep.hidden = !parentSession;
+    crumb.textContent = parentSession ? parentSession.name : '';
+    crumb.dataset.parent = parentSession ? parentSession.id : '';
+    crumb.title = parentSession ? t('chat.parent_crumb', { name: parentSession.name }) : '';
     const taskInfo = sessionTask(session);
     taskNo.hidden = !taskInfo;
     taskNo.textContent = taskInfo ? taskInfo.number : '';

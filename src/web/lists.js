@@ -38,6 +38,25 @@ export function filterSessions(sessions, query) {
   return sessions.filter((s) => String(s.name).toLowerCase().includes(q));
 }
 
+/** Все потомки сессии (дети, дети детей): им обязан сказать удаляющий родителя. Порядок — от ближних к дальним. */
+export function descendantsOf(sessions, id) {
+  const out = [];
+  const seen = new Set([id]);
+  let front = [id];
+  while (front.length > 0) {
+    const next = [];
+    for (const s of sessions) {
+      if (s.parent && front.includes(s.parent) && !seen.has(s.id)) {
+        seen.add(s.id);
+        out.push(s);
+        next.push(s.id);
+      }
+    }
+    front = next;
+  }
+  return out;
+}
+
 /** Множество закреплённых id: ручное решение (overrides[id]) важнее данных сессии. */
 export function effectivePins(sessions, overrides = {}) {
   const out = new Set();
@@ -48,8 +67,11 @@ export function effectivePins(sessions, overrides = {}) {
   return out;
 }
 
-/** Дерево сессий группы: потомки под родителем, сирота и участник цикла — на верхнем уровне. */
-function buildTree(list) {
+/**
+ * Дерево сессий группы: потомки под родителем, сирота и участник цикла — на верхнем уровне. У строки `kids` — сколько у неё прямых дочерних;
+ * родитель из `collapsed` (множество id) свёрнут: его потомков в списке нет (`collapsed: true` у строки).
+ */
+function buildTree(list, collapsed = new Set()) {
   const present = new Set(list.map((s) => s.id));
   const kids = new Map();
   const roots = [];
@@ -63,11 +85,22 @@ function buildTree(list) {
   }
   const rows = [];
   const seen = new Set();
+  // потомки свёрнутого родителя в списке не показываются и не всплывают на верхнем уровне
+  const hide = (id) => {
+    for (const k of kids.get(id) ?? []) {
+      if (seen.has(k.id)) continue;
+      seen.add(k.id);
+      hide(k.id);
+    }
+  };
   const walk = (s, depth) => {
     if (seen.has(s.id)) return;
     seen.add(s.id);
-    rows.push({ session: s, depth });
-    for (const k of kids.get(s.id) ?? []) walk(k, depth + 1);
+    const mine = kids.get(s.id) ?? [];
+    const folded = mine.length > 0 && collapsed.has(s.id);
+    rows.push({ session: s, depth, kids: mine.length, collapsed: folded });
+    if (!folded) for (const k of mine) walk(k, depth + 1);
+    else hide(s.id);
   };
   for (const r of roots) walk(r, 0);
   for (const s of [...list].sort(byOrder)) walk(s, 0); // цикл родителей: ничего не теряем
@@ -81,7 +114,7 @@ function buildTree(list) {
  * проекта в нём нет (удалён), сессия уходит в «Без проекта». Сессия только с именем project — в группе по имени (id пуст).
  * includeEmpty добавляет известные проекты без сессий (в конец, по имени): у них тоже есть кнопка «+».
  */
-export function groupSessions(sessions, { pinned = new Set(), projects = null, includeEmpty = false } = {}) {
+export function groupSessions(sessions, { pinned = new Set(), projects = null, includeEmpty = false, collapsed = new Set() } = {}) {
   const pinnedList = [];
   const known = projects ? new Map(projects.map((p) => [p.id, p])) : null;
   const byKey = new Map();
@@ -110,9 +143,9 @@ export function groupSessions(sessions, { pinned = new Set(), projects = null, i
       if (placed(x) !== placed(y)) return placed(x) < placed(y) ? -1 : 1;
       return (y.latest - x.latest) || (x.project < y.project ? -1 : (x.project > y.project ? 1 : 0));
     })
-    .map(({ project, id, list }) => ({ project, id, rows: buildTree(list) }));
+    .map(({ project, id, list }) => ({ project, id, rows: buildTree(list, collapsed) }));
   return {
-    pinned: pinnedList.sort(byRecency).map((session) => ({ session, depth: 0 })),
+    pinned: pinnedList.sort(byRecency).map((session) => ({ session, depth: 0, kids: 0, collapsed: false })),
     projects: groups,
   };
 }

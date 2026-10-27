@@ -322,7 +322,9 @@ const handlers = {
   onRouteSubtaskParallel(trace, n, on) { send(...signal(trace, routeSignal.subtaskParallel(n, on))); },
   // Распознавание задач (задача 192.2): кнопка «Распознать задачи», кнопки карточек, быстрый ответ
   onCrewRecognize(trace) { send(...signal(trace, crewSignal.recognize())); },
-  onCrewProp(trace, id, action) { send(...signal(trace, crewSignal.prop(id, action))); },
+  onCrewProp(trace, id, action, opts) { send(...signal(trace, crewSignal.prop(id, action, opts))); },
+  onChildrenMerge(trace) { send(...signal(trace, crewSignal.childrenMerge())); },
+  onEpic(trace, on) { send(...signal(trace, crewSignal.epic(on))); },
   onCrewQuick(trace, text) { send(...signal(trace, crewSignal.quick(text))); },
   onRouteSubtaskChoose(trace, n, tree) { send(...signal(trace, routeSignal.subtaskChoose(n, tree))); },
   // «Закончить задачу»: переключить режим и сразу прогнать шаги окончания — два сигнала подряд, шаг события у каждого свой

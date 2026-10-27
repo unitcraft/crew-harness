@@ -1305,3 +1305,21 @@ input[aria-invalid="true"] { border-color: var(--danger); }
 .crew-row-problem { flex-basis: 100%; color: var(--fg-muted); font-size: 12px; }
 .crew-quick-row { display: flex; gap: 6px; }
 .crew-quick { flex: 1; min-height: 28px; padding: 0 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--fg); font: inherit; font-size: 13px; }
+
+/* Задача 192.3: дочерние сессии в списке слева, «родитель › ребёнок» в заголовке, дети и способы оформления в карточках */
+.child-mark { flex: none; width: 12px; height: 12px; margin-right: 4px; color: var(--fg-muted); }
+.session.has-kids { position: relative; }
+.fold-btn { position: absolute; left: 0; top: 50%; transform: translateY(-50%); width: 18px; height: 18px; z-index: 1; }
+.session.has-kids .session-item { padding-left: 20px; }
+.title-parent { border: 0; background: transparent; color: var(--fg-muted); font: inherit; padding: 0; cursor: pointer; max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.title-parent:hover { text-decoration: underline; }
+.title-sep { color: var(--fg-muted); margin: 0 6px; }
+.crew-way-row { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0; }
+.crew-way, .crew-agent { font: inherit; max-width: 100%; }
+.crew-kids { list-style: none; margin: 4px 0; padding: 0; display: grid; gap: 2px; }
+.crew-kid { display: flex; gap: 8px; align-items: baseline; width: 100%; text-align: left; border: 0; background: transparent; padding: 3px 4px; border-radius: var(--radius); cursor: pointer; color: inherit; font: inherit; }
+.crew-kid:hover:not(:disabled) { background: var(--hover); }
+.crew-kid-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.crew-kid[data-state="merged"] .crew-kid-title { text-decoration: line-through; opacity: .7; }
+.crew-kids-title { margin: 8px 0 2px; font-size: 12px; }
+.crew-parent { display: block; margin: 4px 0; }

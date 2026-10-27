@@ -156,18 +156,51 @@ function parseTask(raw) {
   };
 }
 
+const KID_STATES = ['running', 'waits', 'ready', 'merged'];
+
+/**
+ * Задача 192.3: дети сессии (дочерние сессии) и сведения о себе, если сессия — дочерняя. Хаб шлёт children (строки таблицы task/children.md),
+ * children_block (номера, что держат слияние родителя), child { parent, parent_name, kind, parent_no, k, target }, epic.
+ */
+export function parseKids(src) {
+  const list = (Array.isArray(src.children) ? src.children : []).filter(isObject).map((r) => ({
+    k: num(r.k),
+    number: str(r.number),
+    kind: str(r.kind),
+    title: str(r.title),
+    folder: str(r.folder),
+    branch: str(r.branch),
+    session: str(r.session),
+    state: KID_STATES.includes(r.state) ? r.state : 'running',
+    stateText: str(r.state_text),
+    waitsFor: num(r.waits_for),
+    done: num(r.done),
+    total: num(r.total),
+    touches: Array.isArray(r.touches) ? r.touches.filter((x) => typeof x === 'string') : [],
+  }));
+  const c = isObject(src.child) ? src.child : null;
+  return {
+    list,
+    merged: list.filter((r) => r.state === 'merged').length,
+    total: list.length,
+    block: Array.isArray(src.children_block) ? src.children_block.filter((x) => typeof x === 'string') : [],
+    epic: src.epic === true,
+    child: c && str(c.parent) ? { parent: str(c.parent), parentName: str(c.parent_name), kind: str(c.kind), parentNo: str(c.parent_no), k: num(c.k), target: c.target === 'parent' ? 'parent' : 'main' } : null,
+  };
+}
+
 /** Вычистить payload route_state: неверное отбрасывается; у режима interactive шагов нет, а задача (если сессия в git) остаётся. */
 export function parseRouteState(input) {
   const src = isObject(input) ? input : {};
   const route = normalizeRoute(src.route);
   const useTree = src.use_tree !== false;
-  if (!routeInfo(route).hasSteps) return { route, stepless: true, steps: [], running: false, useTree, task: parseTask(src.task), crew: parseCrewTask(src) };
+  if (!routeInfo(route).hasSteps) return { route, stepless: true, steps: [], running: false, useTree, task: parseTask(src.task), crew: parseCrewTask(src), kids: parseKids(src) };
   const steps = (Array.isArray(src.steps) ? src.steps : []).filter(isObject).map((s, i) => ({
     n: Number.isInteger(s.n) ? s.n : i + 1,
     title: str(s.title),
     state: STEP_STATES.includes(s.state) ? s.state : 'pending',
   }));
-  return { route, stepless: false, steps, running: src.running === true, useTree, task: parseTask(src.task), crew: parseCrewTask(src) };
+  return { route, stepless: false, steps, running: src.running === true, useTree, task: parseTask(src.task), crew: parseCrewTask(src), kids: parseKids(src) };
 }
 
 export const INTERACTIVE_STATE = Object.freeze(parseRouteState({ route: DEFAULT_ROUTE }));

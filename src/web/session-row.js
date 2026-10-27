@@ -55,8 +55,15 @@ export function createSideKit(doc, deps) {
   function askDelete(session) {
     menu = null;
     render();
-    confirm(t('session.delete_confirm', { name: session.name })).then((yes) => {
+    // у сессии есть дочерние (задача 192.3): владельца спрашивают про них, они не остаются сиротами молча
+    const kids = typeof deps.descendants === 'function' ? deps.descendants(session.id) : [];
+    const text = kids.length > 0
+      ? t('session.delete_with_kids', { name: session.name, n: kids.length, names: kids.map((k) => `«${k.name}»`).join(', ') })
+      : t('session.delete_confirm', { name: session.name });
+    const words = kids.length > 0 ? { ok: t('session.delete_kids_ok'), cancel: t('session.delete_cancel') } : undefined;
+    (words ? confirm(text, words) : confirm(text)).then((yes) => {
       if (!yes) return;
+      for (const k of [...kids].reverse()) handlers.onDeleteSession(k.id);
       // ветка и дерево задачи живут, пока есть сессия; не влитую работу не теряем молча: владелец выбирает
       const task = session.routeState && session.routeState.task;
       const work = task && task.worktree ? task.unmergedCommits : 0;
