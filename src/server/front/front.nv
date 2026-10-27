@@ -254,7 +254,6 @@ const CSP = "default-src 'self'; img-src 'self' blob:; connect-src 'self' ws://l
 fn with_headers(mut resp ServerResponse) -> ServerResponse {
     resp.header("Content-Security-Policy", CSP)
     resp.header("Cache-Control", "no-store")
-    resp.header("Keep-Alive", "timeout=50")
     resp
 }
 
@@ -558,6 +557,11 @@ export fn run_front(settings FrontSettings, config_file str) Proc Net Time Detac
                     // Every open connection (an idle keep-alive one for 60 s, a WebSocket for good) holds one admission permit; the default 16 was gone with a few
                     // tabs and the 17th request got a 503 or a reset (the blank page, task 192). Fibers are cheap: a thousand.
                     policy.max_inflight(1024)
+                    // One request per connection: the response carries `Connection: close` and the server closes the socket cleanly (FIN). A kept-alive socket idle for
+                    // longer than the idle deadline was dropped with a reset, and the browser (it ignores `Keep-Alive: timeout`) sent the next request into the dead socket:
+                    // `/api/fs/list` failed the first time after a pause. On localhost a new connection is cheap. A WebSocket is not touched (it is an upgrade).
+                    policy.max_requests_per_conn(1)
+                    policy.idle_deadline(600.to_seconds())
                     match serve_addr("127.0.0.1:${settings.port}", router, policy) {
                         Ok(done) => ()
                         Err(e) => {
