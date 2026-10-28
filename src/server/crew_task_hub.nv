@@ -11,9 +11,10 @@ import crew_harness.acp.{AcpImage}
 import std.encoding.json.{Json, JsonValue, JsonObject}
 
 // The subtasks of the session as lines for the agent and the page.
-fn Hub @ct_lines(s Dialog) -> []SubLine {
-    // task 192.3: the works in work are the tasks of the hub, each in a session of its own
-    if @settings.route_children { return @cs_task_lines() }
+fn Hub @ct_lines(at int) -> []SubLine {
+    ro s = @sessions[at]
+    // task 192.3: the works in work are the tasks of the hub, each in a session of its own; task 192.13: only the tasks near this session (its own, its epic, its children, its sisters)
+    if @settings.route_children { return @cs_task_lines(at) }
     mut out = []SubLine.new()
     for sub in s.rt.subs {
         ro state = if sub.merged { "слита" } else if sub.done { "готово" } else if sub.waits > 0 || sub.queued { "ждёт" } else { "идёт" }
@@ -43,7 +44,7 @@ fn Hub @ct_running_old(s Dialog) -> []RunSub {
 /// The state of the mode for the page with the cards and the numbers of the tasks in work (called from `route_state_text`).
 fn Hub @ct_view(at int, base str) -> str {
     ro s = @sessions[at]
-    ext_view_extend(hints_view_extend(@cs_view(at, crew_view_extend(base, s.rt.props, @ct_lines(s), @cs_active_all(), @settings.route_max_active, @settings.route_confirm_word, @settings.route_over_limit_word)), s.rt.hints, s.rt.ctx_used, s.rt.ctx_size, s.rt.ctx_hist), s.rt.exts)
+    ext_view_extend(hints_view_extend(@cs_view(at, crew_view_extend(base, s.rt.props, @ct_lines(at), @cs_active_all(), @settings.route_max_active, @settings.route_confirm_word, @settings.route_over_limit_word)), s.rt.hints, s.rt.ctx_used, s.rt.ctx_size, s.rt.ctx_hist), s.rt.exts)
 }
 
 // A service hint to the agent is remembered for the panel "Машины" (not in the feed, not in the journal).
@@ -107,28 +108,32 @@ fn Hub @ct_fix_kind(at int, p0 Proposal) -> Proposal {
     mut p = proposal_copy(p0)
     ro s = @sessions[at]
     if p.kind == "extend" {
-        mut found = @settings.route_children && @cs_find_number(p.extends) >= 0
+        mut found = @settings.route_children && @cs_find_number(p.extends) >= 0 && @ct_related(at, @cs_find_number(p.extends))
         for sub in s.rt.subs { if sub.n == p.extends && !@settings.route_children { found = true } }
         if !found {
             p.kind = "new"
             p.extends = 0
         }
     }
-    if p.kind == "child" && !(@settings.route_children && @cs_find_number(p.epic) >= 0) { p.kind = "new" }
+    if p.kind == "child" && !(@settings.route_children && @cs_find_number(p.epic) >= 0 && @ct_related(at, @cs_find_number(p.epic))) { p.kind = "new" }
     if p.kind == "epic" && !@settings.route_children { p.kind = "new" }
     p
 }
 
 // ----- the addition applied at once (task 192.7; the owner, 2026-10-27: always on, there is no setting) -----
 
-// Is the task `found` near this session: the task of the session itself, its child, its epic, a sibling under the same epic, or any task of the same project (the list the agent is given is the list of the hub).
+// Is the task `found` near this session: the task of the session itself, its child, its epic, a sibling under the same epic (the owner, 2026-10-29: the tasks of OTHER sessions of the project are not touched,
+// not listed and not offered; the list the agent is given and the choices of the card are the same set).
 fn Hub @ct_related(at int, found int) -> bool {
     if found == at { return true }
     ro s = @sessions[at]
     ro c = @sessions[found]
     if c.rt.parent.byte_len() > 0 && c.rt.parent == s.id { return true }
     if s.rt.parent.byte_len() > 0 && (s.rt.parent == c.id || s.rt.parent == c.rt.parent) { return true }
-    c.project_id == s.project_id
+    // the tasks that were made from the talk of this session, and the talk this task was made from
+    if c.rt.origin.byte_len() > 0 && (c.rt.origin == s.id || c.rt.origin == s.rt.origin) { return true }
+    if s.rt.origin.byte_len() > 0 && s.rt.origin == c.id { return true }
+    false
 }
 
 // The index of the open task K that takes the addition at once, -1 - the addition goes to a card (K is merged, closed, done, not near this session, or the confidence is lower than the threshold).
@@ -468,7 +473,8 @@ fn Hub mut @ct_do(at int, p Proposal, action str) Proc Detach Time -> () {
 }
 
 /// The signal of the page `route_prop {id, action}`: a button of a card.
-fn Hub mut @ct_answer(trace str, id int, action str, agent str, mode str, target int) Proc Detach Time -> () {
+/// `run` is the mode of execution chosen on the card (interactive | fast | full, "" - as proposed), `kids` the children left ticked ("" - all, "-" - none, "0,2" - these).
+fn Hub mut @ct_answer(trace str, id int, action str, agent str, mode str, target int, run str, kids str) Proc Detach Time -> () {
     ro at = @find(trace)
     if at < 0 { return }
     ro k = proposal_at(@sessions[at].rt.props, id)
@@ -476,8 +482,19 @@ fn Hub mut @ct_answer(trace str, id int, action str, agent str, mode str, target
     mut p = proposal_copy(@sessions[at].rt.props[k])
     // the family for the child session chosen on the card (an unknown one is ignored)
     if agent.byte_len() > 0 && @agent_ids().contains(agent) { p.agent = agent }
+    // the mode of execution chosen on the card (task 192.13) and the children of an epic left ticked
+    if run_mode_ok(run) { p.mode = run }
+    if p.kids.byte_len() > 0 { p = children_picked(p, kids) }
     // the way chosen on the card: a task of its own, a child task of the epic `target`, an epic, an addition to the task `target` (the old words subtask / epic_task are a child)
     ro way = if mode == "subtask" || mode == "epic_task" { "child" } else { mode }
+    // task 192.13: a task of ANOTHER session can be neither extended nor made a parent from here
+    if (way == "child" || way == "extend") && target > 0 {
+        ro found = @cs_find_number(target)
+        if found < 0 || !@ct_related(at, found) {
+            @ct_note(at, "▸ задача ${target} из другой сессии: её нельзя ${if way == "extend" { "дополнить" } else { "сделать родителем" }} отсюда")
+            return
+        }
+    }
     if way == "new" || way == "child" || way == "epic" || way == "extend" {
         p.kind = way
         if way == "child" { p.epic = target }
@@ -671,7 +688,7 @@ fn Hub mut @ct_recognize(trace str) Proc Detach Time -> () {
     for p in s.rt.props {
         if p.listed && p.choice == "discuss" { cands.push("- «${p.title}»") }
     }
-    ro request = recognize_request(tasks_hint(s.rt.task_dir, @ct_lines(s)), cands)
+    ro request = recognize_request(tasks_hint(s.rt.task_dir, @ct_lines(at)), cands)
     @hint_add(at, "Распознать задачи", request)
     ro reason = @route_agent_turn(at, "Распознать задачи", request)
     if reason.byte_len() > 0 { @tell_error(0, trace, s.engine.step_number(), "", "распознавание не начато: ${reason}") }
@@ -689,11 +706,11 @@ fn Hub mut @ct_apply(trace str, items []JsonValue) Proc Detach Time -> () {
         ro k = proposal_at(@sessions[at].rt.props, id)
         if k < 0 { continue }
         if word == "work" {
-            @ct_answer(trace, id, "start", jtext(o, "agent"), jtext(o, "mode"), jint(o, "target"))
+            @ct_answer(trace, id, "start", jtext(o, "agent"), jtext(o, "mode"), jint(o, "target"), jtext(o, "run"), jtext(o, "children"))
         } else if word == "forget" {
-            @ct_answer(trace, id, "forget", "", "", 0)
+            @ct_answer(trace, id, "forget", "", "", 0, "", "")
         } else {
-            @ct_answer(trace, id, "discuss", "", "", 0)
+            @ct_answer(trace, id, "discuss", "", "", 0, "", "")
         }
     }
 }

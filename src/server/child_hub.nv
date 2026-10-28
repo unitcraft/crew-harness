@@ -138,7 +138,10 @@ fn Hub @cs_view(at int, base str) -> str {
         info = ChildInfo { parent: s.rt.parent, parent_name: if pat >= 0 { @sessions[pat].name } else { "" }, kind: s.rt.parent_kind, parent_no: s.rt.parent_no, k: s.rt.child_no, target: if s.rt.ptree.byte_len() > 0 { "parent" } else { "main" }, pbranch: s.rt.pbranch }
     }
     mut targets = []ChildTarget.new()
+    mut xi = 0
     for x in @sessions {
+        xi += 1
+        if !@ct_related(at, xi - 1) { continue }
         if x.rt.task_open && !x.rt.task_closed && x.rt.number.byte_len() > 0 {
             targets.push(ChildTarget { number: cs_number_int(x.rt.number), title: x.rt.title, session: x.id, epic: x.rt.epic })
         }
@@ -219,9 +222,12 @@ fn cs_number_int(text str) -> int {
 }
 
 // The tasks in work in the whole hub, as the list for the agent and the page.
-fn Hub @cs_task_lines() -> []SubLine {
+fn Hub @cs_task_lines(at int) -> []SubLine {
     mut out = []SubLine.new()
+    mut i = 0
     for s in @sessions {
+        i += 1
+        if !@ct_related(at, i - 1) { continue }
         if s.rt.task_open && !s.rt.task_closed && s.rt.number.byte_len() > 0 {
             ro state = if s.rt.epic { "эпик" } else if s.rt.tstate == "ready" { "готово" } else { "идёт" }
             out.push(SubLine { n: cs_number_int(s.rt.number), title: s.rt.title, state, waits: 0, file: "doc/tasks/${s.rt.task_id}" })
@@ -254,7 +260,7 @@ fn Hub mut @cs_spawn(at int, p Proposal, how str, queued bool) Proc Detach Time 
     }
     if pat < 0 { ptype = "" }
     // task 192.4: the first work of a session that has a wip branch is the task of this very session: the branch is renamed, no new session is made
-    if pat < 0 && cur.rt.wip_tree.byte_len() > 0 && cur.rt.kind != "child" && !cur.rt.task_open {
+    if pat < 0 && cur.rt.wip_tree.byte_len() > 0 && cur.rt.kind != "child" && !cur.rt.task_open && p.kids.byte_len() == 0 {
         if @wip_take(at, p, how, queued) { return }
     }
     // any open task becomes an epic with its first child: the mark and the table of the children
@@ -262,7 +268,7 @@ fn Hub mut @cs_spawn(at int, p Proposal, how str, queued bool) Proc Detach Time 
     ro par = if pat >= 0 { @sessions[pat] } else { cur }
     ro parent_no = if pat >= 0 { par.rt.number } else { "" }
     ro parent_slug = if pat < 0 { "" } else if par.rt.kind == "child" { task_slug(par.rt.title) } else { task_slug_of(par.rt.task_id) }
-    ro number = task_number_text(next_task_number(@cs_taken_names(cur)))
+    ro number = task_number_text(@take_task_number(cur.id))
     ro slug = child_slug(parent_no, parent_slug, p.title)
     ro folder = "${number}-${slug}"
     mut k = 0
@@ -270,7 +276,8 @@ fn Hub mut @cs_spawn(at int, p Proposal, how str, queued bool) Proc Detach Time 
         for row in @cs_rows(par.id, false) { if row.k > k { k = row.k } }
         k += 1
     }
-    ro route = if cur.rt.route == "planning" { "interactive" } else { cur.rt.route }
+    // the mode of execution of the new session (task 192.13): the one chosen on the card, else the one of the session where the talk is
+    ro route = if run_mode_ok(p.mode) { p.mode } else if cur.rt.route == "planning" { "interactive" } else { cur.rt.route }
     // the tree: cut from the head of the parent when it has one, else from main
     ro base = @route_repo_dir(cur.id)
     mut tree = TkTree { ok: false, branch: "", worktree: "", base: "", text: "" }
@@ -307,6 +314,7 @@ fn Hub mut @cs_spawn(at int, p Proposal, how str, queued bool) Proc Detach Time 
     js(o, "touches", joined(p.touches, "\n"))
     ji(o, "crew", 1)
     js(o, "kind", "child")
+    js(o, "origin", cur.id)
     js(o, "parent", if pat >= 0 { par.id } else { "" })
     js(o, "pkind", ptype)
     js(o, "pno", parent_no)
@@ -345,6 +353,17 @@ fn Hub mut @cs_spawn(at int, p Proposal, how str, queued bool) Proc Detach Time 
     }
     @route_broadcast(cat, true)
     @route_broadcast(at, true)
+    // the epic with children (task 192.13): every child ticked on the card is a child task of this very epic
+    if p.kind == "epic" && pat < 0 && p.kids.byte_len() > 0 {
+        match number.to_int() {
+            Ok(epic_no) => {
+                for child in proposal_children(p) {
+                    @cs_spawn(at, child_proposal(child, epic_no, p.mode, p.source), "", false)
+                }
+            }
+            Err(e) => ()
+        }
+    }
 }
 
 /// "Дополнить K": the summary goes to the message file of the task K (the session of that task) and its agent gets a service turn. false - there is no task K here.

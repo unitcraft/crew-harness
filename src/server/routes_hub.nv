@@ -177,21 +177,29 @@ fn Hub @route_trees(session str) -> str {
     }
 }
 
-fn Hub @route_make_task(session str, route str, text str, use_tree bool) Proc -> TaskMade {
+// The number of the next task of the session (task 192.13): above EVERY number seen anywhere - the folders of the task in the repository, `origin/main` (after a fetch), the branches
+// local and remote, the trees, the tasks of the sessions of the hub - and above the numbers the hub has given already (`reserved`, so two sessions never take one number at once).
+fn Hub mut @take_task_number(session str) Proc Detach Time -> int {
+    ro at = @find(session)
+    mut names = []str.new()
+    if at >= 0 {
+        for n in @cs_taken_names(@sessions[at]) { names.push(n) }
+        ro base = @route_repo_dir(session)
+        if tk_is_repo(base) { for n in tk_number_names(base) { names.push(n) } }
+    }
+    ro n = next_task_number_reserved(names, @reserved)
+    @reserved.push(n)
+    n
+}
+
+fn Hub mut @route_make_task(session str, route str, text str, use_tree bool) Proc Detach Time -> TaskMade {
     ro base = @route_repo_dir(session)
     ro repo = tk_is_repo(base)
     // a tree is made when the session wants one (the switch "Worktree") and the mode is not the planning (it writes the task and touches no code: the tree comes later)
     ro want_tree = repo && use_tree && route != "planning"
     // task 192.2: the mode "interactive" makes a task only for a confirmed proposal (`crew_task`, `crew_task_list`), see crew_task_hub.nv
     ro tasks_here = want_tree && dir_there("${base}/doc/tasks")
-    mut names = []str.new()
-    if repo {
-        for n in dir_names("${base}/doc/tasks") { names.push(n) }
-        for n in tk_branch_names(base) { names.push(n) }
-    } else {
-        for n in dir_names("${@settings.data_dir}/${session}/tasks") { names.push(n) }
-    }
-    ro number = task_number_text(next_task_number(names))
+    ro number = task_number_text(@take_task_number(session))
     ro slug = task_slug(text)
     ro folder = "${number}-${slug}"
     mut tree = TkTree { ok: false, branch: "", worktree: "", base: "", text: "" }
@@ -294,7 +302,7 @@ fn Hub mut @route_message_prelude(at int) Proc -> str {
     s.rt.told = true
     @sessions[at] = s
     // task 192.2: the list of the tasks of the session, so that the agent can say that a work belongs to one of them
-    ro tasks = tasks_hint(s.rt.task_dir, @ct_lines(s))
+    ro tasks = tasks_hint(s.rt.task_dir, @ct_lines(at))
     mut parts = []str.new()
     if text.byte_len() > 0 {
         parts.push(text)

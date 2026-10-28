@@ -138,7 +138,8 @@ export type Hub {
     marks []MachMark,
     trees_tx ChanTx[TreeDone],
     trees_rx ChanRx[TreeDone],
-    held []HeldMsg
+    held []HeldMsg,
+    reserved []int
 }
 
 /// TreeDone: the answer of the background job that makes the wip tree of a session (task 192.8): the exit code of `git worktree add` (-1: not run), its error stream as bytes, the note, the path and the base.
@@ -730,7 +731,7 @@ export fn start_hub_from(settings ServerSettings, table_text str) Proc Detach Ti
     ro machine = hub_machine_with(machine_text, registry, settings.idle_term_ms)?
     ro trees_chan = Chan[TreeDone].new(64)
     mut hub = Hub {
-        settings, machine, workdir, sessions: []Dialog.new(), conns: []int.new(), out: []Outgoing.new(), log: []str.new(), serial: 0, mcps: []McpServer.new(), mcp_pending: []McpPending.new(), mcp_serial: 0, ctl_letters: []CtlLetter.new(), ctl_waits: []CtlWait.new(), ctl_serial: 0, catalog: JsonObject.new(), catalog_dirty: false, catalog_saved_at: 0, choices: []PendingChoice.new(), reviews: []Review.new(), route_obs: 0, marks: []MachMark.new(), trees_tx: trees_chan.tx, trees_rx: trees_chan.rx, held: []HeldMsg.new()
+        settings, machine, workdir, sessions: []Dialog.new(), conns: []int.new(), out: []Outgoing.new(), log: []str.new(), serial: 0, mcps: []McpServer.new(), mcp_pending: []McpPending.new(), mcp_serial: 0, ctl_letters: []CtlLetter.new(), ctl_waits: []CtlWait.new(), ctl_serial: 0, catalog: JsonObject.new(), catalog_dirty: false, catalog_saved_at: 0, choices: []PendingChoice.new(), reviews: []Review.new(), route_obs: 0, marks: []MachMark.new(), trees_tx: trees_chan.tx, trees_rx: trees_chan.rx, held: []HeldMsg.new(), reserved: []int.new()
     }
     if hub.wants_mcp() { ro started = hub.start_mcp() }
     ro pg = settings.store == "pg"
@@ -1565,7 +1566,7 @@ export fn Hub mut @handle(conn int, text str) Proc Detach Time -> () {
     } else if kind == "route_diff" {
         @route_diff(trace)
     } else if kind == "route_prop" {
-        @ct_answer(trace, jint(input, "id"), jtext(input, "action"), jtext(input, "agent"), jtext(input, "mode"), jint(input, "target"))
+        @ct_answer(trace, jint(input, "id"), jtext(input, "action"), jtext(input, "agent"), jtext(input, "mode"), jint(input, "target"), jtext(input, "run"), jtext(input, "children"))
     } else if kind == "route_children_merge" {
         @cs_chain_signal(trace)
     } else if kind == "route_ext_undo" {

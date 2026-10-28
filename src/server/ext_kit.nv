@@ -116,3 +116,41 @@ export fn scenario_route_auto_extend(settings ServerSettings) Proc Detach Time N
     rig.shut()
     c.report()
 }
+
+/// The scope of the tasks (task 192.13, the owner 2026-10-29): the tasks of ANOTHER session of the project are neither listed to the agent, nor offered, nor extended; the tasks made from the talk of the session are its own.
+export fn scenario_route_scope(settings ServerSettings) Proc Detach Time Net Fs Os -> str {
+    mut c = kit_check()
+    mut rig = rig_open(settings)
+    rig.attach(1)
+    rig.page(1, "session_created", "s-a", "{\"name\":\"Беседа А\",\"agent\":\"opencode\"}")
+    rig.page(1, "session_created", "s-b", "{\"name\":\"Беседа Б\",\"agent\":\"opencode\"}")
+    c.expect(rig.until("\"kind\":\"session_created\"", 5000), "the two sessions are shown")
+    c.expect(ck_list(rig, "s-a", "t1", [ck_item("new", "Работа первой беседы", 0, 0, ["a.txt"])], "Работа первой беседы"), "the list of the first talk is shown")
+    ck_apply(rig, "s-a", [["Работа первой беседы", "work", "new", "0"]])
+    rig.run(4000)
+    ro p1 = ck_find(rig, 1, "Работа первой беседы")
+    c.expect(p1 != "", "the task of the first talk is a session of its own: ${p1}")
+    c.expect(ck_idle(rig, p1, 60000), "its agent finishes the first turn")
+    ro file = "${ck_tree(rig, 1, p1)}/doc/tasks/${ck_task_id(rig, 1, p1)}/task/message.md"
+
+    // the first talk sees its own task among the targets of the card, the second one does not
+    c.expect(rk_array(ck_state(rig, 1, "s-a"), "targets").len() == 1, "the first talk has its own task as a target")
+    c.expect(rk_array(ck_state(rig, 1, "s-b"), "targets").len() == 0, "the second talk has no targets: the task is of another session")
+
+    // an addition from the second talk, even with a high confidence, is a card and does not touch the task of the first one
+    c.expect(ek_say(rig, "s-b", "t2", ek_item("extend", "Чужое дополнение", 1, "high")), "the second talk says: an addition to the task 1")
+    c.expect(!rk_text(file).contains("Чужое дополнение"), "message.md of the other session is not touched")
+    c.expect(rk_card_state(ck_state(rig, 1, "s-b"), "Чужое дополнение") == "open", "it is a card of a new task")
+    // the owner forces the way on the card: refused
+    ro id = rk_card_id(ck_state(rig, 1, "s-b"), "Чужое дополнение")
+    rig.page(1, "route_prop", "s-b", "{\"id\":${id},\"action\":\"start\",\"mode\":\"extend\",\"target\":1}")
+    rig.run(800)
+    c.expect(!rk_text(file).contains("Чужое дополнение"), "the forced addition is refused")
+    c.expect(ck_find(rig, 1, "Чужое дополнение") == "", "and no session is made")
+
+    // the first talk: its own task is near, a high addition goes at once
+    c.expect(ek_say(rig, "s-a", "t3", ek_item("extend", "Своё дополнение", 1, "high")), "the first talk adds to its own task")
+    c.expect(rk_text(file).contains("сделать: Своё дополнение"), "applied at once: ${cut_text(rk_text(file), 200)}")
+    rig.shut()
+    c.report()
+}

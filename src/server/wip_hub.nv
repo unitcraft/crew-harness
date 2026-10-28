@@ -185,7 +185,7 @@ fn Hub mut @wip_done(done TreeDone) Proc Detach Time -> () {
 /// false - the branch could not be made (the caller makes a session of its own as before).
 fn Hub mut @wip_take(at int, p Proposal, how str, queued bool) Proc Detach Time -> bool {
     ro cur = @sessions[at]
-    ro number = task_number_text(next_task_number(@cs_taken_names(cur)))
+    ro number = task_number_text(@take_task_number(cur.id))
     ro slug = child_slug("", "", p.title)
     ro folder = "${number}-${slug}"
     ro tree = cur.rt.wip_tree
@@ -219,6 +219,7 @@ fn Hub mut @wip_take(at int, p Proposal, how str, queued bool) Proc Detach Time 
     js(o, "touches", joined(p.touches, "\n"))
     ji(o, "crew", 1)
     js(o, "kind", "child")
+    js(o, "origin", cur.id)
     js(o, "parent", "")
     js(o, "pkind", "")
     js(o, "pno", "")

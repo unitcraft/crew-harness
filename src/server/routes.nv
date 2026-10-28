@@ -108,6 +108,14 @@ export fn next_task_number(names []str) -> int {
     top + 1
 }
 
+/// The number of the next task above the names seen anywhere AND the numbers given already (task 192.13): two tasks made at once never get one number.
+export fn next_task_number_reserved(names []str, reserved []int) -> int {
+    mut all = []str.new()
+    for n in names { all.push(n) }
+    for r in reserved { all.push("${r}") }
+    next_task_number(all)
+}
+
 /// The number as three digits ("007"); a larger one as it is.
 export fn task_number_text(n int) -> str {
     if n < 10 { return "00${n}" }
@@ -422,6 +430,7 @@ export type RouteSession {
     chain bool,
     tbl str,
     epic_no str,
+    origin str,
     wip_tree str,
     wip_base str,
     wip_unmerged int,
@@ -450,7 +459,7 @@ export fn route_session_new() -> RouteSession => {
     messages: 0, subs: []SubRec.new(), merged_into: 0, force: "", last_state: "", last_check: 0, cwd_now: "", base: "", tstate: "active", tnote: "", unmerged: 0, unmerged_at: 0,
     job: "", attempt: 0, use_tree: true, active_at: 0, extra: task_extra_none(), testing: false, dirty: false, ci_at: 0, diff: []DiffRec.new(), ov_n: 0, ov_with: 0, ov_files: []str.new(), ov_until: 0, asked: []int.new(), conflict_files: []str.new(),
     props: []Proposal.new(), prop_serial: 0, dismissed: []str.new(), last_msg: "", last_imgs: []str.new(), last_names: []str.new(), kicks: []str.new(), kick_ns: []int.new(), focus: 0, recent: []str.new(), marker_turn: "",
-    kind: "", parent: "", parent_kind: "", parent_no: "", child_no: 0, ptree: "", pbranch: "", waits_sib: "", waits_k: 0, queued_c: false, touches: []str.new(), merged_c: false, epic: false, chain: false, tbl: "", epic_no: "",
+    kind: "", parent: "", parent_kind: "", parent_no: "", child_no: 0, ptree: "", pbranch: "", waits_sib: "", waits_k: 0, queued_c: false, touches: []str.new(), merged_c: false, epic: false, chain: false, tbl: "", epic_no: "", origin: "",
     wip_tree: "", wip_base: "", wip_unmerged: 0, wip_dirty: false, wip_idle: 0, wip_stale: false, wip_at: 0, wip_prep: 0, where_branch: "", hints: []HintRec.new(), ctx_used: 0, ctx_size: 0, ctx_scan: 0, ctx_hist: []CtxRec.new(), exts: []ExtRec.new(),
     req_parts: []ReqPart.new(), reqs: []str.new(), req_turn: 0, req_seen: 0, req_tools: []str.new()
 }
@@ -674,6 +683,8 @@ export fn RouteSession mut @apply(name str, text str) -> () {
             @wip_tree = ""
             @wip_base = ""
         }
+        // the session where the talk was that made this task (task 192.13): the tasks of that session are near it
+        @origin = jtext(o, "origin")
         if jtext(o, "kind") == "child" {
             @kind = "child"
             @parent = jtext(o, "parent")

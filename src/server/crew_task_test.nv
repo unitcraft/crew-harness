@@ -363,3 +363,41 @@ test "auto extend: only an extension with the high confidence and a number is ap
     assert(ext_applied_note("003", "кратко", "doc/tasks/003-x/task").contains("Новое требование владельца"))
     assert(ext_withdrawn_note("003", "кратко", "doc/tasks/003-x/task").contains("Требование отозвано"))
 }
+
+test "crew_task: the mode, the reason and the children of an epic are read, checked, travel through the text and go to the page (task 192.13)" {
+    ro text = "{\"kind\":\"epic\",\"title\":\"Отладчик\",\"summary\":\"Сделать\",\"mode\":\"full\",\"reason\":\"две независимые части\",\"children\":[{\"title\":\"Фронт\",\"summary\":\"Страница\",\"touches\":[\"src/web\"],\"mode\":\"fast\"},{\"title\":\"Бек\",\"mode\":\"bogus\"},{\"summary\":\"без названия\"}]}"
+    match proposal_of_text(text) {
+        Ok(p) => {
+            assert(p.mode == "full" && p.reason == "две независимые части")
+            ro kids = proposal_children(p)
+            assert(kids.len() == 2)
+            assert(kids[0].title == "Фронт" && kids[0].mode == "fast" && kids[0].touches.len() == 1)
+            assert(kids[1].title == "Бек" && kids[1].mode == "" && kids[1].summary == "Бек")
+            // the way to the hub keeps all of it
+            match proposal_of_text(proposal_arguments_text(p)) {
+                Ok(q) => assert(q.mode == "full" && proposal_children(q).len() == 2 && proposal_children(q)[0].mode == "fast")
+                Err(e) => panic("the text is not read back: ${e}")
+            }
+            // the page gets them
+            ro view = cht_j(crew_view_extend("{}", [p], []SubLine.new(), 0, 3, "задача", "сверх"))
+            ro card = ct_items(ct_get(view, "proposals"))[0]
+            assert((ct_get(card, "mode").str() ?? "") == "full")
+            assert(ct_items(ct_get(card, "children")).len() == 2)
+            // the owner leaves the second child only / none / all
+            assert(proposal_children(children_picked(p, "1")).len() == 1 && proposal_children(children_picked(p, "1"))[0].title == "Бек")
+            assert(proposal_children(children_picked(p, "-")).len() == 0)
+            assert(proposal_children(children_picked(p, "")).len() == 2)
+            // a child as a proposal of its own: a child of the epic 7, the mode of the epic when it has none
+            ro child = child_proposal(kids[1], 7, "full", "")
+            assert(child.kind == "child" && child.epic == 7 && child.mode == "full")
+            assert(child_proposal(kids[0], 7, "full", "").mode == "fast")
+        }
+        Err(e) => panic("the epic is not read: ${e}")
+    }
+    // an unknown mode is dropped; children are read only for an epic
+    match proposal_of_text("{\"kind\":\"new\",\"title\":\"Т\",\"mode\":\"turbo\",\"children\":[{\"title\":\"X\"}]}") {
+        Ok(p) => assert(p.mode == "" && proposal_children(p).len() == 0)
+        Err(e) => panic("not read: ${e}")
+    }
+    assert(crew_task_tool_json().to_str().contains("children") && crew_task_list_tool_json().to_str().contains("reason"))
+}

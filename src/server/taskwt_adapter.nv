@@ -34,6 +34,44 @@ export fn tk_branch_names(main_copy str) Proc -> []str {
     out
 }
 
+/// The names the next number of a task must stay above (task 192.13): the folders `doc/tasks` of `origin/main` and of the local `main` (after a fetch; with no network the last known `refs/remotes/origin/main` stays),
+/// and the folders and branches of all the trees of the repository (`git worktree list`, the folder of the trees of the project is among them).
+export fn tk_number_names(main_copy str) Proc -> []str {
+    mut out = []str.new()
+    ro fetched = git_run(main_copy, ["fetch", "--quiet", "origin"])
+    for rname in ["origin/main", "main"] {
+        ro r = git_run(main_copy, ["ls-tree", "--name-only", rname, "doc/tasks/"])
+        if r.ok {
+            for line in r.text.lines() {
+                ro raw = line.trim_ascii()
+                ro name = if raw.ends_with("/") { raw[..raw.byte_len() - 1] } else { raw }
+                if name.byte_len() > 0 {
+                    match name.rfind("/") {
+                        Some(k) => out.push(name[k + 1..])
+                        None => out.push(name)
+                    }
+                }
+            }
+        }
+    }
+    ro w = git_run(main_copy, ["worktree", "list", "--porcelain"])
+    if w.ok {
+        for line in w.text.lines() {
+            ro l = line.trim_ascii()
+            if l.starts_with("worktree ") {
+                ro path = l["worktree ".byte_len()..].trim_ascii()
+                match path.rfind("/") {
+                    Some(k) => out.push(path[k + 1..])
+                    None => out.push(path)
+                }
+            } else if l.starts_with("branch refs/heads/task/") {
+                out.push(l["branch refs/heads/task/".byte_len()..])
+            }
+        }
+    }
+    out
+}
+
 /// The lines of `git status --porcelain` of the tree (what is changed and not committed).
 export fn tk_tree_changes(tree str) Proc -> []str {
     mut out = []str.new()

@@ -13,10 +13,19 @@ import std.encoding.json.{Json, JsonValue, JsonObject}
 /// The name of the tool.
 export const CREW_TASK_TOOL = "crew_task"
 
+/// A child task proposed together with an epic (task 192.13): the title, the summary, the files and the mode of execution of its own ("" - the one of the epic).
+export type KidSpec { title str, summary str, touches []str, mode str }
+
+/// The modes of execution the agent may propose (the names of the routes): interactive (the very fast one, up to 30 minutes), fast (6 steps), full (8 steps).
+export fn run_mode_ok(mode str) -> bool => mode == "interactive" || mode == "fast" || mode == "full"
+
 /// Proposal: what the agent recognised and the owner has not answered yet. `state`: `open` (confirm or refuse), `overlap` (the files overlap with a running subtask: wait or go in parallel),
 /// `limit` (the limit of the tasks in work is reached: over the limit or into the queue). `how` is the choice at the overlap ("wait", "parallel"), `over` the word "over the limit".
 /// `source` is the message of the owner the proposal is about, `images` the pictures of that message (paths and names).
 export type Proposal {
+    mode str,
+    reason str,
+    kids str,
     id int,
     kind str,
     title str,
@@ -43,13 +52,13 @@ export type Proposal {
 
 /// A proposal that is just made: open, no choices.
 export fn proposal_new(kind str, title str, summary str, extends int, touches []str, confidence str) -> Proposal => {
-    id: 0, kind, title, summary, extends, touches, confidence, source: "", images: []str.new(), image_names: []str.new(),
+    mode: "", reason: "", kids: "", id: 0, kind, title, summary, extends, touches, confidence, source: "", images: []str.new(), image_names: []str.new(),
     state: "open", how: "", over: false, with_n: 0, with_files: []str.new(), unknown: false, listed: false, choice: "", note: "", agent: "", parent: 0, epic: 0
 }
 
 /// A copy of a proposal (the lists are shared, they are only read).
 export fn proposal_copy(p Proposal) -> Proposal => {
-    id: p.id, kind: p.kind, title: p.title, summary: p.summary, extends: p.extends, touches: p.touches, confidence: p.confidence, source: p.source,
+    mode: p.mode, reason: p.reason, kids: p.kids, id: p.id, kind: p.kind, title: p.title, summary: p.summary, extends: p.extends, touches: p.touches, confidence: p.confidence, source: p.source,
     images: p.images, image_names: p.image_names, state: p.state, how: p.how, over: p.over, with_n: p.with_n, with_files: p.with_files, unknown: p.unknown,
     listed: p.listed, choice: p.choice, note: p.note, agent: p.agent, parent: p.parent, epic: p.epic
 }
@@ -102,7 +111,7 @@ export fn is_code_word(text str, word str) -> bool {
 
 /// The description of the tool for `tools/list`.
 export fn crew_task_tool_json() -> JsonValue {
-    ro text = "{\"name\":\"crew_task\",\"description\":\"Call it when the message of the user is REAL WORK on the files of the project (code, documents, tests, settings): something is to be changed, written or built. Do NOT call it for a question, a talk, an explanation, a look at the code or a one-word answer. The hub then shows the user a card and the user confirms (new task) or refuses; do not touch the files until the hub tells the decision. If the work belongs to a task that is already in the list of the tasks of the session, say kind=extend and its number in extends: an addition to an OPEN task with confidence=high is applied by the hub AT ONCE, without a card (the owner can take it back with a button), so give confidence honestly and never use kind=extend for a question or a talk. Call it once per piece of work, at the very beginning, before the first change of a file. RULES: never call it for a question or a talk; never call crew_task_list on your own; never create doc/tasks folders or message.md yourself - the hub does it after the owner answers the card.\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"kind\":{\"type\":\"string\",\"enum\":[\"new\",\"child\",\"epic\",\"extend\"],\"description\":\"new - a new task of its own (the default); child - the work is explicitly a child task of the epic in epic; epic - the work is a big one, an epic with child tasks; extend - the work belongs to an existing task of the list.\"},\"epic\":{\"type\":\"integer\",\"description\":\"For kind=child: the number of the epic (any open task of the list may be one).\"},\"title\":{\"type\":\"string\",\"description\":\"A short title of the work (up to 60 characters).\"},\"summary\":{\"type\":\"string\",\"description\":\"What is to be done, in a few lines: it becomes the text of message.md.\"},\"extends\":{\"type\":\"integer\",\"description\":\"For kind=extend: the number of the task of the list.\"},\"touches\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"description\":\"The files and folders the work will change (paths in the project).\"},\"confidence\":{\"type\":\"string\",\"enum\":[\"high\",\"medium\",\"low\"],\"description\":\"How sure you are that it is real work and not a talk.\"}},\"required\":[\"kind\",\"title\",\"summary\"]}}"
+    ro text = "{\"name\":\"crew_task\",\"description\":\"Call it when the message of the user is REAL WORK on the files of the project (code, documents, tests, settings): something is to be changed, written or built. Do NOT call it for a question, a talk, an explanation, a look at the code or a one-word answer. The hub then shows the user a card and the user confirms (new task) or refuses; do not touch the files until the hub tells the decision. If the work belongs to a task that is already in the list of the tasks of the session, say kind=extend and its number in extends: an addition to an OPEN task with confidence=high is applied by the hub AT ONCE, without a card (the owner can take it back with a button), so give confidence honestly and never use kind=extend for a question or a talk. Call it once per piece of work, at the very beginning, before the first change of a file. RULES: never call it for a question or a talk; if the work consists of several independent parts (front and back, different modules, more than about 30 minutes) propose ONE epic: kind=epic and children=[...], not one big task; propose the mode by the estimate (up to 30 minutes and reversible - interactive, up to a couple of hours - fast, big or risky - full) and always say why in reason; never call crew_task_list on your own; never create doc/tasks folders or message.md yourself - the hub does it after the owner answers the card.\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"kind\":{\"type\":\"string\",\"enum\":[\"new\",\"child\",\"epic\",\"extend\"],\"description\":\"new - a new task of its own (the default); child - the work is explicitly a child task of the epic in epic; epic - the work is a big one, an epic with child tasks; extend - the work belongs to an existing task of the list.\"},\"epic\":{\"type\":\"integer\",\"description\":\"For kind=child: the number of the epic (any open task of the list may be one).\"},\"title\":{\"type\":\"string\",\"description\":\"A short title of the work (up to 60 characters).\"},\"summary\":{\"type\":\"string\",\"description\":\"What is to be done, in a few lines: it becomes the text of message.md.\"},\"extends\":{\"type\":\"integer\",\"description\":\"For kind=extend: the number of the task of the list.\"},\"touches\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"description\":\"The files and folders the work will change (paths in the project).\"},\"confidence\":{\"type\":\"string\",\"enum\":[\"high\",\"medium\",\"low\"],\"description\":\"How sure you are that it is real work and not a talk.\"},\"mode\":{\"type\":\"string\",\"enum\":[\"interactive\",\"fast\",\"full\"],\"description\":\"The mode of execution you propose: interactive (very fast, up to 30 minutes, reversible), fast (6 steps, up to a couple of hours), full (8 steps, big or risky work).\"},\"reason\":{\"type\":\"string\",\"description\":\"One sentence: why this mode and this way (shown to the owner on the card).\"},\"children\":{\"type\":\"array\",\"description\":\"For kind=epic: the child tasks (the independent parts: front and back, other modules).\",\"items\":{\"type\":\"object\",\"properties\":{\"title\":{\"type\":\"string\"},\"summary\":{\"type\":\"string\"},\"touches\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}},\"mode\":{\"type\":\"string\",\"enum\":[\"interactive\",\"fast\",\"full\"],\"description\":\"The mode of this child task.\"}},\"required\":[\"title\"]}}},\"required\":[\"kind\",\"title\",\"summary\"]}}"
     mparse(text)
 }
 
@@ -159,6 +168,49 @@ export fn proposal_of_arguments(arguments JsonValue) -> Result[Proposal, str] {
         None => ()
     }
     mut made = proposal_new(kind, title, summary, extends, touches, mtext_of(arguments, "confidence"))
+    ro mode = mtext_of(arguments, "mode").trim_ascii()
+    made.mode = if run_mode_ok(mode) { mode } else { "" }
+    made.reason = mtext_of(arguments, "reason").trim_ascii()
+    // the children of an epic (task 192.13): at most 10, each with a title; an item without a title is skipped. Kept as the text of a JSON list (`kids`): a list of records inside a record is not allowed here.
+    if kind == "epic" {
+        mut rows = []JsonValue.new()
+        match mget(arguments, "children") {
+            Some(list) => match list.array() {
+                Some(items) => {
+                    for item in items {
+                        ro ct = mtext_of(item, "title").trim_ascii()
+                        if ct.byte_len() == 0 || rows.len() >= 10 { continue }
+                        ro cs = mtext_of(item, "summary").trim_ascii()
+                        mut ctouches = []str.new()
+                        match mget(item, "touches") {
+                            Some(tl) => match tl.array() {
+                                Some(ts) => {
+                                    for tv in ts {
+                                        match tv.str() {
+                                            Some(path) => { if path.trim_ascii().byte_len() > 0 { ctouches.push(path.trim_ascii()) } }
+                                            None => ()
+                                        }
+                                    }
+                                }
+                                None => ()
+                            }
+                            None => ()
+                        }
+                        ro cm = mtext_of(item, "mode").trim_ascii()
+                        mut r = JsonObject.new()
+                        mput(r, "title", JsonValue.str(ct))
+                        mput(r, "summary", JsonValue.str(if cs.byte_len() == 0 { ct } else { cs }))
+                        mput(r, "touches", ct_strings(ctouches))
+                        mput(r, "mode", JsonValue.str(if run_mode_ok(cm) { cm } else { "" }))
+                        rows.push(JsonValue.object(r))
+                    }
+                }
+                None => ()
+            }
+            None => ()
+        }
+        made.kids = if rows.len() == 0 { "" } else { JsonValue.array(rows).to_str() }
+    }
     made.parent = parent
     // an old agent names the task in `parent` (subtask) - for a child it is the same epic
     made.epic = if epic > 0 { epic } else if kind == "child" { parent } else { 0 }
@@ -181,7 +233,35 @@ export fn proposal_arguments_text(p Proposal) -> str {
     mput(o, "epic", JsonValue.int(p.epic))
     mput(o, "touches", ct_strings(p.touches))
     mput(o, "confidence", JsonValue.str(p.confidence))
+    mput(o, "mode", JsonValue.str(p.mode))
+    mput(o, "reason", JsonValue.str(p.reason))
+    mput(o, "children", ct_children_view(p))
     JsonValue.object(o).to_str()
+}
+
+/// The children of an epic as a JSON list (for the way to the hub and for the page).
+fn ct_children_view(p Proposal) -> JsonValue {
+    if p.kids.byte_len() == 0 { return JsonValue.array([]JsonValue.new()) }
+    match Json.parse(p.kids) {
+        Ok(v) => v
+        Err(e) => JsonValue.array([]JsonValue.new())
+    }
+}
+
+/// The children of the epic proposal.
+export fn proposal_children(p Proposal) -> []KidSpec {
+    mut out = []KidSpec.new()
+    for item in (ct_children_view(p).array() ?? []JsonValue.new()) {
+        mut touches = []str.new()
+        for tv in ((mget(item, "touches") ?? JsonValue.null()).array() ?? []JsonValue.new()) {
+            match tv.str() {
+                Some(path) => touches.push(path)
+                None => ()
+            }
+        }
+        out.push(KidSpec { title: mtext_of(item, "title"), summary: mtext_of(item, "summary"), touches, mode: mtext_of(item, "mode") })
+    }
+    out
 }
 
 /// The proposal from the text above (the hub side); a text that is not good gives the reason.
@@ -403,7 +483,40 @@ fn ct_proposal_view(p Proposal, extends_title str) -> JsonValue {
     mput(o, "listed", JsonValue.bool(p.listed))
     mput(o, "choice", JsonValue.str(p.choice))
     mput(o, "note", JsonValue.str(p.note))
+    mput(o, "mode", JsonValue.str(p.mode))
+    mput(o, "reason", JsonValue.str(p.reason))
+    mput(o, "children", ct_children_view(p))
     JsonValue.object(o)
+}
+
+/// The children the owner left ticked on the card: `picked` is "" (all of them), "-" (none) or the numbers from 0 separated by commas. The epic keeps only these.
+export fn children_picked(p Proposal, picked str) -> Proposal {
+    mut q = proposal_copy(p)
+    if picked.trim_ascii().byte_len() == 0 { return q }
+    mut keep = []JsonValue.new()
+    mut i = 0
+    for item in (ct_children_view(p).array() ?? []JsonValue.new()) {
+        mut on = false
+        for part in picked.split(",") {
+            match part.trim_ascii().to_int() {
+                Ok(n) => { if n == i { on = true } }
+                Err(e) => ()
+            }
+        }
+        if on { keep.push(item) }
+        i += 1
+    }
+    q.kids = if keep.len() == 0 { "" } else { JsonValue.array(keep).to_str() }
+    q
+}
+
+/// A child task of an epic as a proposal of its own (a child of the task `epic_no`), the mode of the epic when it has none.
+export fn child_proposal(c KidSpec, epic_no int, mode str, source str) -> Proposal {
+    mut q = proposal_new("child", c.title, c.summary, 0, c.touches, "")
+    q.epic = epic_no
+    q.mode = if run_mode_ok(c.mode) { c.mode } else { mode }
+    q.source = source
+    q
 }
 
 /// What the page needs for the cards and the panel, added to the state of the mode: `proposals`, `active` (the subtasks in work), `max_active` (the limit, 0 - none), the two code words.

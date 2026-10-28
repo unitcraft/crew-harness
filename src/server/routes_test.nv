@@ -526,3 +526,18 @@ test "routes: wip - the journal says the tree of a work that is not a task, the 
     dropped.apply("route_task", "{\"op\":\"wip\",\"branch\":\"\",\"worktree\":\"\",\"base\":\"\"}")
     assert(dropped.wip_tree == "" && dropped.agent_dir("/repo") == "/repo")
 }
+
+test "routes: the next number stays above origin/main and above the numbers given at once (task 192.13)" {
+    // local folders reach 192, origin/main already holds 194 and 234: 235; with only 192 and 194 - 195
+    assert(next_task_number_reserved(["190-a", "192-b", "194-alula-epic"], []int.new()) == 195)
+    assert(next_task_number_reserved(["192-b", "194-x", "234-y", "246-z"], []int.new()) == 247)
+    // two tasks made at once: the second one gets the next number, never the same
+    mut given = []int.new()
+    ro names = ["192-b", "194-x"]
+    ro first = next_task_number_reserved(names, given)
+    given.push(first)
+    ro second = next_task_number_reserved(names, given)
+    given.push(second)
+    ro third = next_task_number_reserved(names, given)
+    assert(first == 195 && second == 196 && third == 197)
+}
