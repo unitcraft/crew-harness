@@ -45,12 +45,12 @@ fn product_rows() -> str => "| расход | transport_usage |\n| ИтогХо�
 
 fn with_usage(text str) -> str => text.replace("| расход | transport_usage |\n", product_rows())
 
-// The product corrects two explanatory paragraphs for Pause 0.9.1; the copied package sample keeps its prose.
+// The product corrects two explanatory paragraphs for Pause 0.9.1 and the version of the format in the first paragraph (0.27, task 247); the copied package sample keeps its prose.
 fn with_product_notes(text str) -> str {
     mut out = []str.new()
     for line in text.split("\n") {
         mut changed = line
-        for prefix in ["Границу `число_ходов <= предел ходов`", "Набор `остановка` — 12 значений;"] {
+        for prefix in ["Границу `число_ходов <= предел ходов`", "Набор `остановка` — 12 значений;", "Это **иллюстрация**: машина «Шаг агента»"] {
             if line.starts_with(prefix) {
                 for product_line in lf(agent_step_table_text()).split("\n") {
                     if product_line.starts_with(prefix) { changed = product_line }
