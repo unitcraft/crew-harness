@@ -513,8 +513,9 @@ test('проводка: баннер и меню подзадач шлют си�
   assert.match(view, /aria-label': t\('route\.sub_more'\)/);
 });
 
-test('полоса шагов и баннер лежат в абсолютном контейнере над полем и не сдвигают макет; цвета только через токены', () => {
-  assert.match(css, /\.route-over \{ position: absolute;/);
+test('полоса шагов и баннер лежат в потоке над полем, лента кончается над ними; цвета только через токены', () => {
+  assert.match(css, /\.route-over \{ position: relative;/);
+  assert.doesNotMatch(css, /\.route-over \{[^}]*position: absolute/);
   const block = css.slice(css.indexOf('режимы работы по методике (задача 192p)'));
   assert.doesNotMatch(block, /#[0-9a-fA-F]{3,8}\b|rgba?\(/, 'в стилях режимов нет прямых цветов');
 });
