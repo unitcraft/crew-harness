@@ -23,6 +23,7 @@ import crew_harness.pgconf.{pg_config_env}
 import std.encoding.json.{Json, JsonValue, JsonObject}
 import std.fs.{Fs, read_text, Path}
 import std.os.{Os, env}
+import crew_harness.config.{ConfigLayout, legacy_layout, layout_in, layout_with_data_dir, crew_home, work_dir_now, find_project_dir, file_layers, env_layer, arg_layer, merge_layers, normalize_layer, file_text}
 
 /// AgentSpec: an agent the page can choose: the id the page names it by, the label, the command, and how it asks the owner (task 192i): `native` (its own
 /// tool of questions, over `elicitation/create`; the default), `mcp` (the hub gives it the MCP tool `ask_user_question` and a hint), `off` (nothing).
@@ -68,7 +69,9 @@ export type ServerSettings {
     route_wip bool,
     wip_timeout_ms int,
     agent_start_ms int,
-    agent_silent_minutes int
+    agent_silent_minutes int,
+    layout ConfigLayout,
+    preset str
 }
 
 fn st_text(o JsonObject, key str, fallback str) -> Result[str, str] {
@@ -115,8 +118,8 @@ const STT_DEFAULT_URL = "http://127.0.0.1:8178/inference"
 fn st_stt_url_ok(url str) -> bool => url.starts_with("http://127.0.0.1:") || url.starts_with("http://localhost:")
 
 fn st_stt_check(url str, language str) -> Result[(), str] {
-    if !st_stt_url_ok(url) { return Err("the stt url must be http://127.0.0.1:<port>/... or http://localhost:<port>/...") }
-    if language.byte_len() == 0 { return Err("the stt language must not be empty (auto, ru, en, ...)") }
+    if !st_stt_url_ok(url) { return Err("the stt (voice) url must be http://127.0.0.1:<port>/... or http://localhost:<port>/...") }
+    if language.byte_len() == 0 { return Err("the stt (voice) language must not be empty (auto, ru, en, ...)") }
     Ok(())
 }
 
@@ -225,9 +228,11 @@ export fn parse_server_settings(text str) -> Result[ServerSettings, str] {
     if ask_seconds < 1 { return Err("ask_timeout_seconds must be 1 or more") }
     mut stt_url = STT_DEFAULT_URL
     mut stt_language = "auto"
-    match o.get("stt") {
+    // `voice` is the name of the setting; the older name `stt` (speech-to-text) is read too, `voice` over it
+    ro voice_o = normalize_layer(o)
+    match voice_o.get("voice") {
         Some(t) => {
-            ro to = st_object(t, "the setting stt")?
+            ro to = st_object(t, "the setting voice")?
             stt_url = st_text(to, "url", stt_url)?
             stt_language = st_text(to, "language", stt_language)?
         }
@@ -256,6 +261,7 @@ export fn parse_server_settings(text str) -> Result[ServerSettings, str] {
     ro wip_timeout_seconds = st_number(o, "wip_timeout_seconds", 300)?
     ro agent_start_seconds = st_number(o, "agent_start_timeout_seconds", 60)?
     ro agent_silent_minutes = st_number(o, "agent_silent_minutes", 5)?
+    ro preset = st_text(o, "preset", "default")?
     mut hub_program = "target/crew-hub.exe"
     mut hub_args = []str.new()
     match o.get("hub") {
@@ -269,7 +275,7 @@ export fn parse_server_settings(text str) -> Result[ServerSettings, str] {
         }
         None => ()
     }
-    Ok(ServerSettings { port, data_dir, store, pg, agents, idle_term_ms: idle_seconds * 1000, workdir, web_dir, machines_dir, hub_program, hub_args, acp_trace, ask_form, ask_timeout_ms: ask_seconds * 1000, stt_url, stt_language, max_image_bytes, routes_dir, route_reviewer_order, route_task_limit, route_task_messages, route_fix_attempts, route_worktree_ask, route_overlap_seconds, route_keep_days, context_drop_percent, route_confirm_word, route_over_limit_word, route_max_active, route_tool, route_auto_propose, route_children, route_wip, wip_timeout_ms: wip_timeout_seconds * 1000, agent_start_ms: agent_start_seconds * 1000, agent_silent_minutes })
+    Ok(ServerSettings { port, data_dir, store, pg, agents, idle_term_ms: idle_seconds * 1000, workdir, web_dir, machines_dir, hub_program, hub_args, acp_trace, ask_form, ask_timeout_ms: ask_seconds * 1000, stt_url, stt_language, max_image_bytes, routes_dir, route_reviewer_order, route_task_limit, route_task_messages, route_fix_attempts, route_worktree_ask, route_overlap_seconds, route_keep_days, context_drop_percent, route_confirm_word, route_over_limit_word, route_max_active, route_tool, route_auto_propose, route_children, route_wip, wip_timeout_ms: wip_timeout_seconds * 1000, agent_start_ms: agent_start_seconds * 1000, agent_silent_minutes, layout: legacy_layout(data_dir), preset })
 }
 
 fn st_env(key str) Os -> Option[str] {
@@ -328,21 +334,45 @@ fn st_one_agent(words []str) -> []AgentSpec {
     one
 }
 
-/// The settings: the file `file` (or the one named by CREW_SERVER_CONFIG when `file` is empty; no file means the defaults),
-/// then the environment over it. The error never quotes the content of the file.
-export fn server_settings(file str) Os Fs -> Result[ServerSettings, str] {
+/// The settings in the root of the instance named by CREW_HOME (or the folder of the user): see `server_settings_in`.
+export fn server_settings(file str) Os Fs -> Result[ServerSettings, str] => server_settings_in(file, crew_home(""), []str.new())
+
+/// The settings by the layers (task 192.12, ADR-0016), the lower ones are covered by the upper: the defaults of the code, `<home>/config/config.json`, the file `file`
+/// (or the one named by CREW_SERVER_CONFIG when `file` is empty: "the server file"), `.crew-harness/config.json` and `local.json` of the project (the folder the hub works in,
+/// or above it), `<home>/config/secrets.json`, the variables CREW_*, the words `key=value` of `sets` (the arguments `--set`). `home` is the root of the instance ("" - none: the
+/// old flat layout in `crew-data`). An old `data_dir` (a file or CREW_SERVER_DATA_DIR) makes the layout flat in that folder. The error is `file:line: reason` for a broken
+/// file and never quotes the content.
+export fn server_settings_in(file str, home str, sets []str) Os Fs -> Result[ServerSettings, str] {
     ro name = if file.byte_len() > 0 { file } else { st_env("CREW_SERVER_CONFIG") ?? "" }
-    ro base = if name.byte_len() == 0 {
-        parse_server_settings("{}")?
-    } else {
-        ro text = match read_text(Path.from_bytes(name.bytes())) {
-            Ok(t) => t
-            Err(e) => return Err("the settings file ${name} cannot be read")
-        }
-        match parse_server_settings(text) {
-            Ok(s) => s
-            Err(e) => return Err("${e} (file ${name})")
-        }
+    if name.byte_len() > 0 && file_text(name).is_none() { return Err("the settings file ${name} cannot be read") }
+    ro work = work_dir_now()
+    ro project = find_project_dir(work, home)
+    ro at = layout_in(home, project)
+    mut layers = file_layers(at, name)?
+    layers.push(env_layer())
+    layers.push(arg_layer(sets))
+    ro merged = merge_layers(layers)
+    ro data_set = match merged.get("data_dir") {
+        Some(v) => (v.str() ?? "").byte_len() > 0
+        None => false
+    }
+    ro routes_set = match merged.get("routes_dir") {
+        Some(v) => (v.str() ?? "").byte_len() > 0
+        None => false
+    }
+    ro parsed = match parse_server_settings(JsonValue.object(merged).to_str()) {
+        Ok(s) => s
+        Err(e) => return Err(e)
+    }
+    ro layout = if data_set { layout_with_data_dir(home, parsed.data_dir, project) } else if home.byte_len() > 0 { at } else { legacy_layout(parsed.data_dir) }
+    ro base = ServerSettings {
+        port: parsed.port, data_dir: layout.sessions, store: parsed.store, pg: parsed.pg, agents: parsed.agents, idle_term_ms: parsed.idle_term_ms, workdir: parsed.workdir, web_dir: parsed.web_dir, machines_dir: parsed.machines_dir,
+        hub_program: parsed.hub_program, hub_args: parsed.hub_args, acp_trace: parsed.acp_trace, ask_form: parsed.ask_form, ask_timeout_ms: parsed.ask_timeout_ms, stt_url: parsed.stt_url,
+        stt_language: parsed.stt_language, max_image_bytes: parsed.max_image_bytes, routes_dir: if routes_set { parsed.routes_dir } else { "" }, route_reviewer_order: parsed.route_reviewer_order,
+        route_task_limit: parsed.route_task_limit, route_task_messages: parsed.route_task_messages, route_fix_attempts: parsed.route_fix_attempts, route_worktree_ask: parsed.route_worktree_ask,
+        route_overlap_seconds: parsed.route_overlap_seconds, route_keep_days: parsed.route_keep_days, context_drop_percent: parsed.context_drop_percent, route_confirm_word: parsed.route_confirm_word,
+        route_over_limit_word: parsed.route_over_limit_word, route_max_active: parsed.route_max_active, route_tool: parsed.route_tool, route_auto_propose: parsed.route_auto_propose,
+        route_children: parsed.route_children, route_wip: parsed.route_wip, wip_timeout_ms: parsed.wip_timeout_ms, agent_start_ms: parsed.agent_start_ms, agent_silent_minutes: parsed.agent_silent_minutes, layout, preset: parsed.preset
     }
     ro pg = pg_config_env(base.pg)?
     ro port = st_env_number("CREW_SERVER_PORT")?
@@ -358,33 +388,30 @@ export fn server_settings(file str) Os Fs -> Result[ServerSettings, str] {
     }
     ro hub_program = if hub_words.len() > 0 { hub_words[0] } else { base.hub_program }
     ro hub_args = if hub_words.len() > 0 { st_rest(hub_words) } else { base.hub_args }
-    ro idle_term_ms = match idle {
-        Some(n) => n * 1000
-        None => base.idle_term_ms
-    }
-    ro acp_trace = st_env_flag("CREW_SERVER_ACP_TRACE", base.acp_trace)?
-    ro ask_form = st_env_flag("CREW_SERVER_ASK_FORM", base.ask_form)?
-    ro ask_seconds = st_env_number("CREW_SERVER_ASK_TIMEOUT_SECONDS")?
-    ro ask_timeout_ms = match ask_seconds {
-        Some(n) => n * 1000
-        None => base.ask_timeout_ms
-    }
-    ro stt_url = st_env("CREW_SERVER_STT_URL") ?? base.stt_url
-    ro stt_language = st_env("CREW_SERVER_STT_LANGUAGE") ?? base.stt_language
+    // the variables are already a layer of `base` (env_layer), under the arguments; here they are only checked, a wrong one is named
+    ro idle_term_ms = base.idle_term_ms
+    ro trace_check = st_env_flag("CREW_SERVER_ACP_TRACE", base.acp_trace)?
+    ro form_check = st_env_flag("CREW_SERVER_ASK_FORM", base.ask_form)?
+    ro ask_check = st_env_number("CREW_SERVER_ASK_TIMEOUT_SECONDS")?
+    ro acp_trace = base.acp_trace
+    ro ask_form = base.ask_form
+    ro ask_timeout_ms = base.ask_timeout_ms
+    ro stt_url = base.stt_url
+    ro stt_language = base.stt_language
     st_stt_check(stt_url, stt_language)?
     ro image_limit = st_env_number("CREW_SERVER_MAX_IMAGE_BYTES")?
-    ro max_image_bytes = image_limit ?? base.max_image_bytes
+    ro max_image_bytes = base.max_image_bytes
     st_image_limit_check(max_image_bytes)?
     ro merged = ServerSettings {
-        port: port ?? base.port,
-        data_dir: st_env("CREW_SERVER_DATA_DIR") ?? base.data_dir,
-        store: st_env("CREW_SERVER_STORE") ?? base.store,
+        port: base.port,
+        data_dir: base.data_dir,
+        store: base.store,
         pg,
         agents,
         idle_term_ms,
-        workdir: st_env("CREW_SERVER_WORKDIR") ?? base.workdir,
-        web_dir: st_env("CREW_SERVER_WEB_DIR") ?? base.web_dir,
-        machines_dir: st_env("CREW_SERVER_MACHINES_DIR") ?? base.machines_dir,
+        workdir: base.workdir,
+        web_dir: base.web_dir,
+        machines_dir: base.machines_dir,
         hub_program,
         hub_args,
         acp_trace,
@@ -393,7 +420,7 @@ export fn server_settings(file str) Os Fs -> Result[ServerSettings, str] {
         stt_url,
         stt_language,
         max_image_bytes,
-        routes_dir: st_env("CREW_SERVER_ROUTES_DIR") ?? base.routes_dir,
+        routes_dir: base.routes_dir,
         route_reviewer_order: base.route_reviewer_order,
         route_task_limit: base.route_task_limit,
         route_task_messages: base.route_task_messages,
@@ -410,7 +437,9 @@ export fn server_settings(file str) Os Fs -> Result[ServerSettings, str] {
         route_wip: base.route_wip,
         wip_timeout_ms: base.wip_timeout_ms,
         agent_start_ms: base.agent_start_ms,
-        agent_silent_minutes: base.agent_silent_minutes
+        agent_silent_minutes: base.agent_silent_minutes,
+        layout: base.layout,
+        preset: base.preset
     }
     if merged.store != "files" && merged.store != "pg" { return Err("the store must be files or pg") }
     if merged.port < 1 || merged.port > 65535 { return Err("the port must be 1 to 65535") }
@@ -437,7 +466,8 @@ export fn ServerSettings @describe() -> str {
     mut ids = []str.new()
     for a in @agents { ids.push(a.id) }
     ro store = if @store == "pg" { "pg ${@pg.describe()}" } else { "files in ${@data_dir}" }
-    "port ${@port}, store ${store}, agents ${ids.join(",")}, idle term ${@idle_term_ms / 1000} s"
+    ro place = if @layout.legacy { "flat layout" } else { "home ${@layout.home}" }
+    "port ${@port}, store ${store}, ${place}, agents ${ids.join(",")}, idle term ${@idle_term_ms / 1000} s"
 }
 
 /// The agent with this id.

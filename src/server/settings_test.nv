@@ -2,8 +2,9 @@
 // text that can be printed.
 module crew_harness.server
 
+import crew_harness.config.{defaults_layer}
 import std.os.{Os, MockOs, mock_os, real_os, temp_dir, pid}
-import std.fs.{Fs, real_fs, read_text, write_text, create_dir_all, Path}
+import std.fs.{Fs, real_fs, read_text, write_text, create_dir_all, remove_dir_all, Path}
 
 fn full_settings_text() -> str => "{\"port\":8123,\"data_dir\":\"C:/work/crew-data\",\"store\":\"pg\",\"pg\":{\"host\":\"localhost\",\"port\":55432,\"database\":\"crew_x\",\"user\":\"crew_login\",\"password\":\"file-test-pw\"},\"agents\":[{\"id\":\"opencode\",\"label\":\"OpenCode\",\"program\":\"opencode\",\"args\":[\"acp\"]},{\"id\":\"fake\",\"program\":\"node\",\"args\":[\"a.mjs\",\"--live\"]}],\"idle_term_seconds\":60,\"workdir\":\"C:/work/project\",\"web_dir\":\"web\",\"hub\":{\"program\":\"target/hub.exe\",\"args\":[\"x\"]}}"
 
@@ -345,4 +346,187 @@ test "settings: the modes of work have defaults and can be set" {
     ro words = must_settings("{\"route_confirm_word\":\"go\",\"route_over_limit_word\":\"more\",\"route_max_active\":0,\"route_tool\":false,\"route_auto_propose\":true}")
     assert(words.route_confirm_word == "go" && words.route_over_limit_word == "more" && words.route_max_active == 0 && !words.route_tool && words.route_auto_propose)
     assert(is_error(parse_server_settings("{\"route_reviewer_order\":\"kimi\"}")))
+}
+
+// ----- the layers and the layout of the folders (task 192.12) -----
+
+fn layers_root(name str) -> str {
+    ro base = with Os = real_os() { temp_dir() }
+    ro id = with Os = real_os() { pid() }
+    ro dir = base.join("crew-layers-${name}-${id}")
+    with Fs = real_fs() {
+        ro gone = remove_dir_all(dir)
+        ro made = create_dir_all(dir)
+    }
+    dir.display().replace("\\", "/")
+}
+
+fn layers_put(root str, rel str, text str) -> () {
+    ro path = Path.from_bytes("${root}/${rel}".bytes())
+    with Fs = real_fs() {
+        match path.parent() {
+            Some(p) => { ro made = create_dir_all(p) }
+            None => ()
+        }
+        ro written = write_text(path, text)
+    }
+}
+
+fn layers_drop(root str) -> () {
+    with Fs = real_fs() {
+        ro gone = remove_dir_all(Path.from_bytes(root.bytes()))
+    }
+}
+
+test "layers: the layers cover each other in the order user, server file, project, local, environment, arguments" {
+    ro root = layers_root("order")
+    layers_put(root, "inst/config/config.json", "{\"port\":1,\"web_dir\":\"u\",\"workdir\":\"u\",\"route_task_limit\":1,\"route_task_messages\":1,\"route_fix_attempts\":1}")
+    layers_put(root, "srv.json", "{\"port\":2,\"web_dir\":\"s\",\"workdir\":\"s\",\"route_task_limit\":2,\"route_task_messages\":2}")
+    layers_put(root, "repo/.crew-harness/config.json", "{\"port\":3,\"web_dir\":\"p\",\"workdir\":\"p\",\"route_task_limit\":3}")
+    layers_put(root, "repo/.crew-harness/local.json", "{\"port\":4,\"web_dir\":\"l\",\"workdir\":\"l\"}")
+    mut state = MockOs.new()
+    state.set_cwd_str("${root}/repo/sub")
+    state.put_env("CREW_SERVER_PORT", "5")
+    state.put_env("CREW_SERVER_WEB_DIR", "e")
+    match with Os = mock_os(state), Fs = real_fs() { server_settings_in("${root}/srv.json", "${root}/inst", ["port=6"]) } {
+        Err(e) => assert(false)
+        Ok(s) => {
+            assert(s.port == 6)
+            assert(s.web_dir == "e")
+            assert(s.workdir == "l")
+            assert(s.route_task_limit == 3)
+            assert(s.route_task_messages == 2)
+            assert(s.route_fix_attempts == 1)
+            assert(s.layout.project == "${root}/repo/.crew-harness")
+        }
+    }
+    layers_drop(root)
+}
+
+test "layers: with a root the folders are home/data/sessions, state and cache, and the mode of work is searched by layers" {
+    ro root = layers_root("folders")
+    mut state = MockOs.new()
+    state.set_cwd_str("${root}/nowhere")
+    match with Os = mock_os(state), Fs = real_fs() { server_settings_in("", "${root}/inst", []str.new()) } {
+        Err(e) => assert(false)
+        Ok(s) => {
+            assert(s.data_dir == "${root}/inst/data/sessions")
+            assert(s.layout.data == "${root}/inst/data" && s.layout.state == "${root}/inst/state" && s.layout.cache == "${root}/inst/cache" && s.layout.config == "${root}/inst/config")
+            assert(!s.layout.legacy)
+            assert(s.routes_dir == "")
+            assert(s.preset == "default")
+        }
+    }
+    layers_drop(root)
+}
+
+test "layers: an old data_dir keeps the flat layout in that folder; the explicit routes_dir is kept" {
+    ro root = layers_root("legacy")
+    layers_put(root, "srv.json", "{\"data_dir\":\"${root}/old-data\",\"routes_dir\":\"my/routes\"}")
+    mut state = MockOs.new()
+    state.set_cwd_str("${root}/nowhere")
+    match with Os = mock_os(state), Fs = real_fs() { server_settings_in("${root}/srv.json", "${root}/inst", []str.new()) } {
+        Err(e) => assert(false)
+        Ok(s) => {
+            assert(s.data_dir == "${root}/old-data")
+            assert(s.layout.legacy && s.layout.data == "${root}/old-data" && s.layout.state == "${root}/old-data" && s.layout.cache == "${root}/old-data")
+            assert(s.routes_dir == "my/routes")
+        }
+    }
+    mut env_state = MockOs.new()
+    env_state.set_cwd_str("${root}/nowhere")
+    env_state.put_env("CREW_SERVER_DATA_DIR", "${root}/env-data")
+    match with Os = mock_os(env_state), Fs = real_fs() { server_settings_in("", "${root}/inst", []str.new()) } {
+        Err(e) => assert(false)
+        Ok(s) => assert(s.data_dir == "${root}/env-data" && s.layout.legacy)
+    }
+    layers_drop(root)
+}
+
+test "layers: no root at all is the old default folder crew-data" {
+    mut state = MockOs.new()
+    state.set_home_str("")
+    match with Os = mock_os(state), Fs = real_fs() { server_settings("") } {
+        Err(e) => assert(false)
+        Ok(s) => assert(s.data_dir == "crew-data" && s.layout.legacy)
+    }
+}
+
+test "layers: voice is the name, stt still works, CREW_VOICE_* are synonyms of CREW_SERVER_STT_*" {
+    ro root = layers_root("voice")
+    layers_put(root, "inst/config/config.json", "{\"stt\":{\"language\":\"ru\"}}")
+    layers_put(root, "repo/.crew-harness/config.json", "{\"voice\":{\"model\":\"medium\"}}")
+    mut state = MockOs.new()
+    state.set_cwd_str("${root}/repo")
+    match with Os = mock_os(state), Fs = real_fs() { server_settings_in("", "${root}/inst", []str.new()) } {
+        Err(e) => assert(false)
+        Ok(s) => assert(s.stt_language == "ru")
+    }
+    state.put_env("CREW_VOICE_LANGUAGE", "en")
+    state.put_env("CREW_VOICE_URL", "http://127.0.0.1:9100/inference")
+    match with Os = mock_os(state), Fs = real_fs() { server_settings_in("", "${root}/inst", []str.new()) } {
+        Err(e) => assert(false)
+        Ok(s) => assert(s.stt_language == "en" && s.stt_url == "http://127.0.0.1:9100/inference")
+    }
+    state.put_env("CREW_SERVER_STT_LANGUAGE", "de")
+    match with Os = mock_os(state), Fs = real_fs() { server_settings_in("", "${root}/inst", []str.new()) } {
+        Err(e) => assert(false)
+        Ok(s) => assert(s.stt_language == "en")
+    }
+    ro file = must_settings("{\"voice\":{\"url\":\"http://localhost:9000/x\"},\"stt\":{\"language\":\"fr\"}}")
+    assert(file.stt_url == "http://localhost:9000/x" && file.stt_language == "fr")
+    layers_drop(root)
+}
+
+test "layers: a broken file of a layer is file:line: reason, and the preset comes from a layer" {
+    ro root = layers_root("broken")
+    layers_put(root, "inst/config/config.json", "{\n  \"port\": 1,\n  \"store\": ???\n}")
+    mut state = MockOs.new()
+    state.set_cwd_str("${root}/nowhere")
+    match with Os = mock_os(state), Fs = real_fs() { server_settings_in("", "${root}/inst", []str.new()) } {
+        Ok(s) => assert(false)
+        Err(e) => assert(e.starts_with("${root}/inst/config/config.json:3:") && !e.contains("???"))
+    }
+    layers_put(root, "inst/config/config.json", "{\"preset\":\"mix\"}")
+    match with Os = mock_os(state), Fs = real_fs() { server_settings_in("", "${root}/inst", []str.new()) } {
+        Err(e) => assert(false)
+        Ok(s) => assert(s.preset == "mix")
+    }
+    layers_drop(root)
+}
+
+test "layers: the password from secrets.json or the environment reaches the settings and is not in the description" {
+    ro root = layers_root("secrets")
+    layers_put(root, "inst/config/secrets.json", "{\"pg\":{\"password\":\"from-secrets-file\"}}")
+    layers_put(root, "inst/config/config.json", "{\"store\":\"pg\"}")
+    mut state = MockOs.new()
+    state.set_cwd_str("${root}/nowhere")
+    match with Os = mock_os(state), Fs = real_fs() { server_settings_in("", "${root}/inst", []str.new()) } {
+        Err(e) => assert(false)
+        Ok(s) => {
+            assert(s.pg.password == "from-secrets-file")
+            assert(!s.describe().contains("from-secrets-file"))
+        }
+    }
+    state.put_env("CREW_PG_PASSWORD", "from-env")
+    match with Os = mock_os(state), Fs = real_fs() { server_settings_in("", "${root}/inst", []str.new()) } {
+        Err(e) => assert(false)
+        Ok(s) => assert(s.pg.password == "from-env" && !s.describe().contains("from-env"))
+    }
+    layers_drop(root)
+}
+
+test "layers: the defaults of the schema are the defaults of the settings" {
+    ro s = must_settings("{}")
+    ro d = defaults_layer().obj
+    assert(d.get("port").unwrap().int() == Some(s.port))
+    assert(d.get("web_dir").unwrap().str() == Some(s.web_dir))
+    assert(d.get("max_image_bytes").unwrap().int() == Some(s.max_image_bytes))
+    assert(d.get("route_task_limit").unwrap().int() == Some(s.route_task_limit))
+    assert(d.get("route_max_active").unwrap().int() == Some(s.route_max_active))
+    assert(d.get("route_confirm_word").unwrap().str() == Some(s.route_confirm_word))
+    assert(d.get("ask_timeout_seconds").unwrap().int() == Some(s.ask_timeout_ms / 1000))
+    assert(d.get("idle_term_seconds").unwrap().int() == Some(s.idle_term_ms / 1000))
+    assert(d.get("preset").unwrap().str() == Some(s.preset))
+    assert(d.get("voice").unwrap().object().unwrap().get("url").unwrap().str() == Some(s.stt_url))
 }

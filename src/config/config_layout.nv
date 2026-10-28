@@ -216,19 +216,23 @@ export fn read_layer(origin str, file str) Fs -> Result[Option[Layer], str] {
 export fn normalize_layer(o JsonObject) -> JsonObject {
     if !o.contains("stt") { return merge_objects(o, JsonObject.new()) }
     mut out = JsonObject.new()
-    mut old = JsonObject.new()
-    match o.get("stt") {
-        Some(v) => { old = v.object() ?? JsonObject.new() }
-        None => ()
-    }
     for (k, v) in o {
         if k != "stt" && k != "voice" { ign(out.insert(k, v)) }
     }
-    ro now = match o.get("voice") {
-        Some(v) => v.object() ?? JsonObject.new()
-        None => JsonObject.new()
+    ro old = o.get("stt").unwrap()
+    ro old_o = old.object()
+    // a value that is not an object is kept as it is under `voice`, so that the settings say what is wrong
+    if old_o.is_none() {
+        ign(out.insert("voice", old))
+        return out
     }
-    ign(out.insert("voice", JsonValue.object(merge_objects(old, now))))
+    match o.get("voice") {
+        None => ign(out.insert("voice", old))
+        Some(now) => match now.object() {
+            Some(now_o) => ign(out.insert("voice", JsonValue.object(merge_objects(old_o.unwrap(), now_o))))
+            None => ign(out.insert("voice", now))
+        }
+    }
     out
 }
 
@@ -298,7 +302,7 @@ fn ek(var str, key str, kind str) -> EnvKey => { var, key, kind }
 fn env_keys() -> []EnvKey => [
     ek("CREW_STT_DIR", "voice.dir", "s"),
     ek("CREW_SERVER_PORT", "port", "i"), ek("CREW_SERVER_STORE", "store", "s"), ek("CREW_SERVER_DATA_DIR", "data_dir", "s"), ek("CREW_SERVER_WORKDIR", "workdir", "s"),
-    ek("CREW_SERVER_WEB_DIR", "web_dir", "s"), ek("CREW_SERVER_ACP_TRACE", "acp_trace", "b"), ek("CREW_SERVER_ASK_FORM", "ask_form", "b"),
+    ek("CREW_SERVER_WEB_DIR", "web_dir", "s"), ek("CREW_SERVER_MACHINES_DIR", "machines_dir", "s"), ek("CREW_SERVER_ACP_TRACE", "acp_trace", "b"), ek("CREW_SERVER_ASK_FORM", "ask_form", "b"),
     ek("CREW_SERVER_ASK_TIMEOUT_SECONDS", "ask_timeout_seconds", "i"), ek("CREW_SERVER_IDLE_SECONDS", "idle_term_seconds", "i"),
     ek("CREW_SERVER_ROUTES_DIR", "routes_dir", "s"), ek("CREW_SERVER_MAX_IMAGE_BYTES", "max_image_bytes", "i"),
     ek("CREW_SERVER_STT_URL", "voice.url", "s"), ek("CREW_SERVER_STT_LANGUAGE", "voice.language", "s"), ek("CREW_SERVER_STT_MANAGED", "voice.managed", "b"),
