@@ -35,7 +35,6 @@
 | ПричинаПаузы | PauseReason |
 | Остановлена | Halted |
 | Отменена | Cancelled |
-| причина | reason |
 
 ## Данные
 
