@@ -135,7 +135,12 @@ fn read_request(mut conn TcpStream) Net -> Option[HttpRequest] {
 }
 
 // The session of a path `/mcp/<session>` ("" - none); None - the path is not ours. A path `/mcp/<session>/task` is the same session with the tool `crew_task` only (task 192.2).
-fn session_of(path str) -> Option[str] {
+fn session_of(raw_path str) -> Option[str] {
+    // task 192.9: OpenCode adds a query to the address of an MCP server (`.../list?codemode=false`); it is not a part of the session
+    ro path = match raw_path.find("?") {
+        Some(q) => raw_path[..q]
+        None => raw_path
+    }
     if path == "/mcp" || path == "/mcp/" { return Some("") }
     if path.starts_with("/mcp/") { return Some(path[5..]) }
     None

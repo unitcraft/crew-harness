@@ -160,3 +160,12 @@ test "mcp: the reply of a tool call carries the text, an error carries the flag"
     assert(mkey(result, "isError").bool() == Some(false))
     assert(mkey(mkey(mj(mcp_text_reply(mj("7"), "плохо", true)), "result"), "isError").bool() == Some(true))
 }
+
+test "mcp server: the query that OpenCode adds to the address is not a part of the session" {
+    assert((session_of("/mcp/abc/list?codemode=false") ?? "none") == "abc/list")
+    assert((session_of("/mcp/abc?x=1&y=2") ?? "none") == "abc")
+    assert((session_of("/mcp?codemode=false") ?? "none") == "")
+    assert((session_of("/other?x") ?? "none") == "none")
+    assert(tools_of_session(session_of("/mcp/abc/list?codemode=false") ?? "") == "list")
+    assert(session_plain(session_of("/mcp/abc/list?codemode=false") ?? "") == "abc")
+}
