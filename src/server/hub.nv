@@ -25,7 +25,7 @@ import crew_harness.projects.{EnvEntry, projects_get, parse_dotenv, normalize_fo
 import crew_harness.storage.{remove_session_dir, open_data_dir, file_journal, file_store, list_sessions, valid_session_name, session_file_made, migrate_flat_sessions, image_ext, decode_image, save_image, find_image, replace_file}
 import crew_harness.pgstore.{PgWorld, pg_journal, pg_store}
 import crew_harness.pgdb.{pg_list}
-import std.concurrency.nvchan.{ChanTx}
+import std.concurrency.nvchan.{Chan, ChanTx, ChanRx}
 import std.encoding.hex.{Hex}
 import std.encoding.json.{Json, JsonValue, JsonObject}
 import std.fs.{Fs, real_fs}
@@ -132,8 +132,17 @@ export type Hub {
     choices []PendingChoice,
     reviews []Review,
     route_obs int,
-    marks []MachMark
+    marks []MachMark,
+    trees_tx ChanTx[TreeDone],
+    trees_rx ChanRx[TreeDone],
+    held []HeldMsg
 }
+
+/// TreeDone: the answer of the background job that makes the wip tree of a session (task 192.8): the exit code of `git worktree add` (-1: not run), its error stream as bytes, the note, the path and the base.
+export type TreeDone { trace str, code int, err []u8, note str, path str, base str }
+
+/// HeldMsg: a message of the owner that waits for the tree of its session (task 192.8); it is sent to the agent when the tree is ready or has failed.
+export type HeldMsg { trace str, text str, items []JsonValue }
 
 // ----- small helpers -----
 
@@ -645,7 +654,8 @@ fn Hub mut @ensure_client(at int) Proc Detach Time -> str {
                 s.model_announced = false
                 s.slow_told = false
                 s.started_at = now_millis()
-                s.rt.cwd_now = s.rt.agent_dir(@workdir)
+                // the folder the agent is started in is the one `route_sync_cwd` compares with (a session of a project: the folder of the project): else the agent is restarted at EVERY message (task 192.8)
+                s.rt.cwd_now = s.rt.agent_dir(@cwd_of(s.folder))
                 s.rt.told = false
                 ""
             }
@@ -692,8 +702,9 @@ export fn start_hub_from(settings ServerSettings, table_text str) Proc Detach Ti
         }
     }
     ro machine = hub_machine_with(machine_text, registry, settings.idle_term_ms)?
+    ro trees_chan = Chan[TreeDone].new(64)
     mut hub = Hub {
-        settings, machine, workdir, sessions: []Dialog.new(), conns: []int.new(), out: []Outgoing.new(), log: []str.new(), serial: 0, mcps: []McpServer.new(), mcp_pending: []McpPending.new(), mcp_serial: 0, catalog: JsonObject.new(), catalog_dirty: false, catalog_saved_at: 0, choices: []PendingChoice.new(), reviews: []Review.new(), route_obs: 0, marks: []MachMark.new()
+        settings, machine, workdir, sessions: []Dialog.new(), conns: []int.new(), out: []Outgoing.new(), log: []str.new(), serial: 0, mcps: []McpServer.new(), mcp_pending: []McpPending.new(), mcp_serial: 0, catalog: JsonObject.new(), catalog_dirty: false, catalog_saved_at: 0, choices: []PendingChoice.new(), reviews: []Review.new(), route_obs: 0, marks: []MachMark.new(), trees_tx: trees_chan.tx, trees_rx: trees_chan.rx, held: []HeldMsg.new()
     }
     if hub.wants_mcp() { ro started = hub.start_mcp() }
     ro pg = settings.store == "pg"
@@ -982,6 +993,11 @@ fn Hub mut @say(trace str, text str, items []JsonValue) Proc Detach Time -> () {
     }
     // the mode of work (task 192q): the task, its tree and its files first, then the agent in the right folder
     ro line = @route_on_message(at, text)
+    // task 192.8: the tree of the session is made in the background; the message waits for it (it is not lost) and the hub answers the pages meanwhile
+    if @sessions[at].rt.wip_prep > 0 {
+        @wip_hold(trace, text, items)
+        return
+    }
     @route_sync_cwd(at)
     ro reason = @ensure_client(at)
     if reason.byte_len() > 0 {
@@ -1381,7 +1397,7 @@ fn Hub mut @switch_agent(trace str, agent str) Proc Detach Time -> () {
             s.model_announced = false
             s.slow_told = false
             s.started_at = now_millis()
-            s.rt.cwd_now = s.rt.agent_dir(@workdir)
+            s.rt.cwd_now = s.rt.agent_dir(@cwd_of(s.folder))
             s.rt.told = false
             accept_in(@settings.store == "pg", @settings.data_dir, s, Incoming.signal("agent_switched", switched_text(from, agent, transfer.shown, transfer.total, transfer.cut)))
             @sessions[at] = s
@@ -1438,6 +1454,7 @@ export fn Hub mut @handle(conn int, text str) Proc Detach Time -> () {
             return
         }
     }
+    ro handled_at = now_millis()
     ro kind = jtext(o, "kind")
     ro trace = jtext(o, "trace")
     ro input = match jchild(o, "input") {
@@ -1525,6 +1542,8 @@ export fn Hub mut @handle(conn int, text str) Proc Detach Time -> () {
     }
     // a state the machine passed through while the message was taken (the open turn) is told now, not at the next pump
     @machine_pump()
+    // task 192.8: an operation of the thread of the hub that takes more than 5 s is written to the log (who, how long): the hub answers nobody meanwhile
+    if now_millis() - handled_at > 5000 { @say_log("slow: the message ${kind} of ${trace} took ${now_millis() - handled_at} ms") }
 }
 
 // The first time an agent is ready, or has refused to start, is told: to the log, and a refusal to the page.
@@ -1553,6 +1572,17 @@ fn Hub mut @watch_agent(at int) Time -> () {
         s.slow_told = true
         @say_log("the agent of ${s.id} is still starting (phase ${phase}): ${s.clients[0].stderr_tail()}")
     }
+    // task 192.8: an agent that does not answer `initialize` in `agent_start_timeout_seconds` is told to the owner (a red line); the session stays alive, the next message starts a new agent
+    if !s.announced && phase != "ready" && phase != "failed" && now_millis() - s.started_at > @settings.agent_start_ms {
+        s.announced = true
+        ro tail = s.clients[0].stderr_tail()
+        s.clients[0].close()
+        s.clients = []AcpClient.new()
+        @say_log("the agent of ${s.id} did not start in ${@settings.agent_start_ms / 1000} s (phase ${phase}): ${tail}")
+        @sessions[at] = s
+        @tell_error(0, s.id, s.engine.step_number(), "", "агент ${s.agent} не ответил за ${@settings.agent_start_ms / 1000} с (фаза ${phase}); сессия жива, следующее сообщение запустит агента заново")
+        return
+    }
     // the first summary waits until the choices asked for after the start are settled (a few seconds at most), so that it shows them
     if phase == "ready" && (s.clients[0].sets_pending() == 0 || now_millis() - s.started_at > 5000) {
         s.announced = true
@@ -1575,6 +1605,7 @@ fn Hub mut @watch_agent(at int) Time -> () {
 
 /// The work of a moment: the agents are asked for what they have, the engines take it. Returns the number of steps made.
 export fn Hub mut @pump() Proc Detach Time -> int {
+    ro pumped_at = now_millis()
     @mcp_poll()
     mut made = 0
     mut at = 0
@@ -1588,8 +1619,10 @@ export fn Hub mut @pump() Proc Detach Time -> int {
         at += 1
     }
     @catalog_save(false)
+    @wip_poll()
     @route_pump()
     @machine_pump()
+    if now_millis() - pumped_at > 5000 { @say_log("slow: the pump took ${now_millis() - pumped_at} ms") }
     made
 }
 

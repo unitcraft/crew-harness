@@ -287,3 +287,32 @@ export fn scenario_wip_folder_and_delete(settings ServerSettings) Proc Detach Ti
     rig.shut()
     c.report()
 }
+
+/// Task 192.8: the tree of a big repository takes a long time (here a hook `post-checkout` sleeps 6 s): the session is confirmed at once, the page is told "preparing", the message is not lost, another
+/// session is answered meanwhile (the hub is not blocked), and when the tree is ready the agent answers in it.
+export fn scenario_wip_slow_tree(settings ServerSettings) Proc Detach Time Net Fs Os -> str {
+    mut c = kit_check()
+    ro repo = settings.workdir
+    ro hook = write_file("${repo}/.git/hooks/post-checkout", "#!/bin/sh\nsleep 6\nexit 0\n")
+    mut rig = rig_open(settings)
+    rig.attach(1)
+    rig.page(1, "session_created", "s-sl", "{\"name\":\"Медленная\",\"agent\":\"opencode\"}")
+    c.expect(rig.until("Медленная", 5000), "the session is confirmed at once")
+    rig.page(1, "user_message", "s-sl", "{\"turn\":\"t0\",\"text\":\"привет\"}")
+    rig.run(1500)
+    c.expect(jtext(wk_where(rig, 1, "s-sl"), "kind") == "preparing", "the page is told: the copy is being prepared: ${jtext(wk_where(rig, 1, "s-sl"), "kind")}")
+    c.expect(wk_trees(repo) <= 2, "the tree is on its way")
+    // the hub answers another session while the tree is made
+    rig.page(1, "session_created", "s-sl2", "{\"name\":\"Другая\",\"agent\":\"opencode\",\"worktree\":false}")
+    c.expect(rig.until("Другая", 3000), "another session is shown while the tree is made")
+    rig.page(1, "user_message", "s-sl2", "{\"turn\":\"u0\",\"text\":\"привет\"}")
+    c.expect(rig.until(KIT_DONE, 4000), "another session is answered while the tree is made")
+    c.expect(jtext(wk_where(rig, 1, "s-sl"), "kind") == "preparing", "the first one is still preparing")
+    // the message is not lost: when the tree is ready the agent answers in it
+    c.expect(rig.until(KIT_DONE, 40000), "the held message is answered after the tree is ready")
+    rig.run(300)
+    ro w = wk_where(rig, 1, "s-sl")
+    c.expect(jtext(w, "kind") == "wip" && jtext(w, "worktree").contains("/repo-s-sl"), "the session works in the tree: ${jtext(w, "kind")} ${jtext(w, "worktree")}")
+    c.expect(wk_pwd(rig, "s-sl", "t1p").contains("/repo-s-sl"), "the agent works in the tree")
+    c.report()
+}

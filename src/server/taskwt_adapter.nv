@@ -244,3 +244,14 @@ export fn tk_main_ci(main_copy str) Proc -> TestsRec {
     if run.conclusion.byte_len() > 0 { return TestsRec { has: true, commit: run.sha, at: run.at, result: "red", command: "CI" } }
     tests_rec_none()
 }
+
+/// TkPlan: the quick part of a wip tree (task 192.8): `ok`, the plan, or the reason.
+export type TkPlan { ok bool, plan WipPlan, text str }
+
+/// The quick part of the tree of a work that is not a task yet: no fetch, no check-out; the slow part goes off the thread of the hub (`wip_add_run`).
+export fn tk_wip_plan(main_copy str, name str, trees str) Proc -> TkPlan {
+    match with Os = real_os(), Fs = real_fs() { wip_tree_plan(main_copy, name, trees) } {
+        Ok(p) => { ok: true, plan: p, text: "" }
+        Err(e) => { ok: false, plan: WipPlan { dir: "", path: "", base: "", reuse: false, origin: false }, text: e }
+    }
+}

@@ -219,7 +219,7 @@ export function parseKids(src) {
 export function parseWhere(raw) {
   if (!isObject(raw)) return null;
   return {
-    kind: raw.kind === 'wip' ? 'wip' : 'folder',
+    kind: raw.kind === 'wip' ? 'wip' : raw.kind === 'preparing' ? 'preparing' : 'folder',
     branch: str(raw.branch),
     worktree: str(raw.worktree),
     unmergedCommits: num(raw.unmerged_commits),
@@ -242,6 +242,7 @@ export function whereText(session) {
   if (task && task.worktree) return task.branch ? t('where.branch', { branch: task.branch }) : '';
   const w = rs.where;
   if (!w) return '';
+  if (w.kind === 'preparing') return t('where.preparing');
   if (w.kind === 'wip') return t('where.copy');
   if (!w.branch) return '';
   return w.branch === 'main' ? t('where.main') : t('where.folder_branch', { branch: w.branch });

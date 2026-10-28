@@ -1,0 +1,10 @@
+// wip_slow_test.nv - task 192.8: the tree of a work is made in the background (the scenario `scenario_wip_slow_tree` of crew_harness.server/wip_kit.nv: a hook makes the check-out slow).
+module crew_harness.server_wip_slow_live
+
+import crew_harness.server.{kit_routes_wip, scenario_wip_slow_tree}
+
+test "files: wip: a slow tree is made in the background - the session is confirmed at once, the page is told preparing, the message waits and is answered in the tree, another session is answered meanwhile" {
+    ro report = scenario_wip_slow_tree(kit_routes_wip("wip-slow"))
+    if report.byte_len() > 0 { panic("NOT AS IT MUST BE: ${report}") }
+    assert(report == "")
+}

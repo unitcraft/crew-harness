@@ -30,7 +30,7 @@ fn rk_settings(name str, workdir str) -> ServerSettings {
         web_dir: base.web_dir, hub_program: "", hub_args: []str.new(), acp_trace: false, ask_form: base.ask_form, ask_timeout_ms: base.ask_timeout_ms, max_image_bytes: base.max_image_bytes, stt_url: base.stt_url, stt_language: base.stt_language,
         routes_dir: "${kit_repo_root().display()}/doc/routes", route_reviewer_order: ["second"], route_task_limit: 12, route_task_messages: 40,
         route_fix_attempts: 2, route_worktree_ask: true, route_overlap_seconds: 30, route_keep_days: 30, context_drop_percent: 40,
-        route_confirm_word: "задача", route_over_limit_word: "сверх", route_max_active: 3, route_tool: true, route_auto_propose: false, route_children: false, route_wip: false
+        route_confirm_word: "задача", route_over_limit_word: "сверх", route_max_active: 3, route_tool: true, route_auto_propose: false, route_children: false, route_wip: false, wip_timeout_ms: 300000, agent_start_ms: 60000
     }
 }
 

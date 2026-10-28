@@ -11,6 +11,8 @@
 module crew_harness.server
 
 import crew_harness.acp.{AcpImage}
+import std.concurrency.nvchan.{ChanTx}
+import std.os.{real_os}
 import std.encoding.json.{Json, JsonValue, JsonObject}
 
 // ----- the name -----
@@ -59,30 +61,122 @@ fn wip_head_branch(dir str) -> str {
 // ----- the start -----
 
 /// The first message of a session in the mode interactive with the switch "Worktree" on: a tree on a detached head is made and the agent will work in it. Nothing is made again later.
+/// Task 192.8: the tree is made IN THE BACKGROUND (a big repository takes tens of seconds to check out): the session is confirmed to the page at once, the page is told "preparing" (`where.kind`),
+/// the message waits in `held` and goes to the agent when the tree is ready, has failed or `wip_timeout_ms` has passed (then the agent works in the folder of the project).
 fn Hub mut @wip_start(at int) Proc Detach Time -> () {
     ro s = @sessions[at]
-    if !@settings.route_wip || !s.rt.use_tree || s.rt.wip_tree.byte_len() > 0 || s.rt.kind == "child" { return }
+    if !@settings.route_wip || !s.rt.use_tree || s.rt.wip_tree.byte_len() > 0 || s.rt.kind == "child" || s.rt.wip_prep != 0 { return }
     if s.rt.task_open || s.rt.route != "interactive" || wip_had_message(s.lines) { return }
     ro base = @route_repo_dir(s.id)
     if !tk_is_repo(base) { return }
     ro name = wip_name(s.id)
     if name.byte_len() == 0 { return }
-    ro tree = tk_wip_tree(base, name, @route_trees(s.id))
-    if !tree.ok {
-        @tell_error(0, s.id, s.engine.step_number(), "", "дерево для работы не создано (${tree.text}): агент работает в папке проекта")
+    ro made = tk_wip_plan(base, name, @route_trees(s.id))
+    if !made.ok {
+        @tell_error(0, s.id, s.engine.step_number(), "", "дерево для работы не создано (${made.text}): агент работает в папке проекта")
+        mut off = @sessions[at]
+        off.rt.wip_prep = -1
+        @sessions[at] = off
         return
     }
-    if tree.text.byte_len() > 0 { @say_log("the tree ${tree.worktree} of ${s.id}: ${tree.text}") }
-    mut o = JsonObject.new()
-    js(o, "branch", tree.branch)
-    js(o, "worktree", tree.worktree)
-    js(o, "base", tree.base)
-    @rt_task_op(at, "wip", o)
     mut me = @sessions[at]
-    me.rt.wip_at = 0
+    me.rt.wip_prep = now_millis()
     @sessions[at] = me
-    @say_log("the session ${s.id} works in the tree ${tree.worktree} (branch ${tree.branch})")
+    if made.plan.reuse {
+        // the tree is there already: nothing to wait for
+        @wip_done(TreeDone { trace: s.id, code: 0, err: []u8.new(), note: "", path: made.plan.path, base: made.plan.base })
+        return
+    }
+    ro tx = @trees_tx
+    ro trace = s.id
+    ro plan = made.plan
+    detach { wip_job(tx, trace, plan) }
+    @say_log("the tree of ${s.id} is being made in the background")
     @route_broadcast(at, true)
+}
+
+// The background job: the tree is made off the thread of the hub, the answer goes to the channel the pump reads.
+fn wip_job(tx ChanTx[TreeDone], trace str, plan WipPlan) Proc Time -> () {
+    ro run = with Os = real_os() { wip_add_run(plan) }
+    ro told = tx.send(TreeDone { trace, code: run.code, err: run.err, note: run.note, path: plan.path, base: plan.base })
+}
+
+/// A message waits for the tree of its session; a second message of the same session is added to the first one.
+fn Hub mut @wip_hold(trace str, text str, items []JsonValue) -> () {
+    mut k = 0
+    while k < @held.len() {
+        if @held[k].trace == trace {
+            mut h = @held[k]
+            h.text = "${h.text}\n\n${text}"
+            for x in items { h.items.push(x) }
+            @held[k] = h
+            return
+        }
+        k += 1
+    }
+    @held.push(HeldMsg { trace, text, items })
+}
+
+// The held message of the session goes on its way (the tree is ready, failed, or the term has passed).
+fn Hub mut @wip_release(trace str) Proc Detach Time -> () {
+    mut keep = []HeldMsg.new()
+    mut mine = []HeldMsg.new()
+    for h in @held {
+        if h.trace == trace { mine.push(h) } else { keep.push(h) }
+    }
+    @held = keep
+    for h in mine { @say(trace, h.text, h.items) }
+}
+
+/// At every pump: the answers of the background jobs of the trees, and the term of the ones that take too long.
+fn Hub mut @wip_poll() Proc Detach Time -> () {
+    mut more = true
+    while more {
+        match @trees_rx.try_recv() {
+            Some(done) => @wip_done(done)
+            None => { more = false }
+        }
+    }
+    mut at = 0
+    while at < @sessions.len() {
+        ro s = @sessions[at]
+        if s.rt.wip_prep > 0 && now_millis() - s.rt.wip_prep > @settings.wip_timeout_ms {
+            mut me = @sessions[at]
+            me.rt.wip_prep = -1
+            @sessions[at] = me
+            @tell_error(0, s.id, s.engine.step_number(), "", "рабочая копия не готова за ${@settings.wip_timeout_ms / 1000} с: агент работает прямо в папке проекта")
+            @route_broadcast(at, true)
+            @wip_release(s.id)
+        }
+        at += 1
+    }
+}
+
+fn Hub mut @wip_done(done TreeDone) Proc Detach Time -> () {
+    ro at = @find(done.trace)
+    if at < 0 { return }
+    ro s = @sessions[at]
+    // the term has passed or the session took another way: the tree that came late is not taken
+    if s.rt.wip_prep <= 0 { return }
+    mut me = @sessions[at]
+    me.rt.wip_prep = -1
+    @sessions[at] = me
+    if done.code != 0 {
+        ro why = wip_run_why(WipRun { code: done.code, err: done.err, note: done.note })
+        @tell_error(0, s.id, s.engine.step_number(), "", "дерево для работы не создано (git worktree add: ${why}): агент работает в папке проекта")
+    } else {
+        mut o = JsonObject.new()
+        js(o, "branch", "")
+        js(o, "worktree", done.path)
+        js(o, "base", done.base)
+        @rt_task_op(at, "wip", o)
+        mut again = @sessions[at]
+        again.rt.wip_at = 0
+        @sessions[at] = again
+        @say_log("the session ${s.id} works in the tree ${done.path}")
+    }
+    @route_broadcast(at, true)
+    @wip_release(s.id)
 }
 
 // ----- "В работу" of the first work of a session with a wip branch -----

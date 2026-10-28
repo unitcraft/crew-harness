@@ -429,6 +429,7 @@ export type RouteSession {
     wip_idle int,
     wip_stale bool,
     wip_at int,
+    wip_prep int,
     where_branch str,
     hints []HintRec,
     ctx_used int,
@@ -445,7 +446,7 @@ export fn route_session_new() -> RouteSession => {
     job: "", attempt: 0, use_tree: true, active_at: 0, extra: task_extra_none(), testing: false, dirty: false, ci_at: 0, diff: []DiffRec.new(), ov_n: 0, ov_with: 0, ov_files: []str.new(), ov_until: 0, asked: []int.new(), conflict_files: []str.new(),
     props: []Proposal.new(), prop_serial: 0, dismissed: []str.new(), last_msg: "", last_imgs: []str.new(), last_names: []str.new(), kicks: []str.new(), kick_ns: []int.new(), focus: 0, recent: []str.new(), marker_turn: "",
     kind: "", parent: "", parent_kind: "", parent_no: "", child_no: 0, ptree: "", pbranch: "", waits_sib: "", waits_k: 0, queued_c: false, touches: []str.new(), merged_c: false, epic: false, chain: false, tbl: "", epic_no: "",
-    wip_tree: "", wip_base: "", wip_unmerged: 0, wip_dirty: false, wip_idle: 0, wip_stale: false, wip_at: 0, where_branch: "", hints: []HintRec.new(), ctx_used: 0, ctx_size: 0, ctx_scan: 0, ctx_hist: []CtxRec.new(), exts: []ExtRec.new()
+    wip_tree: "", wip_base: "", wip_unmerged: 0, wip_dirty: false, wip_idle: 0, wip_stale: false, wip_at: 0, wip_prep: 0, where_branch: "", hints: []HintRec.new(), ctx_used: 0, ctx_size: 0, ctx_scan: 0, ctx_hist: []CtxRec.new(), exts: []ExtRec.new()
 }
 
 // The lines of a text (the files a subtask touches are kept one in a line).
@@ -868,7 +869,7 @@ export fn route_view_text(rt RouteSession, titles []str, progress []Progress, su
     if !rt.task_open {
         mut w = JsonObject.new()
         ro in_wip = rt.wip_tree.byte_len() > 0
-        jput(w, "kind", JsonValue.str(if in_wip { "wip" } else { "folder" }))
+        jput(w, "kind", JsonValue.str(if rt.wip_prep > 0 { "preparing" } else if in_wip { "wip" } else { "folder" }))
         jput(w, "branch", JsonValue.str(if in_wip { "" } else { rt.where_branch }))
         jput(w, "worktree", JsonValue.str(rt.wip_tree))
         jput(w, "unmerged_commits", JsonValue.int(rt.wip_unmerged))

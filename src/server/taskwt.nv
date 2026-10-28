@@ -20,6 +20,8 @@ import std.encoding.json.{Json, JsonValue, JsonObject}
 /// Time limits, in milliseconds: a local call, a call over the network.
 const TW_LOCAL_MS = 60000
 const TW_NET_MS = 180000
+// the check-out of a tree of a big repository takes tens of seconds (task 192.8): the term of `git worktree add`
+const TW_TREE_MS = 900000
 
 // ----- types -----
 
@@ -358,11 +360,11 @@ fn tw_tree_ensure(dir str, path str, branch str, base str) Proc Os Fs -> Result[
     }
     if tw_exists(path) { return Err("the folder ${path} exists and is not a tree of this repository") }
     ro r = if branch.byte_len() == 0 {
-        tw_git(dir, ["worktree", "add", "--detach", path, base])
+        tw_exec(dir, ["worktree", "add", "--detach", path, base], TW_TREE_MS)
     } else if tw_ref_exists(dir, "refs/heads/${branch}") {
-        tw_git(dir, ["worktree", "add", path, branch])
+        tw_exec(dir, ["worktree", "add", path, branch], TW_TREE_MS)
     } else {
-        tw_git(dir, ["worktree", "add", "--no-track", "-b", branch, path, base])
+        tw_exec(dir, ["worktree", "add", "--no-track", "-b", branch, path, base], TW_TREE_MS)
     }
     if r.code != 0 { return Err("git worktree add failed: ${tw_why(r)}") }
     Ok(true)
@@ -971,4 +973,68 @@ export fn ci_latest(main_copy str) Proc Os Fs -> CiRun {
     }
     if !finished || out.byte_len() == 0 { return ci_none() }
     parse_ci_run(out)
+}
+
+// ----- the tree of a work in the background (task 192.8) -----
+
+/// WipPlan: what is known before the tree is made: the main copy, the path of the tree, the base, whether the tree is there already (`reuse`), whether `git fetch origin` is to be run (`origin`).
+export type WipPlan { dir str, path str, base str, reuse bool, origin bool }
+
+/// The quick part of `wip_tree_create` (no fetch, no check-out): the folder of the trees, the base, the path, the tree that is there already. The slow part is `wip_add_run`, made off the thread of the hub.
+export fn wip_tree_plan(repo str, name str, trees str) Proc Os Fs -> Result[WipPlan, str] {
+    ro dir = tw_norm(repo)
+    if !tw_is_repo(dir) { return Err("not a git repository") }
+    if !tw_name_ok(name) { return Err("the name of the work may hold letters, digits, - and _: ${name}") }
+    ro place = match worktrees_dir_check(dir, trees) {
+        Ok(d) => d
+        Err(e) => return Err(e)
+    }
+    ro base = tw_base_ref(dir)
+    ro path = "${place}/${tw_base_name(dir)}-${name}"
+    ro pruned = tw_git(dir, ["worktree", "prune"])
+    ro want = tw_key(tw_canon(path))
+    for t in tw_trees(dir) {
+        if tw_key(t.path) == want || tw_key(tw_canon(t.path)) == want { return Ok(WipPlan { dir, path, base, reuse: true, origin: false }) }
+    }
+    if tw_exists(path) { return Err("the folder ${path} exists and is not a tree of this repository") }
+    Ok(WipPlan { dir, path, base, reuse: false, origin: tw_has_origin(dir) })
+}
+
+/// WipRun: the answer of a git call made off the thread of the hub: the exit code (-1 - not started or not finished), the bytes of its error stream, the note.
+export type WipRun { code int, err []u8, note str }
+
+fn tw_run_bytes(dir str, args []str, timeout_ms int) Proc Os -> WipRun {
+    mut command = Command.new("git")
+    command.arg("-C")
+    command.arg(dir)
+    for a in args { command.arg(a) }
+    command.env("GIT_TERMINAL_PROMPT", "0")
+    command.env("GIT_EDITOR", "true")
+    command.tree(Tree.Group)
+    mut code = -1
+    mut err = []u8.new()
+    mut note = ""
+    // no `supervised(timeout)` here: this runs in a detached fiber, and the term of the tree is kept by the hub (`wip_timeout_ms`); a tree that came late is not taken
+    match command.output() {
+        Ok(o) => {
+            code = o.status.code()
+            err = o.stderr
+        }
+        Err(e) => { note = "cannot run git" }
+    }
+    WipRun { code, err, note }
+}
+
+/// The slow part of the tree: `git fetch origin` (a failure is no error) and `git worktree add --detach <path> <base>` with the time limit of a check-out. No text is decoded here (the thread of the hub does it).
+export fn wip_add_run(plan WipPlan) Proc Os -> WipRun {
+    if plan.origin {
+        ro fetched = tw_run_bytes(plan.dir, ["fetch", "origin"], TW_NET_MS)
+    }
+    tw_run_bytes(plan.dir, ["worktree", "add", "--detach", plan.path, plan.base], TW_TREE_MS)
+}
+
+/// The reason of a failed run, as text (without secrets).
+export fn wip_run_why(r WipRun) -> str {
+    ro e = r.err.to_str_lossy().trim_ascii()
+    if r.note.byte_len() > 0 && e.byte_len() == 0 { r.note } else { tw_redact(e) }
 }
