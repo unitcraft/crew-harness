@@ -106,3 +106,10 @@ test "marker: the line the hub reads has no line breaks" {
     assert(!step.found[0].contains("\n"))
     assert(step.out == "")
 }
+
+test "marker: the calls of the tools of the hub are known by their titles, others are not" {
+    assert(is_crew_tool_title("mcp__crew__crew_task_list"))
+    assert(is_crew_tool_title(" mcp__crew__ask_user_question "))
+    assert(!is_crew_tool_title("mcp__other__crew_task_list"))
+    assert(!is_crew_tool_title("Shell"))
+}

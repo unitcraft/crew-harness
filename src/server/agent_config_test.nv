@@ -1,0 +1,74 @@
+// agent_config_test.nv - task 192.9: the configuration of OpenCode for the agents of the hub: the plugin crew-harness is cut out, everything else stays.
+module crew_harness.server
+
+import std.encoding.json.{Json, JsonValue}
+
+fn ac_sample() -> str => [
+    "{",
+    "  // the models",
+    "  \"model\": \"a/b\",",
+    "  \"plugins\": [",
+    "    \"C:/work/plugins/windows-env\",",
+    "    // a comment of the second one",
+    "    \"C:/work/plugins/guards\",",
+    "    // the projects of the letters (a comment of the plugin crew-harness)",
+    "    {",
+    "      \"package\": \"C:/work/crew-harness/opencode-plugin\",",
+    "      \"options\": { \"projects\": [\"C:/work/x\", \"C:/work/y\"], \"local\": { \"a\": 1 } }",
+    "    }",
+    "  ],",
+    "  \"provider\": {",
+    "    \"cc\": { \"settings\": { \"claudeConfigDir\": \"C:/acc\", \"timeStamp\": true, \"crewMcp\": \"C:/work/crew-harness/opencode-plugin/mcp.ts\" } },",
+    "    \"k\": { \"models\": { \"m1\": {} } }",
+    "  }",
+    "}"
+].join("\n")
+
+test "agent config: the plugin crew-harness is cut out of the list, the other plugins, the comments and the providers stay" {
+    ro cut = config_for_hub(ac_sample())
+    assert(!cut.contains("opencode-plugin"))
+    assert(!cut.contains("crewMcp"))
+    assert(!cut.contains("a comment of the plugin"))
+    assert(cut.contains("C:/work/plugins/windows-env"))
+    assert(cut.contains("// a comment of the second one"))
+    assert(cut.contains("C:/work/plugins/guards"))
+    assert(cut.contains("// the models"))
+    assert(cut.contains("\"claudeConfigDir\": \"C:/acc\""))
+    assert(cut.contains("\"timeStamp\": true"))
+    assert(cut.contains("\"models\": { \"m1\": {} }"))
+}
+
+test "agent config: the cut text is JSON without the comments (the list is closed without a stray comma)" {
+    ro cut = config_for_hub(ac_sample())
+    // the comments are dropped for the check only
+    mut lines = []str.new()
+    for line in cut.lines() {
+        if !line.trim_ascii().starts_with("//") { lines.push(line) }
+    }
+    match Json.parse(lines.join("\n")) {
+        Ok(v) => assert(v.object().is_some())
+        Err(e) => panic("the cut configuration is not JSON")
+    }
+}
+
+test "agent config: a plugin of the plugins in the middle and a string entry are cut too; no plugin - the same text" {
+    ro middle = "{ \"plugins\": [\"a\", \"D:\\work\\crew-harness\\opencode-plugin\", \"b\"] }"
+    ro cut = config_without_plugin(middle)
+    assert(cut == "{ \"plugins\": [\"a\", \"b\"] }")
+    ro none = "{ \"plugins\": [\"a\", \"b\"], \"x\": [1] }"
+    assert(config_for_hub(none) == none)
+    ro cli = "{\n  \"plugins\": [\"C:/work/crew-harness/opencode-plugin\"],\n  \"debug\": { \"turn_tokens\": true }\n}\n"
+    ro cli_cut = config_for_hub(cli)
+    assert(!cli_cut.contains("opencode-plugin"))
+    assert(cli_cut.contains("\"debug\": { \"turn_tokens\": true }"))
+    match Json.parse(cli_cut) {
+        Ok(v) => assert(v.object().is_some())
+        Err(e) => panic("not JSON")
+    }
+}
+
+test "agent config: the property crewMcp is cut when it is first or alone too" {
+    ro first = config_without_string_property("{ \"s\": { \"crewMcp\": \"p\", \"t\": 1 } }", "crewMcp")
+    assert(first.replace(" ", "") == "{\"s\":{\"t\":1}}")
+    assert(!config_without_string_property("{ \"s\": { \"crewMcp\": \"p\" } }", "crewMcp").contains("crewMcp"))
+}

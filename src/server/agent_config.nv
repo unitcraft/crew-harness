@@ -1,0 +1,233 @@
+// agent_config.nv - task 192.9: the configuration of the OpenCode that the hub starts, without the plugin `crew-harness`.
+//
+// The plugin `opencode-plugin/` is an experiment of the owner for his own OpenCode windows; it is not a part of the product. The agent of the hub gets the tools of the hub (the MCP server `crew`),
+// and the plugin gives it other tools and other habits (letters, tasks of a project): they are mixed up with the tools of the hub. The global configuration of the owner is not touched (the live
+// service uses it): the hub makes its own copy in `<data_dir>/agent-config/xdg/opencode/` without the plugin, and starts the agent with `XDG_CONFIG_HOME` on `<data_dir>/agent-config/xdg`.
+// The copy is made again at every start of such an agent, so it is never older than the original. The providers, the models, the other plugins, the rules and the agents stay. A secret in the files is
+// never read apart from being copied and never logged. `CREW_OPENCODE_KEEP_PLUGIN=1` in the environment of the hub keeps the plugin (the copy is then not made).
+//
+// The part below is pure: it cuts the plugin out of the text of the configuration (JSONC with comments, or JSON) and does not parse it, so the comments and the layout stay.
+module crew_harness.server
+
+import crew_harness.projects.{EnvEntry}
+import std.fs.{Fs, real_fs, Path, read_text, create_dir_all}
+import std.os.{Os, real_os, env}
+import crew_harness.storage.{replace_file}
+
+/// The mark of the plugin in a path or in a list of plugins: its folder, with the slashes of a path.
+export const CREW_PLUGIN_MARK = "crew-harness/opencode-plugin"
+
+// The index after the string that begins at `from` (a quote); the length of the text when it is not closed.
+fn str_end(bytes []u8, from int) -> int {
+    mut i = from + 1
+    while i < bytes.len() {
+        if bytes[i] == (92 as u8) { i += 2; continue }
+        if bytes[i] == (34 as u8) { return i + 1 }
+        i += 1
+    }
+    bytes.len()
+}
+
+// The index after the comment that begins at `from` (`//` or `/*`), `from` when there is none.
+fn comment_end(bytes []u8, from int) -> int {
+    if from + 1 >= bytes.len() || bytes[from] != (47 as u8) { return from }
+    if bytes[from + 1] == (47 as u8) {
+        mut i = from + 2
+        while i < bytes.len() && bytes[i] != (10 as u8) { i += 1 }
+        return i
+    }
+    if bytes[from + 1] == (42 as u8) {
+        mut i = from + 2
+        while i + 1 < bytes.len() {
+            if bytes[i] == (42 as u8) && bytes[i + 1] == (47 as u8) { return i + 2 }
+            i += 1
+        }
+        return bytes.len()
+    }
+    from
+}
+
+fn is_space(b u8) -> bool => b == (32 as u8) || b == (9 as u8) || b == (10 as u8) || b == (13 as u8)
+
+// The index of the first byte that is not blank and not in a comment, from `from`.
+fn skip_gap(bytes []u8, from int) -> int {
+    mut i = from
+    while i < bytes.len() {
+        if is_space(bytes[i]) { i += 1; continue }
+        ro c = comment_end(bytes, i)
+        if c > i { i = c; continue }
+        break
+    }
+    i
+}
+
+// The index of the opening quote of the key `key` (outside strings and comments, followed by a colon), -1 when there is none; the index after the colon in `after`.
+type KeyAt { at int, after int }
+
+fn find_key(text str, key str, from int) -> KeyAt {
+    ro bytes = text.bytes()
+    mut i = from
+    while i < bytes.len() {
+        ro c = comment_end(bytes, i)
+        if c > i { i = c; continue }
+        if bytes[i] == (34 as u8) {
+            ro e = str_end(bytes, i)
+            if e - i - 2 == key.byte_len() && text[i + 1..e - 1] == key {
+                ro j = skip_gap(bytes, e)
+                if j < bytes.len() && bytes[j] == (58 as u8) { return KeyAt { at: i, after: j + 1 } }
+            }
+            i = e
+            continue
+        }
+        i += 1
+    }
+    KeyAt { at: -1, after: -1 }
+}
+
+// The segments of the array that begins right after the `[` at `open`: the texts between the commas of its own level and the index of its `]`.
+type Segments { parts []str, close int }
+
+fn array_segments(text str, open int) -> Segments {
+    ro bytes = text.bytes()
+    mut parts = []str.new()
+    mut depth = 0
+    mut from = open + 1
+    mut i = open + 1
+    while i < bytes.len() {
+        ro c = comment_end(bytes, i)
+        if c > i { i = c; continue }
+        ro b = bytes[i]
+        if b == (34 as u8) { i = str_end(bytes, i); continue }
+        if b == (91 as u8) || b == (123 as u8) { depth += 1; i += 1; continue }
+        if b == (93 as u8) || b == (125 as u8) {
+            if depth == 0 {
+                parts.push(text[from..i])
+                return Segments { parts, close: i }
+            }
+            depth -= 1
+            i += 1
+            continue
+        }
+        if b == (44 as u8) && depth == 0 {
+            parts.push(text[from..i])
+            from = i + 1
+        }
+        i += 1
+    }
+    Segments { parts, close: -1 }
+}
+
+/// The text of a configuration without the entries of the array `plugins` (or `plugin`) that name the plugin `crew-harness` (a path with `crew-harness/opencode-plugin`, a string or an object with `package`),
+/// with the comments right before such an entry. The text without the plugin is the same text.
+export fn config_without_plugin(text str) -> str {
+    mut out = text
+    for key in ["plugins", "plugin"] {
+        mut from = 0
+        while true {
+            ro found = find_key(out, key, from)
+            if found.at < 0 { break }
+            ro bytes = out.bytes()
+            ro open = skip_gap(bytes, found.after)
+            if open >= bytes.len() || bytes[open] != (91 as u8) { from = found.after; continue }
+            ro seg = array_segments(out, open)
+            if seg.close < 0 { break }
+            mut kept = []str.new()
+            mut dropped = false
+            for part in seg.parts {
+                if part.replace("\\", "/").contains(CREW_PLUGIN_MARK) { dropped = true } else { kept.push(part) }
+            }
+            if dropped {
+                out = "${out[..open + 1]}${kept.join(",")}${out[seg.close..]}"
+            }
+            from = open + 1
+        }
+    }
+    out
+}
+
+/// The text of a configuration without the property `key` whose value is a string and whose name is at the level of any object (used for `crewMcp`, the path of the MCP of the plugin that the claude-code provider is given).
+export fn config_without_string_property(text str, key str) -> str {
+    mut out = text
+    mut from = 0
+    while true {
+        ro found = find_key(out, key, from)
+        if found.at < 0 { break }
+        ro bytes = out.bytes()
+        ro v = skip_gap(bytes, found.after)
+        if v >= bytes.len() || bytes[v] != (34 as u8) { from = found.after; continue }
+        ro e = str_end(bytes, v)
+        // the comma before the property goes with it; if there is none, the comma after it
+        mut b = found.at
+        while b > 0 && is_space(bytes[b - 1]) { b -= 1 }
+        if b > 0 && bytes[b - 1] == (44 as u8) {
+            out = "${out[..b - 1]}${out[e..]}"
+        } else {
+            ro n = skip_gap(bytes, e)
+            if n < bytes.len() && bytes[n] == (44 as u8) { out = "${out[..found.at]}${out[n + 1..]}" } else { out = "${out[..found.at]}${out[e..]}" }
+        }
+        from = found.at
+    }
+    out
+}
+
+/// The whole cut: the plugin out of the list, the property `crewMcp` out of the settings of the providers.
+export fn config_for_hub(text str) -> str => config_without_string_property(config_without_plugin(text), "crewMcp")
+
+// ----- the copy on the disk -----
+
+fn ac_path(p str) -> Path => Path.from_bytes(p.bytes())
+
+fn ac_home() Os -> str {
+    match env("USERPROFILE") {
+        Some(h) => h
+        None => match env("HOME") {
+            Some(h) => h
+            None => ""
+        }
+    }
+}
+
+/// The folder of the global configuration of OpenCode: `$XDG_CONFIG_HOME/opencode`, else `<home>/.config/opencode` ("" - not found).
+export fn opencode_config_source() Os -> str {
+    ro x = env("XDG_CONFIG_HOME") ?? ""
+    if x.byte_len() > 0 { return "${x.replace("\\", "/")}/opencode" }
+    ro home = ac_home()
+    if home.byte_len() == 0 { return "" }
+    "${home.replace("\\", "/")}/.config/opencode"
+}
+
+/// Make (again) the configuration of OpenCode for the agents of the hub and give the folder to put into `XDG_CONFIG_HOME`: `<data_dir>/agent-config/xdg`. "" - the copy is not made (no original, the folder cannot be written,
+/// or `CREW_OPENCODE_KEEP_PLUGIN` is set): the agent then starts with the configuration of the owner as it is. `reason` of a failure is a word, never a text of the files.
+export fn opencode_home_prepare(data_dir str, source str) Fs Os -> Result[str, str] {
+    ro keep = env("CREW_OPENCODE_KEEP_PLUGIN") ?? ""
+    if keep == "1" || keep == "true" { return Err("kept by CREW_OPENCODE_KEEP_PLUGIN") }
+    if source.byte_len() == 0 { return Err("no original configuration") }
+    ro xdg = "${data_dir.replace("\\", "/")}/agent-config/xdg"
+    ro target = "${xdg}/opencode"
+    match create_dir_all(ac_path(target)) {
+        Ok(made) => ()
+        Err(e) => return Err("cannot make ${target}")
+    }
+    mut copied = 0
+    for name in ["opencode.jsonc", "opencode.json", "cli.json", "cli.jsonc"] {
+        match read_text(ac_path("${source}/${name}")) {
+            Ok(text) => {
+                ro cut = config_for_hub(text)
+                if !replace_file(ac_path("${target}/${name}"), cut) { return Err("cannot write ${name}") }
+                copied += 1
+            }
+            Err(e) => ()
+        }
+    }
+    if copied == 0 { return Err("no original configuration") }
+    Ok(xdg)
+}
+
+/// The variable for the agent: `XDG_CONFIG_HOME` on the copy; nothing when the copy is not made.
+export fn opencode_env(data_dir str) Fs Os -> []EnvEntry {
+    ro source = opencode_config_source()
+    match opencode_home_prepare(data_dir, source) {
+        Ok(xdg) => [EnvEntry { key: "XDG_CONFIG_HOME", value: xdg }]
+        Err(why) => []EnvEntry.new()
+    }
+}

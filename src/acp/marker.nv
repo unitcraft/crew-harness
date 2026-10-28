@@ -203,3 +203,10 @@ export fn marker_feed(state MarkerState, text str, last bool) -> MarkerStep {
     }
     MarkerStep { out, state: MarkerState { tail: held, fence: fence && !last }, found }
 }
+
+/// A tool of the MCP server `crew` of the hub as an agent titles its call (Kimi Code: `mcp__crew__crew_task_list`): such a call is not a request for the owner's leave,
+/// the hub offered the tool itself (task 192.9).
+export fn is_crew_tool_title(title str) -> bool {
+    ro t = title.trim_ascii()
+    t == "mcp__crew__crew_task_list" || t == "mcp__crew__crew_task" || t == "mcp__crew__ask_user_question"
+}

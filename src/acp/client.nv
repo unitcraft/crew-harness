@@ -724,6 +724,21 @@ fn AcpClient mut @on_permission(id JsonValue, params JsonValue) -> () {
         }
         None => ()
     }
+    // task 192.9: a call of the tool of the hub itself (Kimi Code asks leave for every MCP tool) is allowed once, the owner is not asked
+    if @ask.mcp_url.byte_len() > 0 {
+        ro call_title = match field(params, "toolCall") {
+            Some(c) => field_text(c, "title") ?? ""
+            None => ""
+        }
+        if is_crew_tool_title(call_title) {
+            for o in options {
+                if o.kind == "allow_once" {
+                    @say(rpc_result_line(id, outcome_result("selected", o.id)))
+                    return
+                }
+            }
+        }
+    }
     ro projection = project_permission(id, params)
     @permissions.push(AcpPending { key: rpc_key(id), id, options })
     @push(progress_event(@active, projection))

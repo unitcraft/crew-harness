@@ -205,6 +205,13 @@ test "crew_task: the hint lists the tasks, the request names the candidates" {
     ro req = recognize_request(hint, ["- «Кандидат»"])
     assert(req.contains("crew_task_list"))
     assert(req.contains("Кандидат"))
+    // task 192.9: the request forbids the work and the talk, names the call for each family and keeps the marker only as the last way
+    assert(req.contains("НИЧЕГО не делай с файлами"))
+    assert(req.contains("Не рассуждай вслух"))
+    assert(req.contains("tools.crew.crew_task_list"))
+    assert(req.contains("mcp__crew__crew_task_list"))
+    assert(req.contains("[[crew_task_list]]"))
+    assert(req.contains("одной короткой фразой"))
 }
 
 test "crew_task: the view holds the cards, the numbers and the words" {

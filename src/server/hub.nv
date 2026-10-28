@@ -634,6 +634,28 @@ fn Hub mut @env_of(s Dialog) -> []EnvEntry {
     }
 }
 
+// Task 192.9: the OpenCode that the hub starts gets the configuration of the owner without the plugin crew-harness (`agent_config.nv`): the variable XDG_CONFIG_HOME over the variables of the project.
+fn Hub mut @agent_env(agent str, base []EnvEntry) -> []EnvEntry {
+    mut out = []EnvEntry.new()
+    for e in base { out.push(e) }
+    match @settings.agent(agent) {
+        Some(spec) => {
+            ro word = "${spec.id} ${spec.program}".to_ascii_lower()
+            if !word.contains("opencode") { return out }
+            ro extra = with Fs = real_fs(), Os = real_os() { opencode_env(@settings.data_dir) }
+            if extra.len() == 0 {
+                @say_log("the agent ${agent} starts with the configuration of the owner as it is (no clean copy of it)")
+                return out
+            }
+            mut merged = []EnvEntry.new()
+            for e in out { if e.key != "XDG_CONFIG_HOME" { merged.push(e) } }
+            for e in extra { merged.push(e) }
+            return merged
+        }
+        None => return out
+    }
+}
+
 // Make sure the session has a live agent: start one if there is none or the old one is gone. "" - well, else the reason.
 fn Hub mut @ensure_client(at int) Proc Detach Time -> str {
     mut s = @sessions[at]
@@ -645,7 +667,7 @@ fn Hub mut @ensure_client(at int) Proc Detach Time -> str {
     }
     match @open_config(s) {
         None => "the agent ${s.agent} is not configured"
-        Some(config) => match open_client_full(config, @trace_path_of(s), TRACE_LIMIT, @ask_for(s.agent, s.id), @env_of(s)) {
+        Some(config) => match open_client_full(config, @trace_path_of(s), TRACE_LIMIT, @ask_for(s.agent, s.id), @agent_env(s.agent, @env_of(s))) {
             Ok(client) => {
                 s.clients.push(client)
                 // the choices of the owner for this family go to every agent started for the session (task 192t)
@@ -1379,7 +1401,7 @@ fn Hub mut @switch_agent(trace str, agent str) Proc Detach Time -> () {
             return
         }
     }
-    match open_client_full(config, @trace_path_of(s), TRACE_LIMIT, @ask_for(agent, s.id), @env_of(s)) {
+    match open_client_full(config, @trace_path_of(s), TRACE_LIMIT, @ask_for(agent, s.id), @agent_env(agent, @env_of(s))) {
         Err(reason) => {
             @say_log("the agent of ${trace} cannot be changed to ${agent}: ${reason}")
             @tell_error(0, trace, s.engine.step_number(), "", "the agent ${agent} cannot be started: ${reason}; the session stays with ${s.agent}")
