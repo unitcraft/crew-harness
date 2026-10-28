@@ -407,6 +407,7 @@ export const S = Object.freeze({
   'route.stale_keep': 'Оставить',
   'route.stale_work': 'В ветке не влито: {commits}',
   'where.draft_tree': 'работа пойдёт в отдельной копии (без ветки), она создастся с первым сообщением',
+  'where.draft_off': 'работа пойдёт прямо в папке проекта',
   'where.draft_folder': 'работа пойдёт прямо в папке проекта, без отдельной ветки',
   'where.copy': 'работа идёт в отдельной копии (без ветки)',
   'where.branch': 'работа идёт в ветке {branch}',

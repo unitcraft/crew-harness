@@ -628,15 +628,15 @@ export function splitBlocks(text) {
 // ---- черновик новой сессии (задача 192): живёт только на странице, на сервер уходит с первым сообщением ----
 
 /** Добавить в модель черновик: обычная сессия без событий, помеченная draft; id станет настоящим id сессии при отправке. */
-export function addDraft(model, { id, agent, projectId = '', project = '', folder = '', branch = '', now }) {
+export function addDraft(model, { id, agent, projectId = '', project = '', folder = '', branch = '', worktree = false, now }) {
   const next = reduce(model, {
     id: `draft-${id}`, trace: id, step: 0, kind: 'session_created', time: now,
     input: { name: '', agent, project, project_id: projectId, folder, branch },
   });
   const session = next.sessions[id];
   if (!session) return model;
-  // режим по умолчанию у человека — «Интерактивный»; Worktree включён: задача получит дерево и ветку
-  return { ...next, sessions: { ...next.sessions, [id]: { ...session, draft: true, route: INTERACTIVE_STATE.route, worktree: true } } };
+  // режим по умолчанию у человека — «Интерактивный»; Worktree по умолчанию выключен (выбор владельца приходит параметром)
+  return { ...next, sessions: { ...next.sessions, [id]: { ...session, draft: true, route: INTERACTIVE_STATE.route, worktree: worktree === true } } };
 }
 
 /** Убрать все черновики (кроме `keep`). */

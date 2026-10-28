@@ -41,6 +41,14 @@ function saveTheme(value) {
     else globalThis.localStorage.setItem(THEME_KEY, value);
   } catch { /* закрытое хранилище: выбор живёт до перезагрузки */ }
 }
+// Переключатель Worktree новой сессии: по умолчанию выключен, последний выбор помнится на уровне пульта.
+const WORKTREE_KEY = 'crew-console-draft-worktree';
+function readWorktreePref() {
+  try { return globalThis.localStorage.getItem(WORKTREE_KEY) === '1'; } catch { return false; }
+}
+function saveWorktreePref(on) {
+  try { globalThis.localStorage.setItem(WORKTREE_KEY, on ? '1' : '0'); } catch { /* закрытое хранилище: выбор живёт до перезагрузки */ }
+}
 function applyTheme(value) {
   const root = document.documentElement;
   if (value === 'system') root.removeAttribute('data-theme');
@@ -226,7 +234,7 @@ const handlers = {
     const agent = (agentList.find((a) => !a.disabled) || { id: '' }).id;
     const id = newId();
     model = addDraft(dropDrafts(model), {
-      id, agent, projectId: project ? project.id : '', project: project ? project.name : '', folder: folder ? folder.path : '', branch: folder && folder.branch ? folder.branch : '', now: Date.now(),
+      id, agent, projectId: project ? project.id : '', project: project ? project.name : '', folder: folder ? folder.path : '', branch: folder && folder.branch ? folder.branch : '', worktree: readWorktreePref(), now: Date.now(),
     });
     ui.selected = id;
     ui.pane = 'chat';
@@ -323,7 +331,7 @@ const handlers = {
     if (model.sessions[trace] && model.sessions[trace].draft) { model = patchDraft(model, trace, { route: normalizeRoute(route) }); render(); return; }
     send(...signal(trace, routeSignal.set(route)));
   },
-  onDraftWorktree(trace, on) { model = patchDraft(model, trace, { worktree: on === true }); render(); },
+  onDraftWorktree(trace, on) { saveWorktreePref(on === true); model = patchDraft(model, trace, { worktree: on === true }); render(); },
   onWorktree(trace, on) { send(...signal(trace, routeSignal.worktree(on))); },
   onRouteRun(trace) { send(...signal(trace, routeSignal.run())); },
   onRouteSkip(trace, step) { send(...signal(trace, routeSignal.skip(step))); },

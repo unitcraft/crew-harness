@@ -115,15 +115,15 @@ test('режим «Планирование»: четвёртый в списк�
   assert.deepEqual(routeSignal.set('planning'), { kind: 'session_route', input: { route: 'planning' } });
 });
 
-test('новая сессия: режим по умолчанию — Интерактивный, Worktree включён; режим и Worktree выбираются до первого сообщения и уходят с ним', () => {
+test('новая сессия: режим по умолчанию — Интерактивный, Worktree выключен по умолчанию; режим и Worktree выбираются до первого сообщения и уходят с ним', () => {
   let m = addDraft(initialModel(), { id: 'd1', agent: 'codex', projectId: 'p1', project: 'crew', folder: 'C:/work/crew', branch: 'main', now: 5 });
   assert.equal(m.sessions.d1.route, 'interactive');
-  assert.equal(m.sessions.d1.worktree, true);
-  m = patchDraft(m, 'd1', { route: 'planning', worktree: false });
-  assert.deepEqual([m.sessions.d1.route, m.sessions.d1.worktree], ['planning', false]);
+  assert.equal(m.sessions.d1.worktree, false);
+  m = patchDraft(m, 'd1', { route: 'planning', worktree: true });
+  assert.deepEqual([m.sessions.d1.route, m.sessions.d1.worktree], ['planning', true]);
   assert.match(app, /const input = \{ name: nameFromText\(text\)[^}]*route: normalizeRoute\(draft\.route\), worktree: draft\.worktree !== false && treeOk \}/);
   assert.match(app, /if \(model\.sessions\[trace\] && model\.sessions\[trace\]\.draft\) \{ model = patchDraft\(model, trace, \{ route: normalizeRoute\(route\) \}\)/);
-  assert.match(app, /onDraftWorktree\(trace, on\) \{ model = patchDraft\(model, trace, \{ worktree: on === true \}\)/);
+  assert.match(app, /onDraftWorktree\(trace, on\) \{ saveWorktreePref\(on === true\); model = patchDraft\(model, trace, \{ worktree: on === true \}\)/);
   assert.match(app, /onWorktree\(trace, on\) \{ send\(\.\.\.signal\(trace, routeSignal\.worktree\(on\)\)\); \}/);
   assert.deepEqual(routeSignal.worktree(true), { kind: 'session_worktree', input: { on: true } });
   // настоящая сессия берёт режим из route_state, а черновиком не остаётся

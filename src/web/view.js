@@ -1528,7 +1528,7 @@ export function createView(doc, refs, deps) {
     worktreeButton.disabled = hasTree || noRepo;
     worktreeButton.title = noRepo ? t('route.worktree_not_repo') : hasTree ? t('route.worktree_locked') : (treeOn ? t('route.worktree_on') : t('route.worktree_off'));
     routeButton.title = `${t('route.label')}: ${routeDescription(currentRoute)}`;
-    const where = session.draft && noRepo ? t('where.draft_folder') : whereText(session);
+    const where = session.draft ? (noRepo ? t('where.draft_folder') : (treeOn ? whereText(session) : t('where.draft_off'))) : whereText(session);
     whereNote.hidden = !where;
     whereNote.textContent = where;
     whereNote.title = where;

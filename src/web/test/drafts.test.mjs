@@ -93,3 +93,16 @@ test('строка проекта выделена: значок папки, ж�
   assert.match(cssSrc, /\.group\[data-active="true"\] \.group-head \{ background: color-mix\(in srgb, var\(--fg\) 7%, transparent\); \}/);
   assert.doesNotMatch(cssSrc, /inset 2px 0 var\(--accent\)/);
 });
+
+test('Worktree новой сессии: по умолчанию выключен, выбор помнится в localStorage пульта, подпись «прямо в папке проекта»', () => {
+  const m = addDraft(initialModel(), { id: 'd9', agent: 'codex', now: 1 });
+  assert.equal(m.sessions.d9.worktree, false);
+  assert.equal(addDraft(initialModel(), { id: 'd8', agent: 'codex', worktree: true, now: 1 }).sessions.d8.worktree, true);
+  const app = fs.readFileSync(new URL('../app.js', import.meta.url), 'utf8');
+  assert.match(app, /worktree: readWorktreePref\(\), now: Date\.now\(\)/);
+  assert.match(app, /onDraftWorktree\(trace, on\) \{ saveWorktreePref\(on === true\)/);
+  assert.match(app, /try \{ return globalThis\.localStorage\.getItem\(WORKTREE_KEY\) === '1'; \} catch/);
+  assert.equal(t('where.draft_off'), 'работа пойдёт прямо в папке проекта');
+  const view = fs.readFileSync(new URL('../view.js', import.meta.url), 'utf8');
+  assert.match(view, /treeOn \? whereText\(session\) : t\('where\.draft_off'\)/);
+});
