@@ -43,7 +43,8 @@ tls = { git = "https://github.com/nv-lang/nova-tls", version = "0.2" }
 # `libs/` beside a machine instead of the fragments, the reads of a state derived by the check, the sections `## Выход` and `## Требует`; the package reads only the format 2.26, the tables of `machines/` are moved to it by its script `tools/migrate-alula-226.py`.
 # Version 0.9.1 (task 241; the tag v0.9.1, commit 02589b4) is the library «Пауза» that does not write to the data of a machine: its own enumeration `ПричинаПаузы` and its datum `причина`, the machine reads
 # `Пауза.причина`; the connection has no parameter `код_остановки`; the tables of `machines/` are moved to it by the script of the package (task 242).
-alula = { git = "https://github.com/nv-lang/nova-alula", version = "0.9.1" }
+# Version 0.9.2 (the tag v0.9.2, commit e69d729) is 0.9.1 plus one row of `## Имена` in the library «Пауза» (`причина | reason`): its hash is ff49cbe958c1, the connections of `machines/` name it (task 243).
+alula = { git = "https://github.com/nv-lang/nova-alula", version = "0.9.2" }
 
 [package]
 name = "crew_harness"
