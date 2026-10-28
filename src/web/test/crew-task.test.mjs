@@ -58,7 +58,7 @@ test('слова и счётчик: «в работе N из лимита M», �
   const crew = parseCrewTask(wire());
   assert.equal(activeText(crew), 'в работе 2 из лимита 3');
   assert.equal(activeText({ ...crew, maxActive: 0 }), 'в работе 2');
-  assert.match(wordHint({ state: 'open' }, crew), /слово «задача»/);
+  assert.match(wordHint({ state: 'open' }, crew), /со словом «задача»/);
   assert.match(wordHint({ state: 'limit' }, crew), /«сверх»/);
   assert.match(wordHint({ state: 'overlap' }, crew), /подождать/);
 });
@@ -84,7 +84,7 @@ function mount(extra = {}) {
   return { doc, ui, log, session };
 }
 
-test('полоса и таблица: кнопка «Распознать задачи», строка на кандидата, по умолчанию «Обсудить», одиночная карточка с «Это не задача»', () => {
+test('полоса и таблица: кнопка «Распознать задачи», строка на кандидата, по умолчанию «Обсудить», одиночная карточка с «Только обсуждение»', () => {
   const { ui, log } = mount();
   const el = ui.el;
   const byText = (text) => el.querySelectorAll('button').filter((b) => b.textContent === text);
@@ -104,11 +104,12 @@ test('полоса и таблица: кнопка «Распознать зад
   assert.equal(el.querySelectorAll('.crew-apply')[0].textContent, 'Применить: 0 в работу · 2 обсудить · 0 забыть');
   assert.equal(el.querySelectorAll('.crew-quick').length, 0, 'текстового быстрого ответа нет');
   // одиночная карточка
-  byText('Это не задача')[0].click();
+  byText('Только обсуждение')[0].click();
   assert.deepEqual(log.pop(), ['prop', 's1', 3, 'dismiss']);
   assert.match(el.textContent, /в работе 2 из лимита 3/);
   assert.match(el.textContent, /Кандидаты: 1/);
-  assert.match(el.textContent, /или напишите слово «задача»/);
+  assert.doesNotMatch(el.textContent, /или напишите слово/);
+  assert.match(byText('В работу').at(-1).getAttribute('title'), /Enter в поле ввода со словом «задача» тоже подтверждает/);
 });
 
 test('таблица: выбор «В работу» открывает «Способ», подпись кнопки считает, «Применить» шлёт всю таблицу одним вызовом', () => {
@@ -121,7 +122,7 @@ test('таблица: выбор «В работу» открывает «Спо
   assert.equal(el.querySelectorAll('.crew-apply')[0].textContent, 'Применить: 1 в работу · 1 обсудить · 0 забыть');
   let way = el.querySelectorAll('tbody tr')[0].querySelectorAll('select')[0];
   assert.ok(way, 'у «В работу» есть «Способ»');
-  assert.deepEqual(way.querySelectorAll('option').map((o) => o.textContent), ['Отдельная задача', 'Дочерняя задача эпика 3 · Старая', 'Эпик', 'Дополнить 3 · Старая']);
+  assert.deepEqual(way.querySelectorAll('option').map((o) => o.textContent), ['Отдельная задача', 'Дочерняя задача к 3 · Старая', 'Новый эпик (разделить на части)', 'Дополнить 3 · Старая']);
   choose(1, 'forget');
   assert.equal(el.querySelectorAll('.crew-apply')[0].textContent, 'Применить: 1 в работу · 0 обсудить · 1 забыть');
   way = el.querySelectorAll('tbody tr')[0].querySelectorAll('select')[0];
@@ -139,7 +140,7 @@ test('таблица: без открытых задач «Способ» — т
   choose(0);
   choose(1);
   const ways = el.querySelectorAll('tbody tr').map((row) => row.querySelectorAll('select')[0]);
-  assert.deepEqual(ways[0].querySelectorAll('option').map((o) => o.textContent), ['Отдельная задача', 'Эпик']);
+  assert.deepEqual(ways[0].querySelectorAll('option').map((o) => o.textContent), ['Отдельная задача', 'Новый эпик (разделить на части)']);
   assert.equal(ways[0].value, 'new:0');
   assert.equal(ways[1].value, 'epic:0', 'пометка «эпик» от агента выбрана');
 });
@@ -190,4 +191,86 @@ test('панель: подзадачи из списка агента видны
   assert.equal(subWaitsText(made.task.subtasks[1]), 'ждёт задачу 1');
   assert.equal(subWaitsText({ state: 'waits', waitsFor: 0 }), 'ждёт места под лимитом');
   assert.equal(subWaitsText(made.task.subtasks[0]), '');
+});
+
+// ---- карточка предложения (задача 192.13): подписи, режим выполнения, эпик с дочерними, кнопки
+function mountSingle(extra = {}, deps = {}) {
+  const doc = createFakeDocument();
+  const log = [];
+  const ui = createCrewTaskUi(doc, { onCrewProp: (...a) => log.push(['prop', ...a]), onCrewRecognize() {}, onCrewApply() {} }, deps);
+  const crew = { proposals: [prop({ id: 7, listed: false, title: 'Отладчик', kind: 'epic', mode: 'full', reason: 'две независимые части', children: [{ title: 'Фронт', summary: 'страница', touches: ['src/web'], mode: 'fast' }, { title: 'Бек', summary: 'сервер', touches: [], mode: '' }], ...extra })], active: 0, max_active: 3, confirm_word: 'задача', over_word: 'сверх', targets: [{ number: 5, title: 'Своя', session: 's9', epic: false }] };
+  const session = { id: 's1', agent: 'codex', routeState: parseRouteState({ route: 'interactive', ...crew }) };
+  ui.render(session);
+  return { ui, log, session, el: ui.el };
+}
+
+test('карточка: подписи «Как оформить / Кто делает / Режим выполнения», фраза «Агент предлагает», нет фразы про кодовое слово', () => {
+  const { el } = mountSingle({}, { agents: () => ['codex', 'opencode'] });
+  const text = el.textContent;
+  assert.match(text, /Агент предлагает: эпик/);
+  assert.match(text, /режим: Полный путь \(8 шагов\) — две независимые части/);
+  assert.match(text, /Как оформить:/);
+  assert.match(text, /Кто делает:/);
+  assert.match(text, /Режим выполнения:/);
+  assert.doesNotMatch(text, /или напишите слово/);
+  const way = el.querySelectorAll('.crew-way')[0];
+  assert.deepEqual(way.querySelectorAll('option').map((o) => o.textContent), ['Отдельная задача', 'Дочерняя задача к 5 · Своя', 'Новый эпик (разделить на части)', 'Дополнить 5 · Своя']);
+  assert.equal(way.value, 'epic:0', 'выбран вариант агента');
+  assert.deepEqual(el.querySelectorAll('.crew-run')[0].querySelectorAll('option').map((o) => o.textContent), ['Супер быстро (малый маршрут, до 30 мин)', 'Быстрая задача (6 шагов)', 'Полный путь (8 шагов)']);
+  assert.equal(el.querySelectorAll('.crew-run')[0].value, 'full', 'режим агента выбран');
+  assert.equal(el.querySelectorAll('.crew-agent')[0].querySelectorAll('option')[0].textContent, 'этот же агент (codex)');
+  assert.match(text, /делится на дочерние/, 'у способа есть пояснение мелким серым');
+});
+
+test('карточка: у способа «Дочерняя задача к K» пояснение — «K станет эпиком»; кнопки «В работу» и «Только обсуждение» с подсказками', () => {
+  const { el, log } = mountSingle({ kind: 'child', epic: 5, children: [], mode: '', reason: '' });
+  assert.match(el.textContent, /задача 5 станет эпиком/);
+  const start = el.querySelectorAll('button').filter((b) => b.textContent === 'В работу')[0];
+  assert.match(start.getAttribute('title'), /Enter в поле ввода со словом «задача» тоже подтверждает/);
+  const talk = el.querySelectorAll('button').filter((b) => b.textContent === 'Только обсуждение')[0];
+  assert.equal(talk.getAttribute('title'), 'Задачу не создавать: карточка исчезнет, агент не предложит то же снова');
+  talk.click();
+  assert.deepEqual(log.pop(), ['prop', 's1', 7, 'dismiss']);
+  assert.equal(el.querySelectorAll('button').filter((b) => b.textContent === 'Это не задача').length, 0);
+});
+
+test('карточка эпика: дочерние строками с флажками «создать»; «В работу» уходит с режимом и отмеченными частями', () => {
+  const { el, log } = mountSingle();
+  const kids = el.querySelectorAll('.crew-child');
+  assert.equal(kids.length, 2);
+  assert.match(kids[0].textContent, /Фронт/);
+  assert.match(kids[0].textContent, /режим: Быстрая задача \(6 шагов\)/);
+  assert.deepEqual(kids.map((k) => k.querySelectorAll('input')[0].checked), [true, true]);
+  // все отмечены: части не перечисляются (создать все), режим агента уходит
+  el.querySelectorAll('button').filter((b) => b.textContent === 'В работу')[0].click();
+  assert.deepEqual(log.pop(), ['prop', 's1', 7, 'start', { mode: 'epic', target: 0, agent: '', run: 'full', children: '' }]);
+  // снять вторую часть: уходит «0»
+  const box = el.querySelectorAll('.crew-child')[1].querySelectorAll('input')[0];
+  box.click();
+  el.querySelectorAll('button').filter((b) => b.textContent === 'В работу')[0].click();
+  assert.equal(log.pop()[4].children, '0');
+});
+
+test('карточка: владелец меняет режим выполнения — он уходит с кнопкой; сигнал несёт run и children', () => {
+  const { el, log } = mountSingle({ kind: 'new', mode: '', reason: '', children: [] });
+  assert.equal(el.querySelectorAll('.crew-run')[0].value, 'interactive', 'без предложения агента — «Супер быстро»');
+  const run = el.querySelectorAll('.crew-run')[0];
+  run.value = 'fast';
+  run.dispatchEvent({ type: 'change' });
+  el.querySelectorAll('button').filter((b) => b.textContent === 'В работу')[0].click();
+  assert.deepEqual(log.pop(), ['prop', 's1', 7, 'start', { mode: 'new', target: 0, agent: '', run: 'fast' }]);
+  assert.deepEqual(crewSignal.prop(7, 'start', { mode: 'epic', target: 0, run: 'full', children: '0,1' }), { kind: 'route_prop', input: { id: 7, action: 'start', mode: 'epic', target: 0, run: 'full', children: '0,1' } });
+});
+
+test('parseCrewTask: режим, причина и дочерние эпика; неизвестный режим и дочерняя без названия отбрасываются', () => {
+  const crew = parseCrewTask({ proposals: [prop({ mode: 'turbo', reason: 'r', children: [{ title: '' }, { title: 'А', mode: 'fast' }, 5] })] });
+  assert.equal(crew.proposals[0].mode, '');
+  assert.equal(crew.proposals[0].reason, 'r');
+  assert.deepEqual(crew.proposals[0].children, [{ title: 'А', summary: '', touches: [], mode: 'fast' }]);
+});
+
+test('варианты способа берутся только из targets страницы: чужих задач в списке нет', () => {
+  const { el } = mountSingle({ kind: 'new', mode: '', children: [] });
+  const labels = el.querySelectorAll('.crew-way')[0].querySelectorAll('option').map((o) => o.textContent);
+  assert.equal(labels.filter((l) => /· /.test(l)).length, 2, 'только задача 5 (дочерняя к и дополнить)');
 });

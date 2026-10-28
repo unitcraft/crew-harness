@@ -6,7 +6,7 @@ import { t } from './strings.js';
 import { h } from './dom.js';
 import {
   EMPTY_CREW, CHOICES, DEFAULT_CHOICE, singleCard, activeText, tableRows, problemRows, rowText, rowActions, problemText, wordHint, recognizeShown, kindText, defaultWay, wayOptions, parseWay,
-  applyCounts, applyLabel, applyPlan,
+  applyCounts, applyLabel, applyPlan, defaultRun, runOptions, proposesText, wayHint, childrenPicked,
 } from './crew-task.js';
 
 // подписи переключателей: ключи литералами (проверка strings.test.mjs ищет их в исходниках)
@@ -21,6 +21,8 @@ export function createCrewTaskUi(doc, handlers, deps = {}) {
   const ways = new Map(); // «сессия:карточка» -> выбранный способ «способ:номер» (переживает перерисовку)
   const agents = new Map(); // «сессия:карточка» -> семья агента для сессии задачи ('' — как у этой)
   const choices = new Map(); // «сессия:карточка» -> work | discuss | forget
+  const runs = new Map(); // «сессия:карточка» -> режим выполнения (interactive | fast | full)
+  const kidsOff = new Map(); // «сессия:карточка» -> множество номеров частей эпика, с которых снята отметка
   const el = h(doc, 'div', { class: 'crew-over', hidden: true });
   let sig = '';
 
@@ -58,8 +60,12 @@ export function createCrewTaskUi(doc, handlers, deps = {}) {
     const { way, agent } = chosen(session, crew, p);
     const { mode, target } = parseWay(way);
     const work = action === 'start' || action === 'extend';
-    if (work) handlers.onCrewProp(session.id, p.id, action, { mode, target, agent });
-    else handlers.onCrewProp(session.id, p.id, action);
+    if (work) {
+      const key = `${session.id}:${p.id}`;
+      const opts = { mode, target, agent, run: runs.get(key) || defaultRun(p) };
+      if (mode === 'epic' && p.children.length > 0) opts.children = childrenPicked(p.children.length, kidsOff.get(key) || new Set());
+      handlers.onCrewProp(session.id, p.id, action, opts);
+    } else handlers.onCrewProp(session.id, p.id, action);
   }
 
   // Таблица кандидатов: одна кнопка внизу применяет решения по всем строкам.
@@ -114,16 +120,82 @@ export function createCrewTaskUi(doc, handlers, deps = {}) {
     return out;
   }
 
+  // Поле с подписью и пояснением мелким серым под ним (пояснение меняется вместе с выбранным пунктом)
+  function field(label, control, hint) {
+    return h(doc, 'div', { class: 'crew-field' }, h(doc, 'label', { class: 'crew-field-label' }, h(doc, 'span', { class: 'crew-field-name', text: label }), control), hint);
+  }
+
+  // Одиночная карточка: что предложил агент, три выбора с подписями (как оформить, кто делает, режим выполнения), части эпика, кнопки «В работу» и «Только обсуждение»
   function singleCardEl(session, crew, p) {
     const problem = problemText(p, crew);
+    const { key, way, agent } = chosen(session, crew, p);
+    const open = p.state === 'open';
+    let controls = false;
+    if (open) {
+      const rerender = () => { sig = ''; render(current); };
+      const wayHintEl = h(doc, 'small', { class: 'crew-field-hint muted', text: wayHint(way) });
+      const waySelect = h(doc, 'select', { class: 'crew-way', 'aria-label': t('crewtask.way_label') },
+        ...wayOptions(p, crew).map((o) => h(doc, 'option', { value: o.value, text: o.label, selected: o.value === way })));
+      waySelect.value = way;
+      waySelect.addEventListener('change', () => { ways.set(key, waySelect.value); rerender(); });
+      const families = agentList();
+      let who = false;
+      if (families.length > 1) {
+        const sameLabel = session.agent ? t('crewtask.agent_same_named', { name: session.agent }) : t('crewtask.agent_same');
+        const sel = h(doc, 'select', { class: 'crew-agent', 'aria-label': t('crewtask.agent_label'), title: t('crewtask.agent_label') },
+          h(doc, 'option', { value: '', text: sameLabel, selected: agent === '' }),
+          ...families.map((a) => h(doc, 'option', { value: a, text: a, selected: a === agent })));
+        sel.value = agent;
+        sel.addEventListener('change', () => { agents.set(key, sel.value); });
+        who = field(t('crewtask.who_label'), sel, h(doc, 'small', { class: 'crew-field-hint muted', text: t('crewtask.who_hint') }));
+      }
+      const run = runs.get(key) || defaultRun(p);
+      const runList = runOptions();
+      const runHint = h(doc, 'small', { class: 'crew-field-hint muted', text: (runList.find((o) => o.value === run) || runList[0]).hint });
+      const runSelect = h(doc, 'select', { class: 'crew-run', 'aria-label': t('crewtask.run_label') },
+        ...runList.map((o) => h(doc, 'option', { value: o.value, text: o.label, selected: o.value === run })));
+      runSelect.value = run;
+      runSelect.addEventListener('change', () => { runs.set(key, runSelect.value); rerender(); });
+      const isEpic = parseWay(way).mode === 'epic' && p.children.length > 0;
+      const off = kidsOff.get(key) || new Set();
+      const kids = !isEpic ? false : h(doc, 'div', { class: 'crew-children' },
+        h(doc, 'strong', { class: 'crew-children-title', text: t('crewtask.children_title') }),
+        h(doc, 'ul', { class: 'crew-children-list' }, ...p.children.map((c, i) => {
+          const box = h(doc, 'input', { type: 'checkbox', 'aria-label': c.title });
+          box.checked = !off.has(i);
+          box.addEventListener('change', () => {
+            const next = new Set(kidsOff.get(key) || []);
+            if (box.checked) next.delete(i); else next.add(i);
+            kidsOff.set(key, next);
+            rerender();
+          });
+          const runName = (runList.find((o) => o.value === c.mode) || {}).label;
+          return h(doc, 'li', { class: 'crew-child', 'data-index': String(i) },
+            h(doc, 'label', {}, box, h(doc, 'span', { class: 'crew-child-title', text: c.title })),
+            c.summary && c.summary !== c.title ? h(doc, 'small', { class: 'crew-field-hint muted', text: c.summary }) : false,
+            runName ? h(doc, 'small', { class: 'crew-field-hint muted', text: t('crewtask.proposes_run', { run: runName }) }) : false);
+        })));
+      controls = h(doc, 'div', { class: 'crew-controls' },
+        field(t('crewtask.how_label'), waySelect, wayHintEl),
+        who,
+        field(t('crewtask.run_label'), runSelect, runHint),
+        kids);
+    }
+    const startTip = wordHint(p, crew);
     return h(doc, 'section', { class: 'route-card crew-single', 'data-card': 'crew-single', 'data-state': p.state },
       h(doc, 'strong', { class: 'route-card-title', text: t('crewtask.single_title', { title: p.title }) }),
-      h(doc, 'span', { class: 'route-card-text', text: `${kindText(p)}${p.summary ? ` · ${p.summary}` : ''}` }),
-      wayControls(session, crew, p),
+      h(doc, 'span', { class: 'crew-proposes', text: proposesText(p) }),
+      p.summary ? h(doc, 'span', { class: 'route-card-text muted', text: p.summary }) : false,
+      controls,
       problem ? h(doc, 'span', { class: 'crew-row-problem', text: problem }) : false,
       h(doc, 'div', { class: 'route-actions' },
-        ...rowActions(p, chosen(session, crew, p).way).filter((a) => a.action !== 'discuss').map((a) => button(a.action === 'forget' ? t('crewtask.act_not_task') : a.label, a.primary ? 'primary' : '', () => press(session, crew, p, a.action === 'forget' ? 'dismiss' : a.action)))),
-      h(doc, 'small', { class: 'route-merge-note', text: wordHint(p, crew) }));
+        ...rowActions(p, chosen(session, crew, p).way).filter((a) => a.action !== 'discuss').map((a) => {
+          const b = button(a.action === 'forget' ? t('crewtask.act_not_task') : a.label, a.primary ? 'primary' : '', () => press(session, crew, p, a.action === 'forget' ? 'dismiss' : a.action));
+          if (a.action === 'forget') b.setAttribute('title', t('crewtask.act_not_task_title'));
+          else if (a.primary) b.setAttribute('title', startTip);
+          return b;
+        })),
+      p.state === 'open' ? false : h(doc, 'small', { class: 'route-merge-note', text: startTip }));
   }
 
   /** Перерисовать по сессии (вызывается из render() view.js). */
@@ -135,7 +207,7 @@ export function createCrewTaskUi(doc, handlers, deps = {}) {
     const problems = problemRows(crew);
     const single = singleCard(crew);
     const show = recognizeShown(session);
-    const next = JSON.stringify([session && session.id, show, crew, [...ways], [...agents], [...choices], agentList()]);
+    const next = JSON.stringify([session && session.id, show, crew, [...ways], [...agents], [...choices], [...runs], [...kidsOff].map(([k, v]) => [k, [...v]]), agentList()]);
     if (next === sig) return;
     sig = next;
     if (!show) { el.hidden = true; el.replaceChildren(); return; }

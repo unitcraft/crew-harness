@@ -19,6 +19,14 @@ export const KINDS = Object.freeze(['new', 'child', 'epic', 'extend']);
 export const CHOICES = Object.freeze(['work', 'discuss', 'forget']);
 export const DEFAULT_CHOICE = 'discuss';
 
+/** Режимы выполнения, которые агент может предложить и владелец выбрать (имена маршрутов хаба). */
+export const RUN_MODES = Object.freeze(['interactive', 'fast', 'full']);
+const mode = (v) => (RUN_MODES.includes(v) ? v : '');
+
+function parseChild(raw) {
+  return { title: str(raw.title), summary: str(raw.summary), touches: strings(raw.touches), mode: mode(raw.mode) };
+}
+
 function parseProposal(raw) {
   // старый хаб говорил subtask / epic_task: это дочерняя задача эпика
   const kind = raw.kind === 'subtask' || raw.kind === 'epic_task' ? 'child' : (KINDS.includes(raw.kind) ? raw.kind : 'new');
@@ -38,6 +46,9 @@ function parseProposal(raw) {
     listed: raw.listed === true,
     choice: str(raw.choice),
     note: str(raw.note),
+    mode: mode(raw.mode),
+    reason: str(raw.reason),
+    children: (Array.isArray(raw.children) ? raw.children : []).filter(isObject).map(parseChild).filter((c) => c.title !== ''),
   };
 }
 
@@ -62,8 +73,8 @@ export const EMPTY_CREW = Object.freeze(parseCrewTask({}));
 
 /** Сигналы страницы серверу: { kind, input }; шаг события и id добавляет app.js. */
 export const crewSignal = Object.freeze({
-  // opts: { mode: 'new' | 'child' | 'epic' | 'extend', target: номер задачи, agent: семья агента сессии новой задачи }
-  prop: (id, action, opts = {}) => ({ kind: 'route_prop', input: { id, action: String(action), ...(opts.mode ? { mode: opts.mode, target: opts.target || 0 } : {}), ...(opts.agent ? { agent: opts.agent } : {}) } }),
+  // opts: { mode: 'new' | 'child' | 'epic' | 'extend', target: номер задачи, agent: семья агента сессии новой задачи, run: режим выполнения, children: части эпика ('' — все, '-' — никакие, '0,2') }
+  prop: (id, action, opts = {}) => ({ kind: 'route_prop', input: { id, action: String(action), ...(opts.mode ? { mode: opts.mode, target: opts.target || 0 } : {}), ...(opts.agent ? { agent: opts.agent } : {}), ...(opts.run ? { run: opts.run } : {}), ...(opts.children ? { children: opts.children } : {}) } }),
   recognize: () => ({ kind: 'route_recognize', input: {} }),
   // «Отменить» у серой строки «Дополнено в задачу K»: убрать раздел из message.md и отозвать требование у агента задачи
   extUndo: (id) => ({ kind: 'route_ext_undo', input: { id } }),
@@ -118,6 +129,46 @@ export function wayOptions(p, crew) {
   out.push({ value: 'epic:0', label: t('crewtask.way_epic') });
   for (const x of crew.targets) out.push({ value: `extend:${x.number}`, label: t('crewtask.way_extend', { n: x.number, title: x.title }) });
   return out;
+}
+
+/** Режим выполнения, выбранный в карточке по умолчанию: тот, что предложил агент, иначе «Супер быстро» (режим сессии по умолчанию — «Интерактивный»). */
+export function defaultRun(p) {
+  return p.mode || 'interactive';
+}
+
+/** Режимы для выпадающего списка: значение, подпись и пояснение. */
+export function runOptions() {
+  return [
+    { value: 'interactive', label: t('crewtask.run_interactive'), hint: t('crewtask.run_interactive_hint') },
+    { value: 'fast', label: t('crewtask.run_fast'), hint: t('crewtask.run_fast_hint') },
+    { value: 'full', label: t('crewtask.run_full'), hint: t('crewtask.run_full_hint') },
+  ];
+}
+
+/** Что предлагает агент одной фразой: «отдельная задача · режим: Полный путь (8 шагов) — причина». */
+export function proposesText(p) {
+  const run = runOptions().find((o) => o.value === p.mode);
+  const parts = [t('crewtask.proposes', { what: kindText(p) })];
+  if (run) parts.push(t('crewtask.proposes_run', { run: run.label }));
+  const head = parts.join(' · ');
+  return p.reason ? `${head} — ${p.reason}` : head;
+}
+
+/** Пояснение к выбранному способу оформления (вторая строка под списком). */
+export function wayHint(value) {
+  const { mode: way, target } = parseWay(value);
+  if (way === 'child') return t('crewtask.way_child_hint', { n: target });
+  if (way === 'epic') return t('crewtask.way_epic_hint');
+  if (way === 'extend') return t('crewtask.way_extend_hint');
+  return t('crewtask.way_new_hint');
+}
+
+/** Строка «части эпика», которые оставлены отмеченными: '' — все, '-' — никакие, иначе номера от 0 через запятую. */
+export function childrenPicked(total, off) {
+  const on = [];
+  for (let i = 0; i < total; i += 1) if (!off.has(i)) on.push(i);
+  if (on.length === total) return '';
+  return on.length === 0 ? '-' : on.join(',');
 }
 
 /** Разобрать значение способа: { mode, target }. */

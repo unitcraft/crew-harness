@@ -74,7 +74,7 @@ test('карточка: способ по умолчанию — отдельн�
   assert.deepEqual(values, ['new:0', 'child:232', 'child:100', 'epic:0', 'extend:232', 'extend:100']);
   // нет открытых задач — только «Отдельная задача» и «Эпик»
   assert.deepEqual(wayOptions(base, parseCrewTask({})).map((o) => o.value), ['new:0', 'epic:0']);
-  assert.deepEqual(wayOptions(base, parseCrewTask({})).map((o) => o.label), ['Отдельная задача', 'Эпик']);
+  assert.deepEqual(wayOptions(base, parseCrewTask({})).map((o) => o.label), ['Отдельная задача', 'Новый эпик (разделить на части)']);
   assert.deepEqual(parseWay('child:232'), { mode: 'child', target: 232 });
   assert.deepEqual(parseWay('epic:0'), { mode: 'epic', target: 0 });
   assert.deepEqual(parseWay('мусор'), { mode: 'new', target: 0 });
