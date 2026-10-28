@@ -34,10 +34,13 @@ test "dt the lists of the files hold every file of the folders" {
     ro tables = dt_names(table_files())
     mut tables_in_folders = data_dir_names("product_tables")
     for n in data_dir_names("methodology_tables") {
-        // the copy of the sample of the specification is a text for the tests, not a table of a machine
+        // `meeting` is the called machine of the methodology (task 247): no tree, it is in the list of the called machines, not of the tables
+        if n == "meeting.alula.md" { continue }
         tables_in_folders.push(n)
     }
     assert(dt_same(tables, tables_in_folders))
+    assert(dt_names(callee_files()).contains("meeting.alula.md"))
+    assert(!dt_names(machine_files()).contains("meeting.alula.json"))
     ro scenarios = dt_names(test_files())
     mut scenarios_in_folders = data_dir_names("product_scenarios")
     for n in data_dir_names("methodology_scenarios") { scenarios_in_folders.push(n) }

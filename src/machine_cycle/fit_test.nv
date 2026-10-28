@@ -152,6 +152,12 @@ test "ft runner routes several levels" {
     }
 }
 
+fn party_input_lines(p PartyDef) -> []str {
+    mut out = []str.new()
+    for f in p.input_fields { out.push(field_line(f)) }
+    out
+}
+
 fn party_named(def MachineDef, id str) -> Option[PartyDef] {
     for p in def.parties {
         if p.id == id { return Some(p) }
@@ -170,14 +176,14 @@ fn fields_of_type(def MachineDef, spec TypeSpec) -> []str {
 }
 
 test "ft session launch contract" {
-    // pinned for the task 121: the types of the methodology (SessionLaunchInput, SessionLaunchResult)
+    // pinned for the task 121: the input and the result of the methodology; Alula 0.27 (AL-146): the tree of the caller carries the fields of the input of the called machine and its types
     ro def = cycle_def()
     match party_named(def, "session_launch") {
         Some(p) => {
             assert(p.nested == "session_start")
-            assert(p.input_spec.len() == 1)
-            assert(spec_text(p.input_spec[0]) == "SessionLaunchInput")
-            ro input = fields_of_type(def, p.input_spec[0])
+            assert(p.input_spec.len() == 0)
+            assert(p.callee_types.contains("SessionLaunchResult"))
+            ro input = party_input_lines(p)
             assert(input.len() == 10)
             assert(input[0] == "session:text")
             assert(input[1] == "launch_source:?text")
@@ -202,13 +208,14 @@ test "ft session launch contract" {
 }
 
 test "ft meeting contract" {
-    // pinned for the task 124: the types of the methodology (MeetingInput, MeetingResult)
+    // pinned for the task 124: the input and the result of the methodology, from the file of `meeting` beside (task 247)
     ro def = cycle_def()
     match party_named(def, "meeting") {
         Some(p) => {
             assert(p.nested == "meeting")
-            assert(spec_text(p.input_spec[0]) == "MeetingInput")
-            ro input = fields_of_type(def, p.input_spec[0])
+            assert(p.input_spec.len() == 0)
+            assert(p.result_spec.len() == 1)
+            ro input = party_input_lines(p)
             assert(input.len() == 3)
             assert(input[0] == "proposal:text")
             assert(input[1] == "lens_order:[]text")
