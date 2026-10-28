@@ -55,6 +55,7 @@ test('виды событий: девять прежних, шесть рабо�
     'setting_dropped',
     'tool_call',
     'tool_call_update',
+    'turn_request',
     'turn_usage',
     'usage_update',
     'user_message',

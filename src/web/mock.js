@@ -400,11 +400,34 @@ export function machineInput(m) {
   };
 }
 
+/** Вход события turn_request (задача 192.11): состав запроса к агенту на ход, как его присылает хаб. */
+export function requestInput(trace, turn, text, at) {
+  const part = (kind, title, body) => ({ kind, title, text: body, chars: Array.from(body).length, approx_tokens: Math.floor(Array.from(body).length / 4), truncated: false });
+  const schema = JSON.stringify({ type: 'object', properties: { question: { type: 'string', description: 'Текст вопроса.' } } });
+  return {
+    session: trace, turn, at, agent: 'opencode', cwd: 'C:/work/app', mode: 'default', route: 'interactive', model: 'mock-model', effort: 'high', label: '',
+    parts: [
+      part('reminder', 'Напоминание режима', '[crew] Режим: беседа. Файлы проекта без задачи не правь.'),
+      part('mode_instruction', 'Инструкция режима', 'Ты работаешь в режиме беседы. Если замечаешь работу над файлами — вызови crew_task.'),
+      part('owner_message', 'Сообщение владельца', text),
+    ],
+    tools: {
+      hub: [{ name: 'ask_user_question', description: 'Ask the user a question with a choice of options and wait for the answer.', schema }],
+      agent: [{ name: 'Read', kind: 'read', title: 'Read file a.txt' }],
+      commands: ['init - создать AGENTS.md'],
+    },
+    mcp: [{ name: 'crew', url_kind: 'http, 127.0.0.1 (локально), адрес и токен не показываются' }],
+    raw_ref: { file: 'acp.jsonl', from_line: turn * 10, to_line: 0 },
+  };
+}
+
 /** machines: true — сервер заглушки присылает ещё и machine_state (страница включает; проверки потока прежних видов его не ждут). */
 export function createMockServer({ journal, now = Date.now, machines: withMachines = false } = {}) {
   const base = journal ?? rebaseJournal(INITIAL_JOURNAL, now());
   const machines = {}; // trace -> состояние машины заглушки
   let machineSerial = 0;
+  const requests = {}; // trace -> входы turn_request, что заглушка уже присылала
+  const requestEvent = (trace, input) => { machineSerial += 1; return { id: `req-${machineSerial}`, trace, step: 0, kind: 'turn_request', input, time: now() }; };
   const machineOf = (trace) => machines[trace] ?? (machines[trace] = newMachine(now()));
   const machineEvent = (trace, delay = 0) => {
     machineSerial += 1;
@@ -529,6 +552,17 @@ export function createMockServer({ journal, now = Date.now, machines: withMachin
     }
     entries.push({ delay: 0, event });
     const sent = entries.length;
+    if (withMachines && event.kind === 'user_message') {
+      const list = requests[trace] ?? (requests[trace] = []);
+      const made = requestInput(trace, list.length + 1, String(input.text), now());
+      list.push(made);
+      entries.push({ delay: 0, event: requestEvent(trace, made) });
+    }
+    if (withMachines && event.kind === 'request_get') {
+      const list = requests[trace] ?? [];
+      const found = list.find((x) => x.turn === Number(input.turn)) ?? list[list.length - 1];
+      if (found) entries.push({ delay: 0, event: requestEvent(trace, found) });
+    }
 
     if (event.kind === 'machine_state_get') {
       if (withMachines) entries.push({ delay: 0, event: machineEvent(trace) });

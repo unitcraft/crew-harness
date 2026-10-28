@@ -1348,3 +1348,24 @@ input[aria-invalid="true"] { border-color: var(--danger); }
 .hint-text { margin: 4px 0 0; padding: 6px 8px; max-height: 260px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; border: 1px solid var(--border); border-radius: 8px; font-size: 12px; }
 .crew-merge-all { margin-top: 6px; }
 @media (max-width: 720px) { .crew-table thead { display: none; } .crew-table tr { display: block; padding: 6px 0; } .crew-table td { display: block; border: 0; padding: 2px 0; max-width: none; } }
+
+/* ---- вкладка «Запрос» (задача 192.11) ---- */
+.req-border { font-size: 12px; margin: 2px 0 8px; overflow-wrap: anywhere; }
+.req-turns { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
+.req-chip { padding: 2px 8px; border: 1px solid var(--border); border-radius: 999px; background: transparent; color: var(--fg-muted); font: inherit; font-size: 12px; cursor: pointer; }
+.req-chip[aria-pressed="true"] { color: var(--fg); border-color: var(--accent); }
+.req-summary { display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline; margin-bottom: 6px; font-size: 13px; }
+.req-list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.req-part, .req-tool, .req-agent-tool { min-width: 0; }
+.req-head { display: flex; gap: 6px; align-items: baseline; width: 100%; padding: 2px 0; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.req-head .chev { transition: transform .15s; flex: none; }
+.req-head[aria-expanded="false"] .chev { transform: rotate(-90deg); }
+.req-label { font-weight: 600; overflow-wrap: anywhere; min-width: 0; }
+.req-side { font-size: 12px; margin-left: auto; text-align: right; overflow-wrap: anywhere; }
+.req-text { margin: 4px 0; padding: 6px 8px; max-height: 320px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; border: 1px solid var(--border); border-radius: 8px; font-size: 12px; }
+.req-desc { margin: 4px 0; font-size: 12.5px; overflow-wrap: anywhere; }
+.req-agent-tool { display: flex; gap: 6px; align-items: baseline; }
+.req-command { font-size: 12px; overflow-wrap: anywhere; }
+.req-note { font-size: 12px; }
+.rail .req-card .link-btn { margin-left: 0; }
+.req-commands { max-height: 220px; overflow: auto; }

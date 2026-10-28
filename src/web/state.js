@@ -19,6 +19,7 @@ import { imageUrl } from './attachments.js';
 import { normalizeQuestions, summarize } from './question.js';
 import { INTERACTIVE_STATE, parseRouteState, subtaskNotes } from './routes.js';
 import { parseMachineState } from './machines.js';
+import { parseTurnRequest, addRequest } from './request.js';
 
 export const KINDS = Object.freeze([
   'session_created', 'user_message', 'agent_chunk', 'agent_done', 'agent_refused',
@@ -43,6 +44,8 @@ export const KINDS = Object.freeze([
   'route_state',
   // задача 192.1: отладочное состояние машины диалога (сервер -> страница); в журнал сессии не пишется и порядок списка не меняет
   'machine_state',
+  // задача 192.11: состав запроса к агенту на ход (сервер -> страница); в журнал сессии не пишется
+  'turn_request',
 ]);
 
 export const TOOL_KINDS = Object.freeze(['read', 'edit', 'delete', 'move', 'search', 'execute', 'think', 'fetch', 'other']);
@@ -542,6 +545,7 @@ export function reduce(model, event) {
       routeStep: -1,
       machine: null,
       machineAt: 0,
+      requests: [],
       state: 'idle',
       createdAt: event.time,
       updatedAt: event.time,
@@ -581,6 +585,11 @@ export function reduce(model, event) {
     // состояние для просмотра, не история: id не запоминается (событий много), запоздавший (старее принятого по времени) отбрасывается; порядок сессий и шаг цепочки не трогает
     if (event.time < session.machineAt) return model;
     return { ...model, sessions: { ...model.sessions, [event.trace]: { ...session, machine: parseMachineState(event.input), machineAt: event.time } } };
+  }
+
+  if (event.kind === 'turn_request') {
+    // состав запроса для просмотра, не история: id не запоминается; ход с тем же номером заменяется
+    return { ...model, sessions: { ...model.sessions, [event.trace]: { ...session, requests: addRequest(session.requests, parseTurnRequest(event.input)) } } };
   }
 
   const changed = apply(session, event);
