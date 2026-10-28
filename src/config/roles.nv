@@ -1,0 +1,133 @@
+// roles.nv - the roles of the process: who does what in the work on a task (task 192.12, ADR-0016).
+//
+// A role is a place in the process, not a model. The roles of the product are built in; `roles.json` adds or changes them by the id:
+// `<home>/config/roles.json`, then `.crew-harness/roles.json` of the project (the project wins). The file is one object, the key is the id of a role:
+//   { "dev": { "title": "Исполнитель", "rule": "...", "independent": false } }
+// `independent: true` - the holder must not be the author of the work (the family of the reviewer differs from the family of the session).
+// The names of the stages are those of the stages of the plugin of the owner (`develop`, `develop_accept`, `plan`, `plan_accept`, `spec`, `spec_accept`, `delivery`, `delivery_accept`)
+// in short form (`dev`, `dev_accept`, ...); the sets and the profiles of the plugin are NOT copied here: a preset (presets.nv) is the table of the product.
+module crew_harness.config
+
+import std.text
+import std.encoding.json.{Json, JsonValue, JsonObject}
+import std.fs.{Fs}
+
+/// Role: `id` (lower Latin letters, digits, `_` and `-`), the title and the rule in Russian (for the page and the log), whether the holder must not be the author.
+export type Role { id str, title str, rule str, independent bool }
+
+fn rl(id str, title str, rule str, independent bool) -> Role => { id, title, rule, independent }
+
+/// The roles the product knows.
+export fn builtin_roles() -> []Role => [
+    rl("dev", "Исполнитель", "Делает задачу по постановке и плану; отвечает за код, тесты и документы своей задачи.", false),
+    rl("dev_accept", "Приёмщик", "Проверяет сделанное независимо от исполнителя: другая семья агентов, не автор; смотрит diff, перепрогоняет тесты и стражи.", true),
+    rl("plan", "Планировщик", "Доводит задание до готовности: интервью, формулировка, критерии; код не пишет.", false),
+    rl("plan_accept", "Проверка плана", "Проверяет план и постановку независимо от того, кто их писал.", true),
+    rl("spec", "Разбор", "Разбирает задачу на требования; наследует от планировщика, если не задан.", false),
+    rl("spec_accept", "Проверка разбора", "Проверяет разбор независимо от автора.", true),
+    rl("delivery", "Сдача", "Готовит сдачу: итог, документы, слияние; на ступень ниже исполнителя.", false),
+    rl("delivery_accept", "Проверка сдачи", "Проверяет сдачу независимо от автора.", true),
+    rl("integrator", "Интегратор", "Ведёт слияние в основную ветку и обновление живой копии; не пишет код задач.", false)
+]
+
+/// Is this text fit to be the id of a role?
+export fn role_id_ok(id str) -> bool {
+    ro b = id.bytes()
+    if b.len() == 0 || b.len() > 40 { return false }
+    mut first = true
+    for c in b {
+        ro letter = c >= (97 as u8) && c <= (122 as u8)
+        ro digit = c >= (48 as u8) && c <= (57 as u8)
+        ro mark = c == (95 as u8) || c == (45 as u8)
+        if first && !letter { return false }
+        if !(letter || digit || mark) { return false }
+        first = false
+    }
+    true
+}
+
+fn text_of(o JsonObject, key str, fallback str) -> str {
+    match o.get(key) {
+        Some(v) => v.str() ?? fallback
+        None => fallback
+    }
+}
+
+fn flag_of(o JsonObject, key str, fallback bool) -> bool {
+    match o.get(key) {
+        Some(v) => v.bool() ?? fallback
+        None => fallback
+    }
+}
+
+/// The roles of one `roles.json` text laid over `base`: a role with a known id is changed field by field, a new id is added. Err("file:line: reason").
+export fn roles_over(base []Role, file str, text str) -> Result[[]Role, str] {
+    ro value = match Json.parse(text) {
+        Ok(v) => v
+        Err(e) => return Err("${file}:${json_error_text(e)}")
+    }
+    ro o = match value.object() {
+        Some(x) => x
+        None => return Err("${file}:1: roles.json must be one object, the key is the id of a role")
+    }
+    mut out = []Role.new()
+    for r in base { out.push(r) }
+    for (id, v) in o {
+        if !role_id_ok(id) { return Err("${file}:${key_line(text, id)}: the id of a role is lower Latin letters, digits, _ and -: ${id}") }
+        ro body = match v.object() {
+            Some(x) => x
+            None => return Err("${file}:${key_line(text, id)}: the role ${id} must be an object {title, rule, independent}")
+        }
+        mut at = -1
+        mut i = 0
+        while i < out.len() {
+            if out[i].id == id { at = i }
+            i += 1
+        }
+        if at >= 0 {
+            ro old = out[at]
+            out[at] = Role { id, title: text_of(body, "title", old.title), rule: text_of(body, "rule", old.rule), independent: flag_of(body, "independent", old.independent) }
+        } else {
+            out.push(Role { id, title: text_of(body, "title", id), rule: text_of(body, "rule", ""), independent: flag_of(body, "independent", false) })
+        }
+    }
+    Ok(out)
+}
+
+/// The roles for a layout: the built-in ones, then the user's file, then the project's file.
+export fn load_roles(layout ConfigLayout) Fs -> Result[[]Role, str] {
+    mut roles = builtin_roles()
+    mut files = roles_files(layout)
+    // the order of `roles_files` is the project first; the lower layer (the user) is laid first
+    mut i = files.len()
+    while i > 0 {
+        i -= 1
+        match file_text(files[i]) {
+            Some(text) => { roles = roles_over(roles, files[i], text)? }
+            None => ()
+        }
+    }
+    Ok(roles)
+}
+
+/// The role with this id.
+export fn role_of(roles []Role, id str) -> Option[Role] {
+    for r in roles {
+        if r.id == id { return Some(r) }
+    }
+    None
+}
+
+/// The roles as JSON for the page: `[{"id","title","rule","independent"}]`.
+export fn roles_json(roles []Role) -> JsonValue {
+    mut list = []JsonValue.new()
+    for r in roles {
+        mut o = JsonObject.new()
+        ign(o.insert("id", JsonValue.str(r.id)))
+        ign(o.insert("title", JsonValue.str(r.title)))
+        ign(o.insert("rule", JsonValue.str(r.rule)))
+        ign(o.insert("independent", JsonValue.bool(r.independent)))
+        list.push(JsonValue.object(o))
+    }
+    JsonValue.array(list)
+}

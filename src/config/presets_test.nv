@@ -1,0 +1,167 @@
+// presets_test.nv - the roles and the presets: the layers by name, the family of the independent check, the API reply (task 192.12).
+module crew_harness.config
+
+import std.os.{Os, real_os, temp_dir, pid}
+import std.fs.{Fs, real_fs, write_text, create_dir_all, remove_dir_all, Path}
+import std.encoding.json.{Json, JsonValue, JsonObject}
+
+fn tmp_root2(name str) -> str {
+    ro base = with Os = real_os() { temp_dir() }
+    ro id = with Os = real_os() { pid() }
+    ro dir = base.join("crew-presets-${name}-${id}")
+    with Fs = real_fs() {
+        ro gone = remove_dir_all(dir)
+        ro made = create_dir_all(dir)
+    }
+    dir.display().replace("\\", "/")
+}
+
+fn drop2(root str) -> () {
+    with Fs = real_fs() {
+        ro gone = remove_dir_all(Path.from_bytes(root.bytes()))
+    }
+}
+
+fn put2(root str, rel str, text str) -> () {
+    ro path = Path.from_bytes("${root}/${rel}".bytes())
+    with Fs = real_fs() {
+        match path.parent() {
+            Some(p) => { ro made = create_dir_all(p) }
+            None => ()
+        }
+        ro written = write_text(path, text)
+    }
+}
+
+test "roles: the process roles are built in, dev_accept is independent" {
+    ro roles = builtin_roles()
+    assert(role_of(roles, "dev").unwrap().independent == false)
+    assert(role_of(roles, "dev_accept").unwrap().independent)
+    assert(role_of(roles, "plan_accept").unwrap().independent)
+    assert(role_of(roles, "plan").is_some())
+    assert(role_of(roles, "nobody").is_none())
+}
+
+test "roles: roles.json changes a role field by field and adds a new one" {
+    match roles_over(builtin_roles(), "r.json", "{\"dev\":{\"title\":\"Dev\"},\"qa\":{\"title\":\"QA\",\"independent\":true}}") {
+        Err(e) => assert(false)
+        Ok(roles) => {
+            assert(role_of(roles, "dev").unwrap().title == "Dev")
+            assert(role_of(roles, "dev").unwrap().rule.byte_len() > 0)
+            assert(role_of(roles, "qa").unwrap().independent)
+            assert(roles.len() == builtin_roles().len() + 1)
+        }
+    }
+}
+
+test "roles: a wrong file is file:line: reason" {
+    match roles_over(builtin_roles(), "r.json", "{\n  \"dev\": 5\n}") {
+        Ok(roles) => assert(false)
+        Err(e) => assert(e.starts_with("r.json:2:"))
+    }
+    match roles_over(builtin_roles(), "r.json", "{\"Bad Id\":{}}") {
+        Ok(roles) => assert(false)
+        Err(e) => assert(e.starts_with("r.json:1:"))
+    }
+}
+
+test "preset: the built-in default takes the first two families of the order" {
+    ro p = builtin_preset(["codex", "claude", "kimi"])
+    assert(p.name == "default" && p.origin == "built-in")
+    assert(preset_family(p, "dev") == "codex")
+    assert(preset_family(p, "dev_accept") == "claude")
+    assert(preset_family(p, "plan") == "")
+    assert(builtin_preset([]).picks.len() == 0)
+}
+
+test "preset: a file gives the family, the model and the effort of a role" {
+    match parse_preset("fast", "user", "fast.json", "{\"description\":\"d\",\"roles\":{\"dev\":{\"family\":\"kimi\",\"model\":\"k3\",\"effort\":\"high\"},\"dev_accept\":{\"family\":\"codex\"}}}") {
+        Err(e) => assert(false)
+        Ok(p) => {
+            assert(p.description == "d")
+            assert(preset_pick(p, "dev").unwrap().model == "k3")
+            assert(preset_pick(p, "dev").unwrap().effort == "high")
+            assert(preset_family(p, "dev_accept") == "codex")
+        }
+    }
+}
+
+test "preset: a wrong file is file:line: reason" {
+    match parse_preset("x", "user", "x.json", "{\n  \"roles\": {\n    \"dev\": {\"famly\": \"a\"}\n  }\n}") {
+        Ok(p) => assert(false)
+        Err(e) => assert(e.starts_with("x.json:3:") && e.contains("famly"))
+    }
+    match parse_preset("x", "user", "x.json", "{\"description\":\"no roles\"}") {
+        Ok(p) => assert(false)
+        Err(e) => assert(e.contains("roles"))
+    }
+    match parse_preset("x", "user", "x.json", "{\"roles\":{\"dev\":{\"family\":5}}}") {
+        Ok(p) => assert(false)
+        Err(e) => assert(e.contains("string"))
+    }
+}
+
+test "presets: the project replaces the user's preset of the same name, the others are added" {
+    ro root = tmp_root2("layers")
+    put2(root, "inst/config/presets/a.json", "{\"roles\":{\"dev\":{\"family\":\"claude\"},\"dev_accept\":{\"family\":\"kimi\"}}}")
+    put2(root, "inst/config/presets/b.json", "{\"roles\":{\"dev_accept\":{\"family\":\"codex\"}}}")
+    put2(root, "repo/.crew-harness/presets/a.json", "{\"roles\":{\"dev_accept\":{\"family\":\"opencode\"}}}")
+    ro layout = layout_in("${root}/inst", "${root}/repo/.crew-harness")
+    match with Fs = real_fs() { load_presets(layout, ["codex", "claude"]) } {
+        Err(e) => assert(false)
+        Ok(list) => {
+            assert(list.len() == 3)
+            assert(preset_named(list, "default").is_some())
+            assert(independent_family(list, "a") == "opencode")
+            assert(preset_named(list, "a").unwrap().origin == "project")
+            assert(independent_family(list, "b") == "codex")
+            assert(preset_named(list, "b").unwrap().origin == "user")
+            assert(independent_family(list, "default") == "claude")
+            assert(independent_family(list, "unknown") == "")
+        }
+    }
+    drop2(root)
+}
+
+test "presets: a broken file is the error of load_presets, and the reply of the API still has the built-in preset" {
+    ro root = tmp_root2("broken")
+    put2(root, "inst/config/presets/bad.json", "{\n  \"roles\": 3\n}")
+    ro layout = layout_in("${root}/inst", "")
+    match with Fs = real_fs() { load_presets(layout, ["codex", "claude"]) } {
+        Ok(list) => assert(false)
+        Err(e) => assert(e.contains("bad.json:2:"))
+    }
+    ro reply = with Fs = real_fs() { presets_reply(layout, ["codex", "claude"], "default") }
+    match Json.parse(reply) {
+        Err(e) => assert(false)
+        Ok(v) => {
+            ro o = v.object().unwrap()
+            assert(o.get("error").unwrap().str().unwrap().contains("bad.json:2:"))
+            assert(o.get("presets").unwrap().array().unwrap().len() == 1)
+        }
+    }
+    drop2(root)
+}
+
+test "presets: the reply lists the presets with their roles, the active one and the roles of the process" {
+    ro root = tmp_root2("reply")
+    put2(root, "inst/config/presets/mix.json", "{\"description\":\"микс\",\"roles\":{\"dev\":{\"family\":\"kimi\",\"model\":\"k3\"}}}")
+    ro layout = layout_in("${root}/inst", "")
+    ro reply = with Fs = real_fs() { presets_reply(layout, ["codex", "claude"], "mix") }
+    match Json.parse(reply) {
+        Err(e) => assert(false)
+        Ok(v) => {
+            ro o = v.object().unwrap()
+            assert(o.get("active").unwrap().str() == Some("mix"))
+            assert(!o.contains("error"))
+            ro list = o.get("presets").unwrap().array().unwrap()
+            assert(list.len() == 2)
+            ro mix = list[1].object().unwrap()
+            assert(mix.get("name").unwrap().str() == Some("mix"))
+            ro dev = mix.get("roles").unwrap().object().unwrap().get("dev").unwrap().object().unwrap()
+            assert(dev.get("family").unwrap().str() == Some("kimi") && dev.get("model").unwrap().str() == Some("k3"))
+            assert(o.get("roles").unwrap().array().unwrap().len() == builtin_roles().len())
+        }
+    }
+    drop2(root)
+}

@@ -1,0 +1,222 @@
+// config_cmd_test.nv - `config list|get|set`, the schema and `doctor` (task 192.12).
+module crew_harness.config
+
+import std.os.{Os, MockOs, mock_os, real_os, temp_dir, pid}
+import std.fs.{Fs, real_fs, read_text, write_text, create_dir_all, remove_dir_all, Path}
+import std.encoding.json.{Json, JsonValue, JsonObject}
+
+fn tmp3(name str) -> str {
+    ro base = with Os = real_os() { temp_dir() }
+    ro id = with Os = real_os() { pid() }
+    ro dir = base.join("crew-cmd-${name}-${id}")
+    with Fs = real_fs() {
+        ro gone = remove_dir_all(dir)
+        ro made = create_dir_all(dir)
+    }
+    dir.display().replace("\\", "/")
+}
+
+fn drop3(root str) -> () {
+    with Fs = real_fs() {
+        ro gone = remove_dir_all(Path.from_bytes(root.bytes()))
+    }
+}
+
+fn put3(root str, rel str, text str) -> () {
+    ro path = Path.from_bytes("${root}/${rel}".bytes())
+    with Fs = real_fs() {
+        match path.parent() {
+            Some(p) => { ro made = create_dir_all(p) }
+            None => ()
+        }
+        ro written = write_text(path, text)
+    }
+}
+
+fn line_of(text str, key str) -> str {
+    for line in text.split("\n") {
+        if line.starts_with("${key}=") { return line }
+    }
+    ""
+}
+
+fn listing(layout ConfigLayout, server str, sets []str, origin bool, envs []str) -> str {
+    mut state = MockOs.new()
+    for pair in envs {
+        match pair.split_once("=") {
+            Some((k, v)) => state.put_env(k, v)
+            None => ()
+        }
+    }
+    match with Os = mock_os(state), Fs = real_fs() { config_list(layout, server, sets, origin) } {
+        Ok(t) => t
+        Err(e) => panic("list: ${e}")
+    }
+}
+
+test "schema: every default is JSON of its kind" {
+    for k in known_keys() {
+        match Json.parse(k.default_text) {
+            Err(e) => assert(false)
+            Ok(v) => assert(kind_ok(k.kind, v))
+        }
+    }
+}
+
+test "list: each key shows the layer it comes from" {
+    ro root = tmp3("origin")
+    put3(root, "inst/config/config.json", "{\"port\":8100,\"store\":\"files\",\"voice\":{\"model\":\"medium\"}}")
+    put3(root, "srv.json", "{\"web_dir\":\"srv-web\"}")
+    put3(root, "repo/.crew-harness/config.json", "{\"web_dir\":\"proj-web\",\"preset\":\"mix\"}")
+    put3(root, "repo/.crew-harness/local.json", "{\"workdir\":\"C:/work/mine\"}")
+    ro layout = layout_in("${root}/inst", "${root}/repo/.crew-harness")
+    ro text = listing(layout, "${root}/srv.json", ["port=8131"], true, ["CREW_SERVER_ACP_TRACE=false"])
+    assert(line_of(text, "port").starts_with("port=8131\targ"))
+    assert(line_of(text, "store").starts_with("store=files\tuser\t${root}/inst/config/config.json"))
+    assert(line_of(text, "web_dir").starts_with("web_dir=proj-web\tproject\t"))
+    assert(line_of(text, "workdir").starts_with("workdir=C:/work/mine\tlocal\t"))
+    assert(line_of(text, "acp_trace").starts_with("acp_trace=false\tenv"))
+    assert(line_of(text, "voice.model").starts_with("voice.model=medium\tuser"))
+    assert(line_of(text, "voice.language").starts_with("voice.language=auto\tdefault"))
+    assert(line_of(text, "preset").starts_with("preset=mix\tproject"))
+    assert(line_of(text, "data_dir").starts_with("data_dir=${root}/inst/data/sessions\tdefault"))
+    drop3(root)
+}
+
+test "list: without --show-origin only key=value; the server file is between the user and the project" {
+    ro root = tmp3("plain")
+    put3(root, "inst/config/config.json", "{\"web_dir\":\"user-web\"}")
+    put3(root, "srv.json", "{\"web_dir\":\"srv-web\"}")
+    ro layout = layout_in("${root}/inst", "")
+    ro text = listing(layout, "${root}/srv.json", []str.new(), false, []str.new())
+    assert(line_of(text, "web_dir") == "web_dir=srv-web")
+    assert(!text.contains("\t"))
+    drop3(root)
+}
+
+test "list: the old key stt is shown as voice" {
+    ro root = tmp3("stt")
+    put3(root, "srv.json", "{\"stt\":{\"language\":\"ru\"}}")
+    ro layout = layout_in("${root}/inst", "")
+    ro text = listing(layout, "${root}/srv.json", []str.new(), true, []str.new())
+    assert(line_of(text, "voice.language").starts_with("voice.language=ru\tserver"))
+    assert(line_of(text, "stt.language") == "")
+    drop3(root)
+}
+
+test "secrets: a password is never printed, from the environment, secrets.json or a file" {
+    ro root = tmp3("secret")
+    put3(root, "inst/config/secrets.json", "{\"pg\":{\"password\":\"from-secrets-file\"}}")
+    put3(root, "srv.json", "{\"pg\":{\"host\":\"localhost\",\"password\":\"from-server-file\"}}")
+    ro layout = layout_in("${root}/inst", "")
+    ro quiet = listing(layout, "${root}/srv.json", []str.new(), true, []str.new())
+    assert(!quiet.contains("from-secrets-file") && !quiet.contains("from-server-file"))
+    assert(line_of(quiet, "pg.password").starts_with("pg.password=***\tsecret"))
+    ro loud = listing(layout, "${root}/srv.json", []str.new(), true, ["CREW_PG_PASSWORD=from-env-xyz"])
+    assert(!loud.contains("from-env-xyz"))
+    assert(line_of(loud, "pg.password").starts_with("pg.password=***\tenv"))
+    mut state = MockOs.new()
+    state.put_env("CREW_PG_PASSWORD", "from-env-xyz")
+    match with Os = mock_os(state), Fs = real_fs() { config_get(layout, "${root}/srv.json", []str.new(), "pg.password", false) } {
+        Ok(t) => assert(t == "***")
+        Err(e) => assert(false)
+    }
+    drop3(root)
+}
+
+test "get: a value, with the origin, and an error for an unknown key" {
+    ro root = tmp3("get")
+    put3(root, "inst/config/config.json", "{\"port\":8100}")
+    ro layout = layout_in("${root}/inst", "")
+    match with Os = mock_os(MockOs.new()), Fs = real_fs() { config_get(layout, "", []str.new(), "port", true) } {
+        Ok(t) => assert(t == "8100\tuser\t${root}/inst/config/config.json")
+        Err(e) => assert(false)
+    }
+    match with Os = mock_os(MockOs.new()), Fs = real_fs() { config_get(layout, "", []str.new(), "nothing", false) } {
+        Ok(t) => assert(false)
+        Err(e) => assert(e.contains("nothing"))
+    }
+    drop3(root)
+}
+
+test "set: writes the key into the file of the scope and keeps the other keys" {
+    ro root = tmp3("set")
+    put3(root, "inst/config/config.json", "{\"port\":8100,\"voice\":{\"model\":\"medium\"}}")
+    put3(root, "repo/.crew-harness/config.json", "{}")
+    ro layout = layout_in("${root}/inst", "${root}/repo/.crew-harness")
+    with Fs = real_fs() {
+        assert(config_set(layout, "user", "", "voice.language", "ru").is_ok())
+        assert(config_set(layout, "project", "", "route_wip", "false").is_ok())
+        assert(config_set(layout, "local", "", "workdir", "C:/work/mine").is_ok())
+        ro user = read_text(Path.from_bytes("${root}/inst/config/config.json".bytes())).unwrap()
+        assert(user.contains("\"port\": 8100") && user.contains("\"model\": \"medium\"") && user.contains("\"language\": \"ru\""))
+        ro project = read_text(Path.from_bytes("${root}/repo/.crew-harness/config.json".bytes())).unwrap()
+        assert(project.contains("\"route_wip\": false"))
+        ro local = read_text(Path.from_bytes("${root}/repo/.crew-harness/local.json".bytes())).unwrap()
+        assert(local.contains("\"workdir\": \"C:/work/mine\""))
+    }
+    drop3(root)
+}
+
+test "set: a wrong key, a wrong value, a list and a secret are refused" {
+    ro layout = layout_in("C:/work/nowhere/home", "")
+    with Fs = real_fs() {
+        assert(config_set(layout, "user", "", "no_such_key", "1").is_err())
+        assert(config_set(layout, "user", "", "port", "abc").is_err())
+        assert(config_set(layout, "user", "", "route_wip", "maybe").is_err())
+        assert(config_set(layout, "user", "", "agents", "x").is_err())
+        match config_set(layout, "user", "", "pg.password", "s3cret") {
+            Ok(t) => assert(false)
+            Err(e) => assert(!e.contains("s3cret"))
+        }
+        assert(config_set(layout_in("", ""), "user", "", "port", "1").is_err())
+    }
+}
+
+test "validate: unknown keys and wrong kinds name file and line, secrets in a file are a warning" {
+    match read_layer_text("c.json", "{\n  \"port\": \"abc\",\n  \"colour\": 1,\n  \"pg\": {\"password\": \"zzz\"}\n}") {
+        Err(e) => assert(false)
+        Ok(l) => {
+            ro problems = validate_layer(l)
+            assert(problems.len() == 3)
+            assert(problems[0] == "c.json:2: port must be a whole number")
+            assert(problems[1] == "c.json:3: unknown key colour")
+            assert(problems[2].starts_with("warning c.json:4: pg.password is a secret"))
+            assert(!problems[2].contains("zzz"))
+        }
+    }
+}
+
+fn read_layer_text(file str, text str) -> Result[Layer, str] {
+    match Json.parse(text) {
+        Ok(v) => Ok({ origin: "user", file, obj: normalize_layer(v.object() ?? JsonObject.new()), text })
+        Err(e) => Err(json_error_text(e))
+    }
+}
+
+test "doctor: lists the paths, a broken file is a problem with file:line, a good home is ok" {
+    ro root = tmp3("doctor")
+    put3(root, "good/config/config.json", "{\"port\":8100}")
+    ro good = with Os = mock_os(MockOs.new()), Fs = real_fs() { doctor(layout_in("${root}/good", ""), "", "--home", "${root}") }
+    assert(good.errors == 0)
+    assert(good.text.contains("home: ${root}/good  (--home)"))
+    assert(good.text.contains("user: ${root}/good/config/config.json  ok"))
+    put3(root, "bad/config/config.json", "{\n  \"port\": oops\n}")
+    ro bad = with Os = mock_os(MockOs.new()), Fs = real_fs() { doctor(layout_in("${root}/bad", ""), "", "CREW_HOME", "${root}") }
+    assert(bad.errors == 1)
+    assert(bad.text.contains("${root}/bad/config/config.json:2:"))
+    assert(!bad.text.contains("oops"))
+    drop3(root)
+}
+
+test "doctor: the old flat layout and an unknown key are named" {
+    ro root = tmp3("legacy")
+    put3(root, "srv.json", "{\"colour\":1}")
+    ro layout = layout_with_data_dir("${root}/inst", "${root}/old-data", "")
+    ro report = with Os = mock_os(MockOs.new()), Fs = real_fs() { doctor(layout, "${root}/srv.json", "CREW_HOME", "${root}") }
+    assert(report.text.contains("layout: OLD (flat)"))
+    assert(report.text.contains("migrate --from ${root}/old-data"))
+    assert(report.text.contains("unknown key colour"))
+    assert(report.errors == 1)
+    drop3(root)
+}

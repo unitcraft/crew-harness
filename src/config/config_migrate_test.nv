@@ -1,0 +1,134 @@
+// config_migrate_test.nv - `crew-harness migrate`: the plan, the dry run, the move on a temporary folder (task 192.12).
+module crew_harness.config
+
+import std.os.{Os, real_os, temp_dir, pid}
+import std.fs.{Fs, real_fs, read_text, write_text, create_dir_all, remove_dir_all, try_exists, Path}
+
+fn tmp4(name str) -> str {
+    ro base = with Os = real_os() { temp_dir() }
+    ro id = with Os = real_os() { pid() }
+    ro dir = base.join("crew-migrate-${name}-${id}")
+    with Fs = real_fs() {
+        ro gone = remove_dir_all(dir)
+        ro made = create_dir_all(dir)
+    }
+    dir.display().replace("\\", "/")
+}
+
+fn drop4(root str) -> () {
+    with Fs = real_fs() {
+        ro gone = remove_dir_all(Path.from_bytes(root.bytes()))
+    }
+}
+
+fn put4(root str, rel str, text str) -> () {
+    ro path = Path.from_bytes("${root}/${rel}".bytes())
+    with Fs = real_fs() {
+        match path.parent() {
+            Some(p) => { ro made = create_dir_all(p) }
+            None => ()
+        }
+        ro written = write_text(path, text)
+    }
+}
+
+fn there(root str, rel str) -> bool {
+    with Fs = real_fs() {
+        match try_exists(Path.from_bytes("${root}/${rel}".bytes())) {
+            Ok(b) => b
+            Err(e) => false
+        }
+    }
+}
+
+fn old_layout(root str) -> () {
+    put4(root, "old/projects.json", "{\"version\":1,\"projects\":[]}")
+    put4(root, "old/agents.json", "{\"agents\":{}}")
+    put4(root, "old/last_dir.txt", "C:/work")
+    put4(root, "old/stt.pid", "123\n")
+    put4(root, "old/serve.8100.log", "log")
+    put4(root, "old/s-one/snapshot", "snap")
+    put4(root, "old/s-one/journal", "j")
+    put4(root, "old/s-two/journal", "j")
+    put4(root, "old/agent-config/xdg/opencode/x.json", "{}")
+    put4(root, "old/work/.keep", "")
+    put4(root, "old/loose.journal", "j")
+}
+
+test "migrate plan: the five kinds of things and the sessions are found, a folder without a journal is not a session" {
+    ro root = tmp4("plan")
+    old_layout(root)
+    ro layout = layout_in("${root}/new", "")
+    ro plan = with Fs = real_fs() { plan_migration("${root}/old", layout) }
+    assert(plan.error == "")
+    mut whats = []str.new()
+    for s in plan.steps { whats.push(s.what) }
+    assert(whats.contains("projects.json") && whats.contains("agents.json") && whats.contains("last_dir.txt") && whats.contains("stt.pid") && whats.contains("serve.8100.log"))
+    assert(whats.contains("agent-config/") && whats.contains("session s-one") && whats.contains("session s-two"))
+    assert(!whats.contains("session work"))
+    assert(plan.notes.len() == 1 && plan.notes[0].contains("1 files of the oldest flat form"))
+    drop4(root)
+}
+
+test "migrate dry run: the text says would move and nothing is moved" {
+    ro root = tmp4("dry")
+    old_layout(root)
+    ro layout = layout_in("${root}/new", "")
+    ro plan = with Fs = real_fs() { plan_migration("${root}/old", layout) }
+    ro text = plan_text(plan, true)
+    assert(text.contains("dry run") && text.contains("would move  projects.json: ${root}/old/projects.json -> ${root}/new/data/projects.json"))
+    assert(there(root, "old/projects.json") && !there(root, "new/data/projects.json") && there(root, "old/s-one/snapshot"))
+    drop4(root)
+}
+
+test "migrate run: files and sessions go to data, state and cache; the backup and the report are written" {
+    ro root = tmp4("run")
+    old_layout(root)
+    ro layout = layout_in("${root}/new", "")
+    ro plan = with Fs = real_fs() { plan_migration("${root}/old", layout) }
+    ro result = with Fs = real_fs() { run_migration(plan, layout, "77") }
+    assert(result.failed == 0 && result.moved == 8)
+    assert(there(root, "new/data/projects.json") && !there(root, "old/projects.json"))
+    assert(there(root, "new/data/sessions/s-one/snapshot") && there(root, "new/data/sessions/s-two/journal"))
+    assert(there(root, "new/cache/agents.json") && there(root, "new/cache/agent-config/xdg/opencode/x.json"))
+    assert(there(root, "new/state/last_dir.txt") && there(root, "new/state/stt.pid") && there(root, "new/state/serve.8100.log"))
+    assert(there(root, "old/work/.keep") && there(root, "old/loose.journal"))
+    assert(there(root, "new/state/migrate-backup-77/projects.json"))
+    assert(there(root, "new/state/migrate-report-77.txt"))
+    assert(result.text.contains("8 moved, 0 failed"))
+    ro kept = with Fs = real_fs() { read_text(Path.from_bytes("${root}/new/data/projects.json".bytes())).unwrap() }
+    assert(kept.contains("\"version\":1"))
+    drop4(root)
+}
+
+test "migrate run: a second run finds nothing, a target that is there is not overwritten" {
+    ro root = tmp4("again")
+    old_layout(root)
+    put4(root, "new/data/projects.json", "{\"mine\":true}")
+    ro layout = layout_in("${root}/new", "")
+    ro plan = with Fs = real_fs() { plan_migration("${root}/old", layout) }
+    mut skipped = 0
+    for s in plan.steps {
+        if s.kind == "skip" { skipped += 1 }
+    }
+    assert(skipped == 1)
+    ro result = with Fs = real_fs() { run_migration(plan, layout, "1") }
+    assert(result.failed == 0)
+    ro mine = with Fs = real_fs() { read_text(Path.from_bytes("${root}/new/data/projects.json".bytes())).unwrap() }
+    assert(mine.contains("mine"))
+    assert(there(root, "old/projects.json"))
+    ro again = with Fs = real_fs() { plan_migration("${root}/old", layout) }
+    assert(again.steps.len() == 1 && again.steps[0].kind == "skip")
+    drop4(root)
+}
+
+test "migrate plan: errors for a missing folder, a new-layout folder and a flat layout" {
+    ro root = tmp4("errors")
+    ro layout = layout_in("${root}/new", "")
+    with Fs = real_fs() {
+        assert(plan_migration("${root}/none", layout).error.contains("is not there"))
+        assert(plan_migration(layout.sessions, layout).error.contains("new layout already"))
+        assert(plan_migration("${root}/old", legacy_layout("${root}/old")).error.contains("no root"))
+    }
+    drop4(root)
+}

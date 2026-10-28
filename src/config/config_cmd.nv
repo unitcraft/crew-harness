@@ -1,0 +1,370 @@
+// config_cmd.nv - the commands `crew-harness config list|get|set` and `crew-harness doctor`, the schema of the settings (task 192.12, ADR-0016).
+//
+// The schema is the list of the keys the settings know, with the type and the default. It checks the files of the layers (`validate_layer`: the error is
+// `file:line: reason`) and gives the layer "default" for `config list --show-origin`. The defaults here are the same as in `src/server/settings.nv`
+// (`settings_test.nv` compares a few of them). A value of a secret key (a password, a token) is never printed: it is `***`.
+module crew_harness.config
+
+import std.text
+import std.encoding.json.{Json, JsonValue, JsonObject}
+import std.fs.{Fs, Path, read_text, write_atomic, create_dir_all, try_exists, metadata}
+import std.os.{Os, env}
+
+/// KeySpec: a key of the settings (dotted for the nested ones), its kind (`s` text, `i` whole number, `b` true/false, `a` list or objects of the file only) and the default as JSON text.
+export type KeySpec { key str, kind str, default_text str }
+
+fn ks(key str, kind str, default_text str) -> KeySpec => { key, kind, default_text }
+
+/// The keys the settings know.
+export fn known_keys() -> []KeySpec => [
+    ks("port", "i", "8099"), ks("data_dir", "s", "\"\""), ks("store", "s", "\"files\""), ks("workdir", "s", "\"\""), ks("web_dir", "s", "\"src/web\""),
+    ks("idle_term_seconds", "i", "900"), ks("acp_trace", "b", "true"), ks("ask_form", "b", "true"), ks("ask_timeout_seconds", "i", "1800"),
+    ks("max_image_bytes", "i", "10485760"), ks("agents", "a", "[]"), ks("hub.program", "s", "\"target/crew-hub.exe\""), ks("hub.args", "a", "[]"),
+    ks("pg.host", "s", "\"127.0.0.1\""), ks("pg.port", "i", "5432"), ks("pg.database", "s", "\"crew\""), ks("pg.user", "s", "\"crew_app\""), ks("pg.password", "s", "\"\""),
+    ks("routes_dir", "s", "\"\""), ks("route_reviewer_order", "a", "[\"codex\",\"claude\",\"kimi\",\"opencode\"]"), ks("route_task_limit", "i", "12"), ks("route_task_messages", "i", "40"),
+    ks("route_fix_attempts", "i", "2"), ks("route_worktree_ask", "b", "true"), ks("route_overlap_seconds", "i", "30"), ks("route_keep_days", "i", "30"),
+    ks("context_drop_percent", "i", "40"), ks("route_confirm_word", "s", "\"задача\""), ks("route_over_limit_word", "s", "\"сверх\""), ks("route_max_active", "i", "3"),
+    ks("route_tool", "b", "true"), ks("route_auto_propose", "b", "false"), ks("route_children", "b", "true"), ks("route_wip", "b", "true"),
+    ks("wip_timeout_seconds", "i", "300"), ks("agent_start_timeout_seconds", "i", "60"),
+    ks("voice.url", "s", "\"http://127.0.0.1:8178/inference\""), ks("voice.language", "s", "\"auto\""), ks("voice.managed", "b", "true"), ks("voice.dir", "s", "\"\""), ks("voice.model", "s", "\"small\""),
+    ks("preset", "s", "\"default\""), ks("tools_dir", "s", "\"\"")
+]
+
+fn spec_of(key str) -> Option[KeySpec] {
+    for k in known_keys() {
+        if k.key == key { return Some(k) }
+    }
+    None
+}
+
+/// Is the value of this key a secret (a password, a token, a key)? It is never printed and does not belong in config.json.
+export fn is_secret_key(key str) -> bool {
+    ro last = match key.rfind(".") {
+        Some(at) => key[at + 1..]
+        None => key
+    }
+    ro l = last.to_ascii_lower()
+    l.contains("password") || l.contains("token") || l.contains("secret") || l.ends_with("_key") || l == "key"
+}
+
+/// The layer "default": the defaults of the schema.
+export fn defaults_layer() -> Layer {
+    mut o = JsonObject.new()
+    for k in known_keys() {
+        match Json.parse(k.default_text) {
+            Ok(v) => { o = put_path(o, k.key, v) }
+            Err(e) => ()
+        }
+    }
+    { origin: "default", file: "", obj: o, text: "" }
+}
+
+// ----- the check of a file -----
+
+fn kind_ok(kind str, v JsonValue) -> bool {
+    if kind == "s" { return v.is_str() }
+    if kind == "i" { return v.int().is_some() }
+    if kind == "b" { return v.bool().is_some() }
+    v.is_array() || v.is_object()
+}
+
+fn kind_word(kind str) -> str {
+    if kind == "s" { return "text" }
+    if kind == "i" { return "a whole number" }
+    if kind == "b" { return "true or false" }
+    "a list"
+}
+
+fn leaves(prefix str, o JsonObject, mut out []Entry, origin str, file str) -> () {
+    for (k, v) in o {
+        ro key = if prefix.byte_len() > 0 { "${prefix}.${k}" } else { k }
+        ro known = spec_of(key)
+        // a key with a list kind is a leaf even when the file holds an object (agents are a list)
+        ro leaf_kind = match known {
+            Some(s) => s.kind == "a"
+            None => false
+        }
+        match v.object() {
+            Some(inner) => {
+                if leaf_kind { out.push(Entry { key, value: v, origin, file }) } else { leaves(key, inner, out, origin, file) }
+            }
+            None => out.push(Entry { key, value: v, origin, file })
+        }
+    }
+}
+
+/// Entry: a key of the settings with the value as it is in force and the layer it comes from (`file` of that layer, "" for env, arg and default).
+export type Entry { key str, value JsonValue, origin str, file str }
+
+fn put_entry(mut out []Entry, e Entry) -> () {
+    mut i = 0
+    while i < out.len() {
+        if out[i].key == e.key {
+            out[i] = e
+            return
+        }
+        i += 1
+    }
+    out.push(e)
+}
+
+/// The settings in force: the keys of all layers, the upper layer wins; each with its origin.
+export fn effective_entries(layers []Layer) -> []Entry {
+    mut out = []Entry.new()
+    for l in layers {
+        mut here = []Entry.new()
+        leaves("", l.obj, here, l.origin, l.file)
+        for e in here { put_entry(out, e) }
+    }
+    out
+}
+
+/// The problems of one file layer: `file:line: reason` (an unknown key, a value of the wrong kind) and `warning file:line: reason` (a secret in a file that is not secrets.json).
+export fn validate_layer(l Layer) -> []str {
+    mut problems = []str.new()
+    if l.file.byte_len() == 0 { return problems }
+    mut here = []Entry.new()
+    leaves("", l.obj, here, l.origin, l.file)
+    for e in here {
+        match spec_of(e.key) {
+            None => problems.push("${l.file}:${key_line(l.text, e.key)}: unknown key ${e.key}")
+            Some(s) => {
+                if !kind_ok(s.kind, e.value) { problems.push("${l.file}:${key_line(l.text, e.key)}: ${e.key} must be ${kind_word(s.kind)}") }
+            }
+        }
+        if is_secret_key(e.key) && l.origin != "secret" && !empty_text(e.value) {
+            problems.push("warning ${l.file}:${key_line(l.text, e.key)}: ${e.key} is a secret; keep it in the environment or in secrets.json, not in this file")
+        }
+    }
+    problems
+}
+
+// ----- list, get, set -----
+
+fn empty_text(v JsonValue) -> bool {
+    match v.str() {
+        Some(s) => s.byte_len() == 0
+        None => false
+    }
+}
+
+fn show_value(e Entry) -> str {
+    if is_secret_key(e.key) {
+        return if empty_text(e.value) { "" } else { "***" }
+    }
+    match e.value.str() {
+        Some(s) => s
+        None => e.value.to_str()
+    }
+}
+
+fn origin_text(e Entry) -> str => if e.file.byte_len() > 0 { "${e.origin}\t${e.file}" } else { e.origin }
+
+fn with_layout_defaults(layout ConfigLayout, mut entries []Entry) -> () {
+    mut has = false
+    for e in entries {
+        if e.key == "data_dir" && !empty_text(e.value) && e.value.is_str() { has = true }
+    }
+    if !has { put_entry(entries, Entry { key: "data_dir", value: JsonValue.str(layout.sessions), origin: "default", file: "" }) }
+}
+
+/// The layers over the defaults, for list and get: the files, the variables, the arguments.
+export fn command_layers(layout ConfigLayout, server_file str, sets []str) Os Fs -> Result[[]Layer, str] {
+    mut layers = []Layer.new()
+    layers.push(defaults_layer())
+    for l in all_layers(layout, server_file, sets)? { layers.push(l) }
+    Ok(layers)
+}
+
+/// `config list [--show-origin]`: a line `key=value` for each key; with the origin `key=value<TAB>origin[<TAB>file]`.
+export fn config_list(layout ConfigLayout, server_file str, sets []str, show_origin bool) Os Fs -> Result[str, str] {
+    ro layers = command_layers(layout, server_file, sets)?
+    mut entries = effective_entries(layers)
+    with_layout_defaults(layout, entries)
+    mut lines = []str.new()
+    for e in entries {
+        lines.push(if show_origin { "${e.key}=${show_value(e)}\t${origin_text(e)}" } else { "${e.key}=${show_value(e)}" })
+    }
+    Ok(lines.join("\n"))
+}
+
+/// `config get <key> [--show-origin]`: the value (strings without quotes); Err when the key is not known.
+export fn config_get(layout ConfigLayout, server_file str, sets []str, key str, show_origin bool) Os Fs -> Result[str, str] {
+    ro layers = command_layers(layout, server_file, sets)?
+    mut entries = effective_entries(layers)
+    with_layout_defaults(layout, entries)
+    for e in entries {
+        if e.key == key { return Ok(if show_origin { "${show_value(e)}\t${origin_text(e)}" } else { show_value(e) }) }
+    }
+    Err("no such key: ${key}")
+}
+
+/// The file `config set` writes: `user` is `<home>/config/config.json`, `project` is `.crew-harness/config.json` of the project, `local` is `.crew-harness/local.json`.
+/// `work` is the folder of the project when it has no `.crew-harness` yet. Err when the scope has no place.
+export fn set_target(layout ConfigLayout, scope str, work str) -> Result[str, str] {
+    if scope == "user" {
+        if layout.config.byte_len() == 0 { return Err("no root of the instance: give --home <folder> or set CREW_HOME") }
+        return Ok("${layout.config}/config.json")
+    }
+    ro dir = if layout.project.byte_len() > 0 { layout.project } else if work.byte_len() > 0 { "${work}/.crew-harness" } else { "" }
+    if dir.byte_len() == 0 { return Err("the project folder is not known") }
+    if scope == "project" { return Ok("${dir}/config.json") }
+    if scope == "local" { return Ok("${dir}/local.json") }
+    Err("the scope must be user, project or local")
+}
+
+/// The JSON value of a text for a key of the schema, or why not.
+export fn typed_value(key str, text str) -> Result[JsonValue, str] {
+    ro spec = match spec_of(key) {
+        Some(s) => s
+        None => return Err("no such key: ${key}")
+    }
+    if spec.kind == "a" { return Err("${key} is a list: edit the file") }
+    if spec.kind == "s" { return Ok(JsonValue.str(text)) }
+    if spec.kind == "i" {
+        return match text.to_int() {
+            Ok(n) => Ok(JsonValue.int(n))
+            Err(e) => Err("${key} must be a whole number")
+        }
+    }
+    if text == "true" { return Ok(JsonValue.bool(true)) }
+    if text == "false" { return Ok(JsonValue.bool(false)) }
+    Err("${key} must be true or false")
+}
+
+/// `config set <key> <value> [--project|--local]`: put the value into the file of the scope (the other keys of the file stay). Returns the line to print.
+export fn config_set(layout ConfigLayout, scope str, work str, key str, text str) Fs -> Result[str, str] {
+    if is_secret_key(key) { return Err("${key} is a secret: put it in the environment or in <home>/config/secrets.json by hand") }
+    ro value = typed_value(key, text)?
+    ro file = set_target(layout, scope, work)?
+    ro old = match read_layer(scope, file)? {
+        Some(l) => l.obj
+        None => JsonObject.new()
+    }
+    ro next = put_path(old, key, value)
+    match Path.from_bytes(file.bytes()).parent() {
+        Some(dir) => {
+            match create_dir_all(dir) {
+                Ok(done) => ()
+                Err(e) => return Err("the folder of ${file} cannot be made")
+            }
+        }
+        None => ()
+    }
+    match write_atomic(Path.from_bytes(file.bytes()), "${JsonValue.object(next).to_str_pretty()}\n".bytes()) {
+        Ok(done) => Ok("${key} set in ${file}")
+        Err(e) => Err("${file} cannot be written")
+    }
+}
+
+// ----- doctor -----
+
+/// DoctorReport: the text to print and how many problems it names (a warning is not counted).
+export type DoctorReport { text str, errors int, warnings int }
+
+fn folder_line(name str, dir str) Fs -> []str {
+    if dir.byte_len() == 0 { return []str.new() }
+    ro there = yes(is_present(dir))
+    ["  ${name}: ${dir}  exists: ${there}"]
+}
+
+fn folder_lines(layout ConfigLayout) Fs -> []str {
+    mut out = []str.new()
+    for l in folder_line("config", layout.config) { out.push(l) }
+    for l in folder_line("data", layout.data) { out.push(l) }
+    for l in folder_line("sessions", layout.sessions) { out.push(l) }
+    for l in folder_line("state", layout.state) { out.push(l) }
+    for l in folder_line("cache", layout.cache) { out.push(l) }
+    for l in folder_line("tools", layout.tools) { out.push(l) }
+    out
+}
+
+fn yes(b bool) -> str => if b { "yes" } else { "no" }
+
+fn is_present(path str) Fs -> bool {
+    match try_exists(Path.from_bytes(path.bytes())) {
+        Ok(b) => b
+        Err(e) => false
+    }
+}
+
+fn mode_open(path str) Fs -> bool {
+    match metadata(Path.from_bytes(path.bytes())) {
+        Ok(m) => (m.permissions().mode() & 63) != 0
+        Err(e) => false
+    }
+}
+
+/// `crew-harness doctor`: the paths, the existence of the folders, the files of the layers checked against the schema, the rights of secrets.json, the old places.
+/// `home_source` says where the root came from (`--home`, `CREW_HOME`, `the folder of the user`, `none`).
+export fn doctor(layout ConfigLayout, server_file str, home_source str, work str) Os Fs -> DoctorReport {
+    mut lines = []str.new()
+    mut errors = 0
+    mut warnings = 0
+    ro home_shown = if layout.home.byte_len() > 0 { layout.home } else { "(none)" }
+    lines.push("home: ${home_shown}  (${home_source})")
+    if layout.home.byte_len() == 0 {
+        lines.push("  no root of the instance is known: give --home <folder> or set CREW_HOME; the flat folder is used")
+        warnings += 1
+    }
+    if layout.legacy {
+        lines.push("layout: OLD (flat) - data_dir ${layout.data} holds sessions, projects, state and cache together; `crew-harness migrate --from ${layout.data}` moves them into the new folders")
+        warnings += 1
+    }
+    lines.push("folders:")
+    for line in folder_lines(layout) { lines.push(line) }
+    ro project_shown = if layout.project.byte_len() > 0 { layout.project } else { "(no .crew-harness folder found above ${work})" }
+    lines.push("project: ${project_shown}")
+    lines.push("layers (the lower are covered by the upper):")
+    for (origin, file) in layer_files(layout, server_file) {
+        if !is_present(file) {
+            lines.push("  ${origin}: ${file}  absent")
+        } else {
+            match read_layer(origin, file) {
+                Err(e) => {
+                    lines.push("  ${origin}: ${file}  BROKEN")
+                    lines.push("    ${e}")
+                    errors += 1
+                }
+                Ok(found) => {
+                    lines.push("  ${origin}: ${file}  ok")
+                    match found {
+                        Some(l) => {
+                            for p in validate_layer(l) {
+                                lines.push("    ${p}")
+                                if p.starts_with("warning ") { warnings += 1 } else { errors += 1 }
+                            }
+                        }
+                        None => ()
+                    }
+                }
+            }
+        }
+    }
+    if layout.config.byte_len() > 0 {
+        ro secrets = "${layout.config}/secrets.json"
+        if is_present(secrets) && mode_open(secrets) && !layout.config.contains(":") {
+            lines.push("  warning ${secrets}: other users can read it; run chmod 600")
+            warnings += 1
+        }
+    }
+    if layout.project.byte_len() > 0 && is_present("${layout.project}/local.json") {
+        lines.push("  note: ${layout.project}/local.json is personal: the repository must ignore it (a line `.crew-harness/local.json` in .gitignore)")
+    }
+    lines.push("old places:")
+    mut old = 0
+    ro local_app = (env("LOCALAPPDATA") ?? "").replace("\\", "/")
+    ro old_stt = "${local_app}/crew-harness/stt"
+    if local_app.byte_len() > 0 && is_present(old_stt) {
+        lines.push("  ${old_stt}  (the recognizer of an old install; it is still found there; new place: <tools>/whisper or voice.dir)")
+        old += 1
+    }
+    if work.byte_len() > 0 && is_present("${work}/crew-data") && !layout.legacy {
+        lines.push("  ${work}/crew-data  (the default data folder of an old start; `crew-harness migrate --from ${work}/crew-data`)")
+        old += 1
+    }
+    if old == 0 { lines.push("  none") }
+    ro verdict = if errors == 0 { "result: ok (${warnings} warnings)" } else { "result: ${errors} problems, ${warnings} warnings" }
+    lines.push(verdict)
+    { text: lines.join("\n"), errors, warnings }
+}

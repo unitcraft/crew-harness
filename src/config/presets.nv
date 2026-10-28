@@ -1,0 +1,198 @@
+// presets.nv - the presets: a named table `role -> {family, model, effort}` (task 192.12, ADR-0016).
+//
+// A preset is the answer to "which agent does which role": the family (the id of an agent of the settings), the model and the effort. It lies in a file
+// `presets/<name>.json` of the user (`<home>/config/presets/`) or of the project (`.crew-harness/presets/`; the project wins by the name):
+//   { "description": "...", "roles": { "dev": {"family": "codex", "model": "gpt-6.1-sol", "effort": "high"}, "dev_accept": {"family": "claude"} } }
+// The active preset is the setting `preset` (the user, the project, or a session: the signal `session_preset`); the built-in one is `default`.
+// The independent step of a mode of work (`independent`) takes the family of the role `dev_accept` from the active preset; `route_reviewer_order`
+// is the reserve order when the preset has none (or the family is the author, or is not an agent of the settings).
+module crew_harness.config
+
+import std.text
+import std.encoding.json.{Json, JsonValue, JsonObject}
+import std.fs.{Fs, Path, read_dir}
+
+/// Pick: what a role is given in a preset: the family ("" - not said), the model and the effort ("" - the agent's own).
+export type Pick { role str, family str, model str, effort str }
+
+/// Preset: the name, a line about it, where it comes from (`built-in`, `user`, `project`) and the picks of its roles.
+export type Preset { name str, description str, origin str, picks []Pick }
+
+/// The name of the preset that is used when no one chose.
+export const DEFAULT_PRESET = "default"
+
+/// Is this text fit to be the name of a preset (a file name `<name>.json`)? Lower Latin letters, digits, `_` and `-`, at most 40.
+export fn preset_name_ok(name str) -> bool => role_id_ok(name)
+
+/// The built-in preset `default`: `dev` is the first family of `order`, `dev_accept` the next one (a family that is not the author).
+export fn builtin_preset(order []str) -> Preset {
+    mut picks = []Pick.new()
+    if order.len() > 0 { picks.push(Pick { role: "dev", family: order[0], model: "", effort: "" }) }
+    if order.len() > 1 { picks.push(Pick { role: "dev_accept", family: order[1], model: "", effort: "" }) }
+    { name: DEFAULT_PRESET, description: "Исполнитель и приёмщик из разных семей по порядку route_reviewer_order", origin: "built-in", picks }
+}
+
+fn str_of(o JsonObject, key str) -> str {
+    match o.get(key) {
+        Some(v) => v.str() ?? ""
+        None => ""
+    }
+}
+
+/// A preset from the text of its file; `name` is the name of the file without `.json`. Err("file:line: reason").
+export fn parse_preset(name str, origin str, file str, text str) -> Result[Preset, str] {
+    ro value = match Json.parse(text) {
+        Ok(v) => v
+        Err(e) => return Err("${file}:${json_error_text(e)}")
+    }
+    ro o = match value.object() {
+        Some(x) => x
+        None => return Err("${file}:1: a preset must be one object {description, roles}")
+    }
+    mut picks = []Pick.new()
+    match o.get("roles") {
+        None => return Err("${file}:1: a preset needs the key roles: {\"dev\": {\"family\": ...}}")
+        Some(r) => {
+            ro table = match r.object() {
+                Some(x) => x
+                None => return Err("${file}:${key_line(text, "roles")}: roles must be an object, the key is the id of a role")
+            }
+            for (role, v) in table {
+                if !role_id_ok(role) { return Err("${file}:${key_line(text, role)}: wrong id of a role: ${role}") }
+                ro pick = match v.object() {
+                    Some(x) => x
+                    None => return Err("${file}:${key_line(text, role)}: the role ${role} must be an object {family, model, effort}")
+                }
+                for (k, field) in pick {
+                    if k != "family" && k != "model" && k != "effort" { return Err("${file}:${key_line(text, k)}: unknown key ${k} in the role ${role} (family, model, effort)") }
+                    if field.str() == None { return Err("${file}:${key_line(text, k)}: ${k} of the role ${role} must be a string") }
+                }
+                picks.push(Pick { role, family: str_of(pick, "family"), model: str_of(pick, "model"), effort: str_of(pick, "effort") })
+            }
+        }
+    }
+    Ok({ name, description: str_of(o, "description"), origin, picks })
+}
+
+fn json_names(dir str) Fs -> []str {
+    mut out = []str.new()
+    match read_dir(Path.from_bytes(dir.bytes())) {
+        Ok(entries) => {
+            for e in entries {
+                match e.name_str() {
+                    Some(n) => {
+                        if e.is_file() && n.ends_with(".json") { out.push(n[..n.byte_len() - 5]) }
+                    }
+                    None => ()
+                }
+            }
+        }
+        Err(e) => ()
+    }
+    out
+}
+
+/// All presets: the built-in one, then those of the user, then those of the project (the same name - the upper layer replaces). Err("file:line: reason") for a broken file.
+export fn load_presets(layout ConfigLayout, order []str) Fs -> Result[[]Preset, str] {
+    mut out = []Preset.new()
+    out.push(builtin_preset(order))
+    mut dirs = presets_dirs(layout)
+    mut i = dirs.len()
+    while i > 0 {
+        i -= 1
+        ro origin = if layout.project.byte_len() > 0 && dirs[i].starts_with(layout.project) { "project" } else { "user" }
+        for name in json_names(dirs[i]) {
+            if !preset_name_ok(name) { continue }
+            ro file = "${dirs[i]}/${name}.json"
+            ro text = file_text(file) ?? ""
+            ro p = parse_preset(name, origin, file, text)?
+            mut at = -1
+            mut k = 0
+            while k < out.len() {
+                if out[k].name == name { at = k }
+                k += 1
+            }
+            if at >= 0 { out[at] = p } else { out.push(p) }
+        }
+    }
+    Ok(out)
+}
+
+/// The preset with this name.
+export fn preset_named(list []Preset, name str) -> Option[Preset] {
+    for p in list {
+        if p.name == name { return Some(p) }
+    }
+    None
+}
+
+/// The pick of a role in a preset.
+export fn preset_pick(p Preset, role str) -> Option[Pick] {
+    for k in p.picks {
+        if k.role == role { return Some(k) }
+    }
+    None
+}
+
+/// The family of a role in a preset, "" when the preset does not say.
+export fn preset_family(p Preset, role str) -> str {
+    match preset_pick(p, role) {
+        Some(k) => k.family
+        None => ""
+    }
+}
+
+/// The family for the independent check: the family of `dev_accept` of the preset `name` (the built-in one when the name is unknown), "" when there is none.
+export fn independent_family(list []Preset, name str) -> str {
+    match preset_named(list, name) {
+        Some(p) => preset_family(p, "dev_accept")
+        None => ""
+    }
+}
+
+/// The presets for the page and the API `GET /api/presets`: `{"active": name, "presets": [{name, description, origin, roles: {role: {family, model, effort}}}], "roles": [...]}`.
+export fn presets_json(list []Preset, active str, roles []Role) -> str {
+    mut items = []JsonValue.new()
+    for p in list {
+        mut table = JsonObject.new()
+        for k in p.picks {
+            mut one = JsonObject.new()
+            ign(one.insert("family", JsonValue.str(k.family)))
+            ign(one.insert("model", JsonValue.str(k.model)))
+            ign(one.insert("effort", JsonValue.str(k.effort)))
+            ign(table.insert(k.role, JsonValue.object(one)))
+        }
+        mut o = JsonObject.new()
+        ign(o.insert("name", JsonValue.str(p.name)))
+        ign(o.insert("description", JsonValue.str(p.description)))
+        ign(o.insert("origin", JsonValue.str(p.origin)))
+        ign(o.insert("roles", JsonValue.object(table)))
+        items.push(JsonValue.object(o))
+    }
+    mut out = JsonObject.new()
+    ign(out.insert("active", JsonValue.str(active)))
+    ign(out.insert("presets", JsonValue.array(items)))
+    ign(out.insert("roles", roles_json(roles)))
+    JsonValue.object(out).to_str()
+}
+
+/// The reply of `GET /api/presets` for a layout: a broken file gives `{"error": "file:line: reason", ...}` with the built-in preset alone, so the page never breaks.
+export fn presets_reply(layout ConfigLayout, order []str, active str) Fs -> str {
+    ro roles = match load_roles(layout) {
+        Ok(r) => r
+        Err(e) => builtin_roles()
+    }
+    match load_presets(layout, order) {
+        Ok(list) => presets_json(list, active, roles)
+        Err(e) => {
+            ro base = presets_json([builtin_preset(order)], DEFAULT_PRESET, roles)
+            match Json.parse(base) {
+                Ok(v) => {
+                    ro o = put_path(v.object() ?? JsonObject.new(), "error", JsonValue.str(e))
+                    JsonValue.object(o).to_str()
+                }
+                Err(x) => base
+            }
+        }
+    }
+}

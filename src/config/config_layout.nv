@@ -1,0 +1,408 @@
+// config_layout.nv - where the configuration and the data of the control panel lie, and how the layers of the settings are put together (task 192.12, ADR-0016).
+//
+// The root of an instance is `CREW_HOME`: the argument `--home <folder>`, else the variable `CREW_HOME`, else `<the home folder of the user>/.crew-harness`.
+// Inside the root the subfolders are fixed:
+//   config/   what the user wrote: config.json, roles.json, presets/, modes/, secrets.json
+//   data/     what must not be lost: projects.json, sessions/<id>/ (the journal, the snapshot, acp.jsonl, inbox, images)
+//   state/    service files that can be deleted: stt.pid, last_dir.txt, the logs
+//   cache/    what can be made again: agents.json (the catalog of the families), agent-config/
+//   tools/    heavy installs (whisper); CREW_TOOLS_DIR or the setting `voice.dir` move them
+// The folder `.crew-harness/` of a project has the same names: config.json (shared, in git), local.json (personal, absolute paths; ignored by git), modes/, presets/, roles.json.
+// The layers, lower ones are covered by upper ones: the defaults in the code -> `<home>/config/config.json` -> the server file (`serve <file>`, CREW_SERVER_CONFIG)
+// -> `.crew-harness/config.json` of the project -> `.crew-harness/local.json` -> `<home>/config/secrets.json` -> the variables CREW_* -> the arguments of the command line.
+// An old settings file with `data_dir` keeps working: the flat layout (sessions, projects.json, agents.json, stt.pid ... all in that folder), see `legacy_layout`.
+//
+// This module holds `std` only: the front (Polaris), the hub (the PostgreSQL driver) and the commands of `crew-harness` all import it.
+module crew_harness.config
+
+import std.text
+import std.encoding.json.{Json, JsonValue, JsonObject, ParseJsonError}
+import std.fs.{Fs, read_text, Path, try_exists, metadata}
+import std.os.{Os, env, home_dir, cwd}
+
+/// ConfigLayout: the folders of an instance. `legacy` - the folders come from an old `data_dir` (everything in one folder) and not from the root `home`.
+/// `sessions` is the folder with a folder per session; `data` holds projects.json; `project` is the `.crew-harness` folder of the project ("" - none).
+export type ConfigLayout { home str, config str, data str, sessions str, state str, cache str, tools str, project str, legacy bool }
+
+/// The flat layout of an old `data_dir`: all five folders are that one (the stands that started before the layout keep their files where they are).
+export fn legacy_layout(dir str) -> ConfigLayout =>
+    { home: "", config: "", data: dir, sessions: dir, state: dir, cache: dir, tools: "", project: "", legacy: true }
+
+export fn ign(o Option[JsonValue]) -> () { }
+
+fn slashes(p str) -> str => p.replace("\\", "/")
+
+fn trim_slash(p str) -> str {
+    mut s = slashes(p)
+    while s.byte_len() > 1 && s.ends_with("/") { s = s[..s.byte_len() - 1] }
+    s
+}
+
+/// The layout under a root: `<home>/config`, `data`, `data/sessions`, `state`, `cache`, `tools`.
+export fn layout_in(home str, project str) -> ConfigLayout {
+    ro h = trim_slash(home)
+    if h.byte_len() == 0 { return legacy_layout("") }
+    { home: h, config: "${h}/config", data: "${h}/data", sessions: "${h}/data/sessions", state: "${h}/state", cache: "${h}/cache", tools: "${h}/tools", project, legacy: false }
+}
+
+/// The layout when `data_dir` was named by the old settings: `data`, `sessions`, `state` and `cache` are that folder, `config` and `tools` stay under the root (when there is one).
+export fn layout_with_data_dir(home str, data_dir str, project str) -> ConfigLayout {
+    ro h = trim_slash(home)
+    ro d = trim_slash(data_dir)
+    { home: h, config: if h.byte_len() > 0 { "${h}/config" } else { "" }, data: d, sessions: d, state: d, cache: d, tools: if h.byte_len() > 0 { "${h}/tools" } else { "" }, project, legacy: true }
+}
+
+/// The root of the instance from the three sources, in the order of the rule: the argument, the variable, the folder of the user. "" - none of them is known.
+export fn resolve_home(arg_home str, env_home str, user_home str) -> str {
+    if arg_home.byte_len() > 0 { return trim_slash(arg_home) }
+    if env_home.byte_len() > 0 { return trim_slash(env_home) }
+    if user_home.byte_len() > 0 { return "${trim_slash(user_home)}/.crew-harness" }
+    ""
+}
+
+fn cfg_env(key str) Os -> Option[str] {
+    match env(key) {
+        Some(v) => if v.byte_len() > 0 { Some(v) } else { None }
+        None => None
+    }
+}
+
+/// The root of the instance now: `arg_home` (the argument `--home`), else CREW_HOME, else `~/.crew-harness`. Nothing is made on the disk.
+export fn crew_home(arg_home str) Os -> str {
+    ro user = match home_dir() {
+        Some(p) => p.display()
+        None => ""
+    }
+    resolve_home(arg_home, cfg_env("CREW_HOME") ?? "", user)
+}
+
+// ----- the command line: --home <folder>, --set key=value -----
+
+/// CliArgs: the words of the command line after `--home` and `--set` are taken out of them. `sets` are the `key=value` words of `--set`; `error` is "" or why the line is wrong.
+export type CliArgs { home str, sets []str, rest []str, error str }
+
+/// Take `--home <folder>` (or `--home=<folder>`) and `--set key=value` (or `--set=key=value`) out of the words (the first word, the name of the program, is kept in `rest`).
+export fn split_cli_args(argv []str) -> CliArgs {
+    mut home = ""
+    mut sets = []str.new()
+    mut rest = []str.new()
+    mut error = ""
+    mut i = 0
+    while i < argv.len() {
+        ro w = argv[i]
+        if i == 0 {
+            rest.push(w)
+        } else if w == "--home" {
+            if i + 1 < argv.len() { home = argv[i + 1]; i += 1 } else { error = "--home needs a folder" }
+        } else if w.starts_with("--home=") {
+            home = w[7..]
+        } else if w == "--set" {
+            if i + 1 < argv.len() { sets.push(argv[i + 1]); i += 1 } else { error = "--set needs key=value" }
+        } else if w.starts_with("--set=") {
+            sets.push(w[6..])
+        } else {
+            rest.push(w)
+        }
+        i += 1
+    }
+    { home, sets, rest, error }
+}
+
+// ----- the project folder -----
+
+fn is_dir(p str) Fs -> bool {
+    match metadata(Path.from_bytes(p.bytes())) {
+        Ok(m) => m.is_dir()
+        Err(e) => false
+    }
+}
+
+fn parent_of(p str) -> str {
+    ro s = trim_slash(p)
+    match s.rfind("/") {
+        Some(at) => if at == 0 { "/" } else if at == 2 && s[1..2] == ":" { s[..3] } else { s[..at] }
+        None => ""
+    }
+}
+
+/// The `.crew-harness` folder of the project that holds `start` (or a folder above it, up to 16 levels): the first one that is not the root of the instance. "" - none.
+export fn find_project_dir(start str, home str) Fs -> str {
+    mut dir = trim_slash(start)
+    mut level = 0
+    while dir.byte_len() > 0 && level < 16 {
+        ro candidate = if dir.ends_with("/") { "${dir}.crew-harness" } else { "${dir}/.crew-harness" }
+        if candidate != trim_slash(home) && is_dir(candidate) { return candidate }
+        ro up = parent_of(dir)
+        if up == dir || up.byte_len() == 0 { return "" }
+        dir = up
+        level += 1
+    }
+    ""
+}
+
+/// The folder the program works in now, with slashes; "" when it cannot be told.
+export fn work_dir_now() Os -> str {
+    match cwd() {
+        Ok(p) => slashes(p.display())
+        Err(e) => ""
+    }
+}
+
+// ----- JSON helpers -----
+
+/// Why a text is not JSON: the line and the reason; the text itself is never quoted.
+export fn json_error_text(e ParseJsonError) -> str {
+    match e {
+        UnexpectedChar { line, col, found } => "${line}: unexpected character (column ${col})"
+        UnexpectedEof { line, col } => "${line}: the text ends too early (column ${col})"
+        InvalidEscape { line, col, seq } => "${line}: wrong escape (column ${col})"
+        InvalidUnicode { line, col, hex } => "${line}: wrong unicode escape (column ${col})"
+        InvalidNumber { line, col, text } => "${line}: wrong number (column ${col})"
+        DuplicateKey { line, col, key } => "${line}: the key ${key} is twice (column ${col})"
+        TrailingContent { line, col } => "${line}: something after the end of the object (column ${col})"
+    }
+}
+
+/// The line (1 based) where the key (its last name, after the last dot) is written in the text; 1 when it is not found.
+export fn key_line(text str, key str) -> int {
+    ro name = match key.rfind(".") {
+        Some(at) => key[at + 1..]
+        None => key
+    }
+    ro needle = "\"${name}\""
+    mut n = 1
+    for line in text.split("\n") {
+        if line.contains(needle) { return n }
+        n += 1
+    }
+    1
+}
+
+/// Layer: one source of settings. `origin` is `user`, `server`, `project`, `local`, `secret`, `env` or `arg`; `file` is its file ("" for env and arg); `text` is the text of the file ("" - no file).
+export type Layer { origin str, file str, obj JsonObject, text str }
+
+export fn file_text(path str) Fs -> Option[str] {
+    ro p = Path.from_bytes(path.bytes())
+    ro there = match try_exists(p) {
+        Ok(b) => b
+        Err(e) => false
+    }
+    if !there { return None }
+    match read_text(p) {
+        Ok(t) => Some(t)
+        Err(e) => None
+    }
+}
+
+/// The file as a layer: Ok(None) - there is no such file; Err("file:line: reason") - it is not a JSON object.
+export fn read_layer(origin str, file str) Fs -> Result[Option[Layer], str] {
+    ro text = match file_text(file) {
+        Some(t) => t
+        None => return Ok(None)
+    }
+    ro raw = text.bytes()
+    ro stripped = if raw.len() >= 3 && raw[0] == (239 as u8) && raw[1] == (187 as u8) && raw[2] == (191 as u8) { text[3..] } else { text }
+    ro value = match Json.parse(stripped) {
+        Ok(v) => v
+        Err(e) => return Err("${file}:${json_error_text(e)}")
+    }
+    match value.object() {
+        Some(o) => Ok(Some(Layer { origin, file, obj: normalize_layer(o), text: stripped }))
+        None => Err("${file}:1: the file must hold one JSON object")
+    }
+}
+
+/// The old key `stt` is read as `voice`: the object `stt` is put under the name `voice`, the keys of `voice` itself over it.
+export fn normalize_layer(o JsonObject) -> JsonObject {
+    if !o.contains("stt") { return merge_objects(o, JsonObject.new()) }
+    mut out = JsonObject.new()
+    mut old = JsonObject.new()
+    match o.get("stt") {
+        Some(v) => { old = v.object() ?? JsonObject.new() }
+        None => ()
+    }
+    for (k, v) in o {
+        if k != "stt" && k != "voice" { ign(out.insert(k, v)) }
+    }
+    ro now = match o.get("voice") {
+        Some(v) => v.object() ?? JsonObject.new()
+        None => JsonObject.new()
+    }
+    ign(out.insert("voice", JsonValue.object(merge_objects(old, now))))
+    out
+}
+
+/// `over` on top of `base`: objects are merged key by key, any other value of `over` replaces the value of `base`.
+export fn merge_objects(base JsonObject, over JsonObject) -> JsonObject {
+    mut out = JsonObject.new()
+    for (k, v) in base { ign(out.insert(k, v)) }
+    for (k, v) in over {
+        match out.get(k) {
+            Some(b) => match b.object() {
+                Some(bo) => match v.object() {
+                    Some(vo) => { ign(out.insert(k, JsonValue.object(merge_objects(bo, vo)))) }
+                    None => { ign(out.insert(k, v)) }
+                }
+                None => { ign(out.insert(k, v)) }
+            }
+            None => { ign(out.insert(k, v)) }
+        }
+    }
+    out
+}
+
+/// The layers put together.
+export fn merge_layers(layers []Layer) -> JsonObject {
+    mut out = JsonObject.new()
+    for l in layers { out = merge_objects(out, l.obj) }
+    out
+}
+
+/// Put a value under a dotted key (`voice.url`) into the object.
+export fn put_path(o JsonObject, key str, value JsonValue) -> JsonObject {
+    match key.split_once(".") {
+        None => {
+            mut out = merge_objects(o, JsonObject.new())
+            ign(out.insert(key, value))
+            out
+        }
+        Some((head, tail)) => {
+            ro inner = match o.get(head) {
+                Some(v) => v.object() ?? JsonObject.new()
+                None => JsonObject.new()
+            }
+            mut out = merge_objects(o, JsonObject.new())
+            ign(out.insert(head, JsonValue.object(put_path(inner, tail, value))))
+            out
+        }
+    }
+}
+
+/// The value of a `--set` word or of a text from the command line: `true` and `false` are flags, digits are a number, anything else is a string.
+export fn guess_value(text str) -> JsonValue {
+    if text == "true" { return JsonValue.bool(true) }
+    if text == "false" { return JsonValue.bool(false) }
+    match text.to_int() {
+        Ok(n) => if text.byte_len() > 0 && !text.starts_with("+") { JsonValue.int(n) } else { JsonValue.str(text) }
+        Err(e) => JsonValue.str(text)
+    }
+}
+
+// ----- the environment as a layer -----
+
+/// EnvKey: a variable and the key of the settings it sets; `kind` is `s` (text), `i` (number) or `b` (true/false). Later lines of the list win.
+type EnvKey { var str, key str, kind str }
+
+fn ek(var str, key str, kind str) -> EnvKey => { var, key, kind }
+
+fn env_keys() -> []EnvKey => [
+    ek("CREW_STT_DIR", "voice.dir", "s"),
+    ek("CREW_SERVER_PORT", "port", "i"), ek("CREW_SERVER_STORE", "store", "s"), ek("CREW_SERVER_DATA_DIR", "data_dir", "s"), ek("CREW_SERVER_WORKDIR", "workdir", "s"),
+    ek("CREW_SERVER_WEB_DIR", "web_dir", "s"), ek("CREW_SERVER_ACP_TRACE", "acp_trace", "b"), ek("CREW_SERVER_ASK_FORM", "ask_form", "b"),
+    ek("CREW_SERVER_ASK_TIMEOUT_SECONDS", "ask_timeout_seconds", "i"), ek("CREW_SERVER_IDLE_SECONDS", "idle_term_seconds", "i"),
+    ek("CREW_SERVER_ROUTES_DIR", "routes_dir", "s"), ek("CREW_SERVER_MAX_IMAGE_BYTES", "max_image_bytes", "i"),
+    ek("CREW_SERVER_STT_URL", "voice.url", "s"), ek("CREW_SERVER_STT_LANGUAGE", "voice.language", "s"), ek("CREW_SERVER_STT_MANAGED", "voice.managed", "b"),
+    ek("CREW_SERVER_STT_DIR", "voice.dir", "s"), ek("CREW_SERVER_STT_MODEL", "voice.model", "s"),
+    ek("CREW_VOICE_URL", "voice.url", "s"), ek("CREW_VOICE_LANGUAGE", "voice.language", "s"), ek("CREW_VOICE_MANAGED", "voice.managed", "b"),
+    ek("CREW_VOICE_DIR", "voice.dir", "s"), ek("CREW_VOICE_MODEL", "voice.model", "s"),
+    ek("CREW_PG_HOST", "pg.host", "s"), ek("CREW_PG_PORT", "pg.port", "i"), ek("CREW_PG_DATABASE", "pg.database", "s"), ek("CREW_PG_USER", "pg.user", "s"), ek("CREW_PG_PASSWORD", "pg.password", "s"),
+    ek("CREW_PRESET", "preset", "s"), ek("CREW_TOOLS_DIR", "tools_dir", "s")
+]
+
+/// The layer of the variables CREW_*. A variable with a wrong value (a number that is not one) is skipped here: the settings of the hub say what is wrong.
+export fn env_layer() Os -> Layer {
+    mut o = JsonObject.new()
+    for k in env_keys() {
+        match cfg_env(k.var) {
+            None => ()
+            Some(text) => {
+                if k.kind == "i" {
+                    match text.to_int() {
+                        Ok(n) => { o = put_path(o, k.key, JsonValue.int(n)) }
+                        Err(e) => ()
+                    }
+                } else if k.kind == "b" {
+                    if text == "true" || text == "1" { o = put_path(o, k.key, JsonValue.bool(true)) }
+                    if text == "false" || text == "0" { o = put_path(o, k.key, JsonValue.bool(false)) }
+                } else {
+                    o = put_path(o, k.key, JsonValue.str(text))
+                }
+            }
+        }
+    }
+    { origin: "env", file: "", obj: o, text: "" }
+}
+
+/// The layer of the words `key=value` of `--set`.
+export fn arg_layer(sets []str) -> Layer {
+    mut o = JsonObject.new()
+    for w in sets {
+        match w.split_once("=") {
+            Some((k, v)) => { if k.byte_len() > 0 { o = put_path(o, k, guess_value(v)) } }
+            None => ()
+        }
+    }
+    { origin: "arg", file: "", obj: normalize_layer(o), text: "" }
+}
+
+// ----- the files of the layers -----
+
+/// The files of the layers in order, for `crew-harness doctor`: (origin, file).
+export fn layer_files(layout ConfigLayout, server_file str) -> [](str, str) {
+    mut out = [](str, str).new()
+    if layout.config.byte_len() > 0 { out.push(("user", "${layout.config}/config.json")) }
+    if server_file.byte_len() > 0 { out.push(("server", server_file)) }
+    if layout.project.byte_len() > 0 {
+        out.push(("project", "${layout.project}/config.json"))
+        out.push(("local", "${layout.project}/local.json"))
+    }
+    if layout.config.byte_len() > 0 { out.push(("secret", "${layout.config}/secrets.json")) }
+    out
+}
+
+/// The file layers that exist, in the order of the rule. A file that is not JSON is an error `file:line: reason`. `server_file` that is named but missing is an error too (the caller checks that).
+export fn file_layers(layout ConfigLayout, server_file str) Fs -> Result[[]Layer, str] {
+    mut out = []Layer.new()
+    for (origin, file) in layer_files(layout, server_file) {
+        match read_layer(origin, file)? {
+            Some(l) => out.push(l)
+            None => ()
+        }
+    }
+    Ok(out)
+}
+
+/// All the layers over the code: the files, then the variables, then the arguments.
+export fn all_layers(layout ConfigLayout, server_file str, sets []str) Os Fs -> Result[[]Layer, str] {
+    mut layers = file_layers(layout, server_file)?
+    layers.push(env_layer())
+    layers.push(arg_layer(sets))
+    Ok(layers)
+}
+
+/// The folders of the modes in order of priority: the project, the user ("" are left out).
+export fn modes_dirs(layout ConfigLayout) -> []str {
+    mut out = []str.new()
+    if layout.project.byte_len() > 0 { out.push("${layout.project}/modes") }
+    if layout.config.byte_len() > 0 { out.push("${layout.config}/modes") }
+    out
+}
+
+/// The folders of the presets in order of priority: the project, the user.
+export fn presets_dirs(layout ConfigLayout) -> []str {
+    mut out = []str.new()
+    if layout.project.byte_len() > 0 { out.push("${layout.project}/presets") }
+    if layout.config.byte_len() > 0 { out.push("${layout.config}/presets") }
+    out
+}
+
+/// The files of the roles in order of priority: the project, the user.
+export fn roles_files(layout ConfigLayout) -> []str {
+    mut out = []str.new()
+    if layout.project.byte_len() > 0 { out.push("${layout.project}/roles.json") }
+    if layout.config.byte_len() > 0 { out.push("${layout.config}/roles.json") }
+    out
+}
+
+/// The folder of the tools: CREW_TOOLS_DIR, else the layout (`<home>/tools`); the setting `voice.dir` still moves the recognizer alone.
+export fn tools_dir_now(layout ConfigLayout) Os -> str => cfg_env("CREW_TOOLS_DIR") ?? layout.tools

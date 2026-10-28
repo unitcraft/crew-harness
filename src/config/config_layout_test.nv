@@ -1,0 +1,201 @@
+// config_layout_test.nv - the root of the instance, the folders, the layers of the settings (task 192.12).
+module crew_harness.config
+
+import std.os.{Os, MockOs, mock_os, real_os, temp_dir, pid}
+import std.fs.{Fs, real_fs, read_text, write_text, create_dir_all, remove_dir_all, Path}
+import std.encoding.json.{Json, JsonValue, JsonObject}
+
+fn tmp_root(name str) -> str {
+    ro base = with Os = real_os() { temp_dir() }
+    ro id = with Os = real_os() { pid() }
+    ro dir = base.join("crew-config-${name}-${id}")
+    with Fs = real_fs() {
+        ro gone = remove_dir_all(dir)
+        ro made = create_dir_all(dir)
+    }
+    dir.display().replace("\\", "/")
+}
+
+fn tmp_drop(root str) -> () {
+    with Fs = real_fs() {
+        ro gone = remove_dir_all(Path.from_bytes(root.bytes()))
+    }
+}
+
+fn put(root str, rel str, text str) -> () {
+    ro path = Path.from_bytes("${root}/${rel}".bytes())
+    with Fs = real_fs() {
+        match path.parent() {
+            Some(p) => { ro made = create_dir_all(p) }
+            None => ()
+        }
+        ro written = write_text(path, text)
+    }
+}
+
+fn obj_of(text str) -> JsonObject {
+    match Json.parse(text) {
+        Ok(v) => v.object() ?? JsonObject.new()
+        Err(e) => panic("test json")
+    }
+}
+
+test "home: the argument, then the variable, then the folder of the user" {
+    assert(resolve_home("C:/work/arg", "C:/work/env", "C:/work/me") == "C:/work/arg")
+    assert(resolve_home("", "C:/work/env", "C:/work/me") == "C:/work/env")
+    assert(resolve_home("", "", "C:/work/me") == "C:/work/me/.crew-harness")
+    assert(resolve_home("", "", "C:\\work\\me\\") == "C:/work/me/.crew-harness")
+    assert(resolve_home("", "", "") == "")
+}
+
+test "home: crew_home reads CREW_HOME and the home of the user from the system" {
+    mut state = MockOs.new()
+    state.put_env("CREW_HOME", "C:/work/inst")
+    assert(with Os = mock_os(state) { crew_home("") } == "C:/work/inst")
+    assert(with Os = mock_os(state) { crew_home("C:/work/arg2") } == "C:/work/arg2")
+    mut plain = MockOs.new()
+    plain.set_home_str("C:/work/me2")
+    assert(with Os = mock_os(plain) { crew_home("") } == "C:/work/me2/.crew-harness")
+}
+
+test "layout: the five folders under the root, sessions inside data" {
+    ro l = layout_in("C:/work/inst/", "")
+    assert(l.config == "C:/work/inst/config" && l.data == "C:/work/inst/data" && l.sessions == "C:/work/inst/data/sessions")
+    assert(l.state == "C:/work/inst/state" && l.cache == "C:/work/inst/cache" && l.tools == "C:/work/inst/tools" && !l.legacy)
+}
+
+test "layout: an old data_dir is flat and keeps everything in one folder" {
+    ro l = layout_with_data_dir("C:/work/inst", "C:/work/old/data", "")
+    assert(l.legacy && l.data == "C:/work/old/data" && l.sessions == "C:/work/old/data" && l.state == "C:/work/old/data" && l.cache == "C:/work/old/data")
+    assert(l.config == "C:/work/inst/config")
+    ro flat = legacy_layout("x")
+    assert(flat.config == "" && flat.sessions == "x")
+}
+
+test "args: --home and --set are taken out of the words" {
+    ro a = split_cli_args(["crew-harness", "serve", "--home", "C:/work/h", "f.json", "--set", "port=8131", "--set=store=files"])
+    assert(a.error == "" && a.home == "C:/work/h")
+    assert(a.sets.len() == 2 && a.sets[0] == "port=8131" && a.sets[1] == "store=files")
+    assert(a.rest.len() == 3 && a.rest[1] == "serve" && a.rest[2] == "f.json")
+    ro b = split_cli_args(["crew-harness", "--home=C:/work/x"])
+    assert(b.home == "C:/work/x" && b.rest.len() == 1)
+    assert(split_cli_args(["p", "--home"]).error.byte_len() > 0)
+}
+
+test "json: the error names the line and does not quote the text" {
+    match Json.parse("{\n  \"a\": 1,\n  \"b\": oops\n}") {
+        Ok(v) => assert(false)
+        Err(e) => {
+            ro t = json_error_text(e)
+            assert(t.starts_with("3:"))
+            assert(!t.contains("oops"))
+        }
+    }
+}
+
+test "merge: objects are merged by key, other values are replaced" {
+    ro a = obj_of("{\"port\":1,\"pg\":{\"host\":\"h\",\"port\":5},\"list\":[1,2]}")
+    ro b = obj_of("{\"port\":2,\"pg\":{\"port\":6},\"list\":[3]}")
+    ro m = merge_objects(a, b)
+    assert(m.get("port").unwrap().int() == Some(2))
+    ro pg = m.get("pg").unwrap().object().unwrap()
+    assert(pg.get("host").unwrap().str() == Some("h"))
+    assert(pg.get("port").unwrap().int() == Some(6))
+    assert(m.get("list").unwrap().array().unwrap().len() == 1)
+}
+
+test "merge: the old key stt is read as voice, voice wins over stt in the same file" {
+    ro n = normalize_layer(obj_of("{\"stt\":{\"url\":\"http://127.0.0.1:1/x\",\"language\":\"ru\"},\"voice\":{\"language\":\"en\"},\"port\":3}"))
+    assert(!n.contains("stt"))
+    ro v = n.get("voice").unwrap().object().unwrap()
+    assert(v.get("language").unwrap().str() == Some("en"))
+    assert(v.get("url").unwrap().str() == Some("http://127.0.0.1:1/x"))
+    assert(n.get("port").unwrap().int() == Some(3))
+}
+
+test "put_path: a dotted key makes the nested object" {
+    ro o = put_path(put_path(JsonObject.new(), "voice.url", JsonValue.str("u")), "voice.model", JsonValue.str("small"))
+    ro v = o.get("voice").unwrap().object().unwrap()
+    assert(v.get("url").unwrap().str() == Some("u") && v.get("model").unwrap().str() == Some("small"))
+}
+
+test "guess_value: flags, numbers and text" {
+    assert(guess_value("true") == JsonValue.bool(true))
+    assert(guess_value("42") == JsonValue.int(42))
+    assert(guess_value("a42") == JsonValue.str("a42"))
+    assert(guess_value("") == JsonValue.str(""))
+}
+
+test "layers: the files are read in the order user, server, project, local, and a missing file is skipped" {
+    ro root = tmp_root("layers")
+    put(root, "inst/config/config.json", "{\"port\":1,\"store\":\"files\"}")
+    put(root, "srv.json", "{\"port\":2}")
+    put(root, "repo/.crew-harness/config.json", "{\"port\":3,\"workdir\":\"w\"}")
+    put(root, "repo/.crew-harness/local.json", "{\"workdir\":\"mine\"}")
+    ro layout = layout_in("${root}/inst", "${root}/repo/.crew-harness")
+    match with Fs = real_fs() { file_layers(layout, "${root}/srv.json") } {
+        Err(e) => assert(false)
+        Ok(layers) => {
+            assert(layers.len() == 4)
+            assert(layers[0].origin == "user" && layers[1].origin == "server" && layers[2].origin == "project" && layers[3].origin == "local")
+            ro m = merge_layers(layers)
+            assert(m.get("port").unwrap().int() == Some(3))
+            assert(m.get("workdir").unwrap().str() == Some("mine"))
+            assert(m.get("store").unwrap().str() == Some("files"))
+        }
+    }
+    tmp_drop(root)
+}
+
+test "layers: a broken file is an error file:line: reason, a file that is not an object too" {
+    ro root = tmp_root("broken")
+    put(root, "inst/config/config.json", "{\n  \"port\": 1,\n  \"store\": nope\n}")
+    ro layout = layout_in("${root}/inst", "")
+    match with Fs = real_fs() { file_layers(layout, "") } {
+        Ok(layers) => assert(false)
+        Err(e) => {
+            assert(e.starts_with("${root}/inst/config/config.json:3:"))
+            assert(!e.contains("nope"))
+        }
+    }
+    put(root, "inst/config/config.json", "[1,2]")
+    match with Fs = real_fs() { file_layers(layout, "") } {
+        Ok(layers) => assert(false)
+        Err(e) => assert(e.contains("config.json:1:"))
+    }
+    tmp_drop(root)
+}
+
+test "layers: the variables are over the files and the arguments over the variables" {
+    ro root = tmp_root("envarg")
+    put(root, "inst/config/config.json", "{\"port\":1,\"voice\":{\"model\":\"small\"}}")
+    ro layout = layout_in("${root}/inst", "")
+    mut state = MockOs.new()
+    state.put_env("CREW_SERVER_PORT", "7")
+    state.put_env("CREW_VOICE_MODEL", "medium")
+    state.put_env("CREW_SERVER_ACP_TRACE", "false")
+    match with Os = mock_os(state), Fs = real_fs() { all_layers(layout, "", ["port=9", "voice.language=en"]) } {
+        Err(e) => assert(false)
+        Ok(layers) => {
+            ro m = merge_layers(layers)
+            assert(m.get("port").unwrap().int() == Some(9))
+            ro v = m.get("voice").unwrap().object().unwrap()
+            assert(v.get("model").unwrap().str() == Some("medium"))
+            assert(v.get("language").unwrap().str() == Some("en"))
+            assert(m.get("acp_trace").unwrap().bool() == Some(false))
+        }
+    }
+    tmp_drop(root)
+}
+
+test "project folder: found in a folder above, the root of the instance is not a project" {
+    ro root = tmp_root("project")
+    put(root, "repo/.crew-harness/config.json", "{}")
+    put(root, "repo/src/deep/x.txt", "x")
+    put(root, "inst/.crew-harness/config/config.json", "{}")
+    with Fs = real_fs() {
+        assert(find_project_dir("${root}/repo/src/deep", "${root}/inst/.crew-harness") == "${root}/repo/.crew-harness")
+        assert(find_project_dir("${root}/inst", "${root}/inst/.crew-harness") == "")
+    }
+    tmp_drop(root)
+}
