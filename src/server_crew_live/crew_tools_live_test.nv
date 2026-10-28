@@ -1,0 +1,13 @@
+// crew_tools_live_test.nv - the tools crew_* over a hub with the fake ACP agent in a repository (task 246): the scenario `scenario_crew_tools` of crew_harness.server/crew_tools_kit.nv.
+module crew_harness.server_crew_live
+
+import crew_harness.server.{kit_crew_tools, scenario_crew_tools}
+
+fn crew_tools_clean(report str) -> () {
+    if report.byte_len() > 0 { panic("NOT AS IT MUST BE: ${report}") }
+    assert(report == "")
+}
+
+test "files: the tools crew_*: the roles, the letters and the inbox, a question and its answer, spawn as a card of the owner, the waits, the tasks, the timer and the watches, the doctor, the notes, the refusals" {
+    crew_tools_clean(scenario_crew_tools(kit_crew_tools("crew-tools")))
+}

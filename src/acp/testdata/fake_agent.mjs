@@ -229,6 +229,37 @@ async function prompt(id, params) {
       }
       return respond(id, { stopReason: "end_turn" });
     }
+    case "ctl": {
+      // task 246: calls one tool crew_* of the MCP server of the hub: `ctl <tool> <json>`; the chunk is "ctl <tool>: <names> | <text>"
+      if (mcpServers.length === 0) {
+        chunk("ctl: no-server");
+        return respond(id, { stopReason: "end_turn" });
+      }
+      const server = mcpServers[0];
+      const headers = { "content-type": "application/json", accept: "application/json, text/event-stream" };
+      for (const h of server.headers || []) headers[h.name] = h.value;
+      const post = async (body) => {
+        const res = await fetch(server.url, { method: "POST", headers, body: JSON.stringify(body) });
+        const t = await res.text();
+        return { status: res.status, body: t ? JSON.parse(t) : null };
+      };
+      try {
+        const rest = plain.slice(plain.indexOf(" ") + 1);
+        const cut = rest.indexOf(" ");
+        const tool = cut < 0 ? rest : rest.slice(0, cut);
+        const args = cut < 0 ? {} : JSON.parse(rest.slice(cut + 1));
+        await post({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-03-26", capabilities: {}, clientInfo: { name: "fake-agent", version: "0" } } });
+        const tools = await post({ jsonrpc: "2.0", id: 2, method: "tools/list" });
+        const names = ((tools.body && tools.body.result && tools.body.result.tools) || []).map((t) => t.name).join(",");
+        const called = await post({ jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: tool, arguments: args } });
+        const content = called.body && called.body.result && called.body.result.content;
+        const err = called.body && called.body.result && called.body.result.isError ? "ERR " : "";
+        chunk("ctl " + tool + ": " + (word === "ctl" && args.__names ? names + " | " : "") + err + (content && content[0] ? content[0].text : JSON.stringify(called.body)));
+      } catch (e) {
+        chunk("ctl: error " + (e && e.message));
+      }
+      return respond(id, { stopReason: "end_turn" });
+    }
     case "askmcp": {
       if (mcpServers.length === 0) {
         chunk("askmcp: no-server");

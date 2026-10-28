@@ -1,0 +1,219 @@
+// crew_tools_kit.nv - task 246: the scenario of the tools `crew_*` over a hub with the fake ACP agent in a repository. The fake agent calls a tool of the MCP server of the hub (the word `ctl <tool> <json>`),
+// the chunk of its answer is the text the tool gave. The helpers are in `child_kit.nv` and `routes_kit.nv`.
+module crew_harness.server
+
+import std.encoding.json.{Json, JsonValue, JsonObject}
+
+/// The settings of the scenario: a repository, the children are sessions of their own, the limit of eight tasks in work.
+export fn kit_crew_tools(name str) Proc -> ServerSettings => kit_routes_children(name)
+
+fn ctl_page(turn str, tool str, args str) -> str {
+    mut o = JsonObject.new()
+    jput(o, "turn", JsonValue.str(turn))
+    jput(o, "text", JsonValue.str("ctl ${tool} ${args}"))
+    JsonValue.object(o).to_str()
+}
+
+// The turn of the LAST message "ctl ..." of the session ("" - none): the hub names the turns itself.
+fn ctl_turn_of(rig Rig, trace str) -> str {
+    mut found = ""
+    for line in rig.all_lines_for(1) {
+        if line_field(line, "trace") == trace && line_field(line, "kind") == "user_message" && line_input(line, "text").starts_with("ctl ") { found = line_input(line, "turn") }
+    }
+    found
+}
+
+// The tool is called by the agent of the session `trace`; the text of the answer ("" - the turn did not end). A message that a busy session did not take (a letter woke it just before) is sent again.
+fn ctl_ask(mut rig Rig, trace str, tool str, args str) Proc Detach Time Net Fs Os -> str {
+    mut said = ""
+    mut attempt = 0
+    while attempt < 4 && said == "" {
+        ro idle = ck_idle(rig, trace, 90000)
+        rig.run(200)
+        ro from = rig.all_lines_for(1).len()
+        rig.forget()
+        rig.page(1, "user_message", trace, ctl_page("c${from}-${attempt}", tool, args))
+        // the end of a turn that is not ours (a letter that woke the session before) must not be taken for ours: the answer has to carry the name of the tool
+        mut waited = 0
+        while waited < 20000 && said == "" {
+            ro one = rig.until(KIT_DONE, 2000)
+            waited += 2000
+            rig.run(150)
+            ro got = answer_of(rig.all_lines_for(1), ctl_turn_of(rig, trace))
+            if one && got.contains("ctl ${tool}:") { said = got }
+        }
+        attempt += 1
+    }
+    said
+}
+
+// The text between the first `from` and the next `to` after it ("" - none).
+fn ctl_between(text str, from str, to str) -> str {
+    match text.find(from) {
+        Some(at) => {
+            ro rest = text[at + from.byte_len()..]
+            match rest.find(to) {
+                Some(end) => rest[..end]
+                None => rest
+            }
+        }
+        None => ""
+    }
+}
+
+// How many user messages of the session contain the words (a service turn that a letter or a timer made)?
+fn ctl_turns_with(rig Rig, trace str, words str) -> int {
+    mut n = 0
+    for line in rig.all_lines_for(1) {
+        if line_field(line, "trace") == trace && line_field(line, "kind") == "user_message" && line_input(line, "text").contains(words) { n += 1 }
+    }
+    n
+}
+
+// Does a line of the feed of the session contain the words?
+fn ctl_notes_with(rig Rig, trace str, words str) -> bool {
+    for line in rig.all_lines_for(1) {
+        if line_field(line, "trace") == trace && line.contains(words) { return true }
+    }
+    false
+}
+
+/// Every tool crew_* is called by a real session of the hub: the roles, the letters (wake and no wake), a question and its answer, a wait for a child, the proposal of a new worker (the card of the owner), the tasks,
+/// the timer and the watches, the doctor, the notes of the step and of the branch, the refusals (an action of the owner, a command, the config).
+export fn scenario_crew_tools(settings ServerSettings) Proc Detach Time Net Fs Os -> str {
+    mut c = kit_check()
+    mut rig = rig_open(settings)
+    rig.attach(1)
+    rig.page(1, "session_created", "s-t1", "{\"name\":\"Беседа\",\"agent\":\"opencode\"}")
+    c.expect(rig.until("\"kind\":\"session_created\"", 5000), "the session of the talk is shown")
+    c.expect(ck_list(rig, "s-t1", "t1", [ck_item("new", "Главная работа", 0, 0, ["a.txt"])], "Главная работа"), "the work is listed")
+    ck_apply(rig, "s-t1", [["Главная работа", "work", "new", "0"]])
+    rig.run(4000)
+    ro p1 = ck_find(rig, 1, "Главная работа")
+    c.expect(p1 != "", "the session of the task is made")
+    ro n1 = cs_number_int(ck_number(rig, 1, p1))
+
+    // 1. help, the role of a task session, the list
+    ro r_help = ctl_ask(rig, p1, "crew_help", "{}")
+    c.expect(r_help.contains("crew_wait") && r_help.contains("crew_spawn") && !r_help.contains("crew_config {"), "crew_help lists the tools and not crew_config: ${cut_text(r_help, 200)}")
+    ro role1 = ctl_ask(rig, p1, "crew_role", "{}")
+    c.expect(role1.contains("executor"), "a session with a task and no children is an executor: ${role1}")
+    ro bad_role = ctl_ask(rig, p1, "crew_role", "{\"role\":\"integrator\"}")
+    c.expect(bad_role.contains("ERR") && bad_role.contains("не назначается"), "a role cannot be taken by a call: ${cut_text(bad_role, 160)}")
+    ro list1 = ctl_ask(rig, p1, "crew_list", "{}")
+    c.expect(list1.contains(p1) && list1.contains("Главная работа") && list1.contains("route_max_active"), "crew_list shows the session, its task and the limit: ${cut_text(list1, 240)}")
+
+    // 2. crew_spawn: a card for the owner, a child only after his yes
+    ro r_spawn = ctl_ask(rig, p1, "crew_spawn", "{\"goal\":\"Сделать часть работы\",\"criteria\":[\"тест зелёный\"],\"title\":\"Часть главной\",\"touches\":[\"c.txt\"]}")
+    c.expect(r_spawn.contains("карточкой") && r_spawn.contains("crew_wait"), "crew_spawn shows the owner a card and says how to wait: ${cut_text(r_spawn, 200)}")
+    c.expect(ck_find(rig, 1, "Часть главной") == "", "no child before the owner says yes")
+    c.expect(rk_card_id(ck_state(rig, 1, p1), "Часть главной") > 0, "the card is in the state of the session")
+    ro r_early = ctl_ask(rig, p1, "crew_wait", "{\"target\":\"Часть главной\",\"seconds\":1}")
+    c.expect(r_early.contains("не появилась") && r_early.contains("владелец"), "a wait for a child that waits for the owner says so: ${cut_text(r_early, 200)}")
+    ck_press(rig, p1, "Часть главной", "start")
+    rig.run(4000)
+    ro kid = ck_find(rig, 1, "Часть главной")
+    c.expect(kid != "" && ck_parent(rig, 1, kid) == p1, "the child is a session under the session of the task after the yes: ${kid}")
+    ro nk = ck_number(rig, 1, kid)
+    ro nki = cs_number_int(nk)
+    c.expect(ctl_ask(rig, p1, "crew_role", "{}").contains("orchestrator"), "the session with a child is an orchestrator")
+    c.expect(ctl_ask(rig, kid, "crew_role", "{}").contains("executor"), "the child is an executor")
+    c.expect(ctl_ask(rig, kid, "crew_role", "{}").contains(p1), "and knows its orchestrator")
+
+    // 3. letters: wake, no wake, the inbox
+    ro r_sent = ctl_ask(rig, p1, "crew_send", "{\"to\":\"${nk}\",\"text\":\"начни с теста\"}")
+    c.expect(r_sent.contains("Отправлено") && r_sent.contains(kid), "crew_send by the number of the task: ${cut_text(r_sent, 160)}")
+    rig.run(2500)
+    c.expect(ck_idle(rig, kid, 90000), "the child finishes the turn of the letter")
+    c.expect(ctl_turns_with(rig, kid, "[crew] Письмо от") >= 1 && ctl_turns_with(rig, kid, "начни с теста") >= 1, "the letter that wakes arrives as a service turn of the child")
+    ro r_quiet = ctl_ask(rig, p1, "crew_send", "{\"to\":\"children\",\"text\":\"к сведению: файл c.txt общий\",\"wake\":false}")
+    c.expect(r_quiet.contains("без пробуждения"), "wake=false is said: ${cut_text(r_quiet, 160)}")
+    ro r_box = ctl_ask(rig, kid, "crew_inbox", "{}")
+    c.expect(r_box.contains("НОВЫЕ ПИСЬМА") && r_box.contains("файл c.txt общий"), "crew_inbox hands over the quiet letter: ${cut_text(r_box, 200)}")
+    ro r_box2 = ctl_ask(rig, kid, "crew_inbox", "{}")
+    c.expect(!r_box2.contains("НОВЫЕ ПИСЬМА") && r_box2.contains("файл c.txt общий"), "and it is a read one the second time")
+    ro nowhere = ctl_ask(rig, p1, "crew_send", "{\"to\":\"нет-такой\",\"text\":\"x\"}")
+    c.expect(nowhere.contains("ERR") && nowhere.contains("не найден"), "an unknown address is refused: ${cut_text(nowhere, 120)}")
+    ro noself = ctl_ask(rig, p1, "crew_send", "{\"to\":\"${p1}\",\"text\":\"себе\"}")
+    c.expect(noself.contains("ERR"), "a letter to oneself is refused")
+
+    // 4. a question and its answer
+    ro r_ask = ctl_ask(rig, kid, "crew_send", "{\"to\":\"parent\",\"text\":\"сколько тестов нужно?\",\"expect_reply\":true}")
+    c.expect(r_ask.contains("Вопрос q"), "a question gets a qid: ${cut_text(r_ask, 200)}")
+    ro qid = ctl_between(r_ask, "Вопрос ", ":")
+    rig.run(2500)
+    c.expect(ck_idle(rig, p1, 90000), "the orchestrator finishes the turn of the question")
+    c.expect(ctl_turns_with(rig, p1, "[вопрос q") >= 1, "the question reached the orchestrator and tells how to answer")
+    ro r_answered = ctl_ask(rig, p1, "crew_send", "{\"reply_to\":\"${qid}\",\"text\":\"три теста\"}")
+    c.expect(r_answered.contains("Отправлено") && r_answered.contains(kid), "the answer goes to the one who asked, `to` is not needed: ${cut_text(r_answered, 160)}")
+    rig.run(2500)
+    c.expect(ck_idle(rig, kid, 90000), "the child is free again")
+    ro r_none = ctl_ask(rig, kid, "crew_wait", "{\"target\":\"q-none\",\"seconds\":1}")
+    c.expect(r_none.contains("нет"), "a wait that has no answer ends by the time: ${cut_text(r_none, 120)}")
+
+    // 5. the tasks
+    ro tl = ctl_ask(rig, p1, "crew_task", "{\"action\":\"list\"}")
+    c.expect(tl.contains("Главная работа") && tl.contains("Часть главной"), "crew_task list: ${cut_text(tl, 200)}")
+    ro ts = ctl_ask(rig, p1, "crew_task", "{\"action\":\"show\",\"n\":${n1}}")
+    c.expect(ts.contains("дочерняя") && ts.contains("Часть главной"), "crew_task show lists the children: ${cut_text(ts, 200)}")
+    ro r_refused = ctl_ask(rig, p1, "crew_task", "{\"action\":\"merge\",\"n\":${n1}}")
+    c.expect(r_refused.contains("ERR") && r_refused.contains("владелец"), "an action of the owner is refused with the reason: ${cut_text(r_refused, 120)}")
+    ro r_push = ctl_ask(rig, p1, "crew_task", "{\"action\":\"push\",\"n\":${nki},\"text\":\"проверь\"}")
+    c.expect(r_push.contains("разбудит"), "crew_task push: ${cut_text(r_push, 120)}")
+
+    // 6. the wait for the child: it ends when the child is ready
+    c.expect(ck_idle(rig, p1, 90000) && ck_idle(rig, kid, 90000), "both are free")
+    rig.forget()
+    ro wfrom = rig.lines_for(1).len()
+    rig.page(1, "user_message", p1, ctl_page("w${wfrom}", "crew_wait", "{\"target\":\"${nk}\",\"seconds\":60}"))
+    rig.run(1200)
+    c.expect(!rig.hub.takes_message(p1), "the turn of the orchestrator waits")
+    rig.page(1, "route_subtask_done", kid, "{\"n\":1}")
+    c.expect(rig.until(KIT_DONE, 30000), "the wait ends when the child is ready")
+    ro r_waited = answer_of(rig.all_lines_for(1), ctl_turn_of(rig, p1))
+    c.expect(r_waited.contains("Готово") && r_waited.contains("Часть главной"), "the answer is the state of the child: ${cut_text(r_waited, 200)}")
+    ro r_submit = ctl_ask(rig, kid, "crew_task", "{\"action\":\"submit\",\"text\":\"сделано, тесты зелёные\"}")
+    c.expect(r_submit.contains("Отчёт отправлен"), "the child reports to the orchestrator: ${cut_text(r_submit, 120)}")
+    rig.run(2500)
+    c.expect(ck_idle(rig, p1, 90000), "the orchestrator finishes the turn of the report")
+    c.expect(ctl_turns_with(rig, p1, "сделано, тесты зелёные") >= 1, "the report arrived as a letter")
+
+    // 7. the timer and the watches
+    ro r_timer = ctl_ask(rig, p1, "crew_timer", "{\"seconds\":2,\"note\":\"проверка\"}")
+    c.expect(r_timer.contains("поставлен"), "crew_timer: ${cut_text(r_timer, 120)}")
+    ro r_watch = ctl_ask(rig, p1, "crew_watch", "{\"on\":\"children\",\"note\":\"все готовы\"}")
+    c.expect(r_watch.contains("поставлено"), "crew_watch on children: ${cut_text(r_watch, 120)}")
+    ro r_listed = ctl_ask(rig, p1, "crew_watch", "{}")
+    c.expect(r_listed.contains("children") || r_listed.contains("Наблюдений нет"), "the list of the watches: ${cut_text(r_listed, 200)}")
+    rig.run(3500)
+    c.expect(ck_idle(rig, p1, 90000), "the orchestrator finishes the turn of the timer")
+    rig.run(2500)
+    c.expect(ck_idle(rig, p1, 90000), "and of the watch")
+    c.expect(ctl_turns_with(rig, p1, "проверка") >= 1, "the timer woke the session with a letter")
+    c.expect(ctl_turns_with(rig, p1, "все готовы") >= 1, "the watch on the children woke the session: all of them are ready")
+    ro r_command = ctl_ask(rig, p1, "crew_watch", "{\"command\":\"sleep 5\"}")
+    c.expect(r_command.contains("ERR") && r_command.contains("не запускает"), "a command is not run by the hub: ${cut_text(r_command, 120)}")
+    ro w2 = ctl_ask(rig, p1, "crew_watch", "{\"on\":\"idle\",\"target\":\"${kid}\",\"minutes\":5}")
+    c.expect(w2.contains("поставлено"), "a watch on a session: ${cut_text(w2, 120)}")
+    ro wid = ctl_between(w2, "Наблюдение ", " ")
+    ro r_gone = ctl_ask(rig, p1, "crew_watch", "{\"action\":\"cancel\",\"id\":\"${wid}\"}")
+    c.expect(r_gone.contains("снято") || r_gone.contains("нет"), "a watch is cancelled: ${cut_text(r_gone, 120)}")
+
+    // 8. the doctor and the notes
+    ro r_doc = ctl_ask(rig, p1, "crew_doctor", "{}")
+    c.expect(r_doc.contains("crew_doctor") && r_doc.contains("ветка"), "crew_doctor: ${cut_text(r_doc, 240)}")
+    ro r_step = ctl_ask(rig, p1, "crew_step_note", "{\"reason\":\"пишу тест\",\"minutes\":10}")
+    c.expect(r_step.contains("Записано") && ctl_notes_with(rig, p1, "пишу тест"), "crew_step_note is in the journal of the session")
+    ro r_bn = ctl_ask(rig, p1, "crew_branch_note", "{\"what\":\"git switch main\",\"why\":\"проверка\",\"who\":\"владелец, 2026-10-28\"}")
+    c.expect(r_bn.contains("записана") && ctl_notes_with(rig, p1, "смена каталога/ветки"), "crew_branch_note is in the journal of the session")
+    ro r_bn_bad = ctl_ask(rig, p1, "crew_branch_note", "{\"what\":\"git switch main\"}")
+    c.expect(r_bn_bad.contains("ERR"), "crew_branch_note without the reason and the one who allowed is refused")
+    c.expect(ctl_notes_with(rig, p1, "▸ crew_list") && ctl_notes_with(rig, p1, "▸ crew_send"), "every call is written to the journal of the session")
+
+    // 9. crew_config is not there; the old crew_task_list still works by its name
+    ro r_cfg = ctl_ask(rig, p1, "crew_config", "{\"action\":\"show\"}")
+    c.expect(r_cfg.contains("ERR") && r_cfg.contains("not available"), "crew_config is refused: ${cut_text(r_cfg, 120)}")
+    c.expect(ck_list(rig, "s-t1", "t9", [ck_item("new", "Старый путь", 0, 0, ["z.txt"])], "Старый путь"), "crew_task_list keeps its name and shows the card")
+    rig.shut()
+    c.report()
+}
