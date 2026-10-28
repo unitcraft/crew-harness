@@ -280,6 +280,15 @@ fn Hub mut @ct_tool_call(msg McpMsg) Proc Detach Time -> () {
     }
 }
 
+/// The markers the client of ACP cut out of the answers of the turn (`crew_marker`, task 192.9), one in a line.
+export fn markers_of(lines []str, turn str) -> str {
+    mut parts = []str.new()
+    for line in lines {
+        if line_field(line, "kind") == "crew_marker" && line_input(line, "turn") == turn { parts.push(line_input(line, "text")) }
+    }
+    joined(parts, "\n")
+}
+
 // The marker line of an agent that has no tools: when its turn is over the last answer is looked at once.
 fn Hub mut @ct_marker(at int) Proc Detach Time -> () {
     ro s = @sessions[at]
@@ -287,7 +296,7 @@ fn Hub mut @ct_marker(at int) Proc Detach Time -> () {
     mut me = @sessions[at]
     me.rt.marker_turn = s.turn
     @sessions[at] = me
-    ro answer = answer_of(s.lines, s.turn)
+    ro answer = "${answer_of(s.lines, s.turn)}\n${markers_of(s.lines, s.turn)}"
     match proposals_of_marker(answer) {
         Some(items) => {
             ro added = @ct_list_offer(at, items)

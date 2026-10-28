@@ -103,7 +103,8 @@ export type AcpClient {
     prelude str,
     presets []AcpPreset,
     settled []AcpPreset,
-    dropped []AcpDrop
+    dropped []AcpDrop,
+    marker MarkerState
 }
 
 const STDERR_KEEP = 4000
@@ -352,7 +353,7 @@ export fn open_client_full(config AcpConfig, trace_path str, trace_limit int, as
                 config, link, phase: "initializing", next_rpc: 0, init_rpc: -1, new_rpc: -1, prompt_rpc: -1,
                 session: "", agent: "", model_name: "", modes: JsonValue.null(), models: JsonValue.null(), choices_cfg: JsonValue.null(), mode_now: "", model_now: "", sets: []AcpSet.new(), queue: []AcpQueued.new(), active: "", permissions: []AcpPending.new(), ask, asks: []AcpAsk.new(), mcp_http: false, hint_due: false,
                 ready, taken: []AcpInboxItem.new(), next_seq: next, stderr: "", exit_code: -2, last_error: "", trace: trace_open(trace_path, trace_limit),
-                images_ok: false, attached: []AcpImage.new(), prelude: "", presets: []AcpPreset.new(), settled: []AcpPreset.new(), dropped: []AcpDrop.new()
+                images_ok: false, attached: []AcpImage.new(), prelude: "", presets: []AcpPreset.new(), settled: []AcpPreset.new(), dropped: []AcpDrop.new(), marker: marker_start()
             }
             client.init_rpc = client.next_id()
             client.say(rpc_request_line(client.init_rpc, "initialize", initialize_params(ask.form)))
@@ -488,6 +489,7 @@ fn AcpClient mut @on_result(id JsonValue, result JsonValue) -> () {
     if @prompt_rpc >= 0 && key == "${@prompt_rpc}" {
         ro reason = field_text(result, "stopReason") ?? ""
         ro request = @active
+        @flush_answer(request)
         @active = ""
         @prompt_rpc = -1
         // the tokens of the turn go before its end (when the agent says them), so that they belong to the turn on the page
@@ -515,6 +517,7 @@ fn AcpClient mut @on_failure(id JsonValue, code int, message str) -> () {
     }
     if @prompt_rpc >= 0 && key == "${@prompt_rpc}" {
         ro request = @active
+        @flush_answer(request)
         @active = ""
         @prompt_rpc = -1
         @last_error = "session/prompt failed: ${why}"
@@ -547,7 +550,29 @@ fn AcpClient mut @on_update(params JsonValue) -> () {
         @push_options()
         return
     }
+    if projected.name == "agent_chunk" && @active.byte_len() > 0 {
+        // task 192.9: the fallback marker `[[crew_task_list]] {json}` is cut out of the answer and given as an event of its own
+        @push_answer_part(@active, marker_feed(@marker, projected.input, false))
+        return
+    }
     @push(progress_event(@active, projected))
+}
+
+// The shown part of an answer and the markers cut out of it (task 192.9).
+fn AcpClient mut @push_answer_part(request str, step MarkerStep) -> () {
+    @marker = step.state
+    if step.out.byte_len() > 0 { @push(progress_event(request, Projection { name: "agent_chunk", input: step.out })) }
+    for line in step.found {
+        mut o = JsonObject.new()
+        put(o, "text", JsonValue.str(line))
+        @push(progress_event(request, Projection { name: "crew_marker", input: JsonValue.object(o).to_str() }))
+    }
+}
+
+// The end of a turn: what was held back is shown (a marker that is not closed is dropped).
+fn AcpClient mut @flush_answer(request str) -> () {
+    if request.byte_len() > 0 { @push_answer_part(request, marker_feed(@marker, "", true)) }
+    @marker = marker_start()
 }
 
 // The summary of the choices now (task 192): model, effort, mode.

@@ -1,0 +1,108 @@
+// marker_test.nv - task 192.9: the cutting of the fallback marker `[[crew_task_list]] {json}` out of the text of an answer: whole, in parts, in the middle, in a fence, cut off.
+module crew_harness.acp
+
+// The answer given in parts of `size` bytes (ASCII only in the texts that are cut by size); the shown text and the markers found.
+fn run_parts(text str, size int) -> MarkerStep => run_checked(text, size, true)
+
+fn run_checked(text str, size int, strict bool) -> MarkerStep {
+    mut state = marker_start()
+    mut shown = ""
+    mut found = []str.new()
+    mut at = 0
+    while at < text.byte_len() {
+        mut e = at + size
+        if e > text.byte_len() { e = text.byte_len() }
+        ro step = marker_feed(state, text[at..e], false)
+        shown = "${shown}${step.out}"
+        // nothing that looks like a marker is ever shown
+        if strict { assert(!shown.contains("[[crew")) }
+        for f in step.found { found.push(f) }
+        state = step.state
+        at = e
+    }
+    ro rest = marker_feed(state, "", true)
+    shown = "${shown}${rest.out}"
+    for f in rest.found { found.push(f) }
+    MarkerStep { out: shown, state: marker_start(), found }
+}
+
+const LIST_JSON = "{\"tasks\":[{\"title\":\"Fix {braces} \\\" here\",\"summary\":\"s\"}]}"
+
+test "marker: at the end of an answer, whole: cut, found" {
+    ro step = run_parts("Done.\n[[crew_task_list]] ${LIST_JSON}", 10000)
+    assert(step.out == "Done.\n")
+    assert(step.found.len() == 1)
+    assert(step.found[0] == "[[crew_task_list]] ${LIST_JSON}")
+}
+
+test "marker: in the middle of an answer the text around it stays" {
+    ro step = run_parts("Before.\n[[crew_task_list]] ${LIST_JSON}\nAfter.", 10000)
+    assert(step.out == "Before.\n\nAfter.")
+    assert(step.found.len() == 1)
+}
+
+test "marker: the same in parts of every size: never a piece of it is shown" {
+    ro text = "Before.\n[[crew_task_list]] ${LIST_JSON}\nAfter text and [[crew_task]] {\"title\":\"T\",\"summary\":\"S\"}"
+    mut size = 1
+    while size < 40 {
+        ro step = run_parts(text, size)
+        assert(step.out == "Before.\n\nAfter text and ")
+        assert(step.found.len() == 2)
+        assert(step.found[1].starts_with("[[crew_task]] {"))
+        size += 1
+    }
+}
+
+test "marker: a marker in a code fence goes with the lines of the fence" {
+    ro text = "Total:\n```json\n[[crew_task_list]] ${LIST_JSON}\n```\nThe end"
+    ro whole = run_parts(text, 10000)
+    assert(whole.out == "Total:\nThe end")
+    assert(whole.found.len() == 1)
+    mut size = 1
+    while size < 30 {
+        ro step = run_parts(text, size)
+        if step.out != "Total:\nThe end" { panic("size ${size}: [${step.out.replace("\n", "|")}]") }
+        assert(step.found.len() == 1)
+        size += 1
+    }
+}
+
+test "marker: a code fence without a marker is shown as it is" {
+    ro text = "Code:\n```python\nprint(1)\n```\nok"
+    mut size = 1
+    while size < 30 {
+        ro step = run_parts(text, size)
+        assert(step.out == text)
+        assert(step.found.len() == 0)
+        size += 1
+    }
+}
+
+test "marker: a marker that is cut off (no closing brace) is dropped, the text before it stays" {
+    ro step = run_parts("Answer\n[[crew_task_list]] {\"tasks\":[{\"title\":\"x\"", 7)
+    assert(step.out == "Answer\n")
+    assert(step.found.len() == 0)
+    ro bare = run_parts("Answer [[crew_task_list]]", 5)
+    assert(bare.out == "Answer ")
+    assert(bare.found.len() == 0)
+}
+
+test "marker: the name in an ordinary sentence is text" {
+    ro text = "The mark [[crew_task_list]] is a word, and [[crew_tasks are not one."
+    ro step = run_checked(text, 3, false)
+    assert(step.out == text)
+    assert(step.found.len() == 0)
+}
+
+test "marker: text with no marker passes unchanged, also a lone bracket at the end" {
+    ro step = run_parts("a [b] and [[c", 2)
+    assert(step.out == "a [b] and [[c")
+    assert(step.found.len() == 0)
+}
+
+test "marker: the line the hub reads has no line breaks" {
+    ro step = run_parts("[[crew_task_list]] {\"tasks\":\n[]}", 10000)
+    assert(step.found.len() == 1)
+    assert(!step.found[0].contains("\n"))
+    assert(step.out == "")
+}

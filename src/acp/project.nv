@@ -692,6 +692,11 @@ fn page_input_of(e Incoming, turn str) -> Option[PageInput] {
                 ro value = object_input(e)?
                 return with_turn("tool_call", value, turn)
             }
+            // task 192.9: a fallback marker `[[crew_task_list]] {json}` cut out of the answer; the hub reads it when the turn is over
+            if e.name == "crew_marker" {
+                ro value = object_input(e)?
+                return with_turn("crew_marker", value, turn)
+            }
             if e.name == "turn_usage" {
                 ro value = object_input(e)?
                 return with_turn("turn_usage", value, turn)
