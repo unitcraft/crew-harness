@@ -71,7 +71,9 @@ export type ServerSettings {
     agent_start_ms int,
     agent_silent_minutes int,
     layout ConfigLayout,
-    preset str
+    preset str,
+    auto_extend_confidence str,
+    task_scope str
 }
 
 fn st_text(o JsonObject, key str, fallback str) -> Result[str, str] {
@@ -262,6 +264,10 @@ export fn parse_server_settings(text str) -> Result[ServerSettings, str] {
     ro agent_start_seconds = st_number(o, "agent_start_timeout_seconds", 60)?
     ro agent_silent_minutes = st_number(o, "agent_silent_minutes", 5)?
     ro preset = st_text(o, "preset", "default")?
+    ro auto_extend_confidence = st_text(o, "auto_extend_confidence", "high")?
+    if auto_extend_confidence != "high" && auto_extend_confidence != "medium" && auto_extend_confidence != "off" { return Err("auto_extend_confidence must be high, medium or off") }
+    ro task_scope = st_text(o, "task_scope", "session")?
+    if task_scope != "session" { return Err("task_scope must be session (the tasks of the session and its relatives; other values are not supported)") }
     mut hub_program = "target/crew-hub.exe"
     mut hub_args = []str.new()
     match o.get("hub") {
@@ -275,7 +281,7 @@ export fn parse_server_settings(text str) -> Result[ServerSettings, str] {
         }
         None => ()
     }
-    Ok(ServerSettings { port, data_dir, store, pg, agents, idle_term_ms: idle_seconds * 1000, workdir, web_dir, machines_dir, hub_program, hub_args, acp_trace, ask_form, ask_timeout_ms: ask_seconds * 1000, stt_url, stt_language, max_image_bytes, routes_dir, route_reviewer_order, route_task_limit, route_task_messages, route_fix_attempts, route_worktree_ask, route_overlap_seconds, route_keep_days, context_drop_percent, route_confirm_word, route_over_limit_word, route_max_active, route_tool, route_auto_propose, route_children, route_wip, wip_timeout_ms: wip_timeout_seconds * 1000, agent_start_ms: agent_start_seconds * 1000, agent_silent_minutes, layout: legacy_layout(data_dir), preset })
+    Ok(ServerSettings { port, data_dir, store, pg, agents, idle_term_ms: idle_seconds * 1000, workdir, web_dir, machines_dir, hub_program, hub_args, acp_trace, ask_form, ask_timeout_ms: ask_seconds * 1000, stt_url, stt_language, max_image_bytes, routes_dir, route_reviewer_order, route_task_limit, route_task_messages, route_fix_attempts, route_worktree_ask, route_overlap_seconds, route_keep_days, context_drop_percent, route_confirm_word, route_over_limit_word, route_max_active, route_tool, route_auto_propose, route_children, route_wip, wip_timeout_ms: wip_timeout_seconds * 1000, agent_start_ms: agent_start_seconds * 1000, agent_silent_minutes, layout: legacy_layout(data_dir), preset, auto_extend_confidence, task_scope })
 }
 
 fn st_env(key str) Os -> Option[str] {
@@ -372,7 +378,7 @@ export fn server_settings_in(file str, home str, sets []str) Os Fs -> Result[Ser
         route_task_limit: parsed.route_task_limit, route_task_messages: parsed.route_task_messages, route_fix_attempts: parsed.route_fix_attempts, route_worktree_ask: parsed.route_worktree_ask,
         route_overlap_seconds: parsed.route_overlap_seconds, route_keep_days: parsed.route_keep_days, context_drop_percent: parsed.context_drop_percent, route_confirm_word: parsed.route_confirm_word,
         route_over_limit_word: parsed.route_over_limit_word, route_max_active: parsed.route_max_active, route_tool: parsed.route_tool, route_auto_propose: parsed.route_auto_propose,
-        route_children: parsed.route_children, route_wip: parsed.route_wip, wip_timeout_ms: parsed.wip_timeout_ms, agent_start_ms: parsed.agent_start_ms, agent_silent_minutes: parsed.agent_silent_minutes, layout, preset: parsed.preset
+        route_children: parsed.route_children, route_wip: parsed.route_wip, wip_timeout_ms: parsed.wip_timeout_ms, agent_start_ms: parsed.agent_start_ms, agent_silent_minutes: parsed.agent_silent_minutes, layout, preset: parsed.preset, auto_extend_confidence: parsed.auto_extend_confidence, task_scope: parsed.task_scope
     }
     ro pg = pg_config_env(base.pg)?
     ro port = st_env_number("CREW_SERVER_PORT")?
@@ -439,7 +445,9 @@ export fn server_settings_in(file str, home str, sets []str) Os Fs -> Result[Ser
         agent_start_ms: base.agent_start_ms,
         agent_silent_minutes: base.agent_silent_minutes,
         layout: base.layout,
-        preset: base.preset
+        preset: base.preset,
+        auto_extend_confidence: base.auto_extend_confidence,
+        task_scope: base.task_scope
     }
     if merged.store != "files" && merged.store != "pg" { return Err("the store must be files or pg") }
     if merged.port < 1 || merged.port > 65535 { return Err("the port must be 1 to 65535") }

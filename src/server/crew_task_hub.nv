@@ -136,9 +136,12 @@ fn Hub @ct_related(at int, found int) -> bool {
     false
 }
 
+// The note to the agent after the owner answered a card: the text of the layer `decision_<what>` or the built-in one.
+fn Hub @decision(what str, n int, title str, shown str) -> str => decision_note_t(@prompt(decision_name_of(what), decision_text_of(what)), n, title, shown)
+
 // The index of the open task K that takes the addition at once, -1 - the addition goes to a card (K is merged, closed, done, not near this session, or the confidence is lower than the threshold).
 fn Hub @ct_auto_target(at int, p Proposal) -> int {
-    if !@settings.route_children || !auto_extend_ok(p) { return -1 }
+    if !@settings.route_children || !auto_extend_ok_at(p, @settings.auto_extend_confidence) { return -1 }
     ro found = @cs_find_number(p.extends)
     if found < 0 { return -1 }
     ro c = @sessions[found]
@@ -174,7 +177,7 @@ fn Hub mut @ct_auto_extend(at int, p Proposal) Proc Detach Time -> bool {
     @say_log("crew_task of ${me.id}: the addition to the task ${c.rt.number} is applied at once")
     if found != at {
         @rt_note(found, "▸ задача дополнена владельцем")
-        if !@ct_has_steps(c) { @ct_kick(found, c.rt.last_sub(), ext_applied_note(c.rt.number, ext_brief(p), c.rt.task_shown)) }
+        if !@ct_has_steps(c) { @ct_kick(found, c.rt.last_sub(), ext_applied_note_t(@prompt("ext_applied", EXT_APPLIED_TEXT), c.rt.number, ext_brief(p), c.rt.task_shown)) }
     }
     @route_broadcast(found, true)
     @route_broadcast(at, true)
@@ -226,7 +229,7 @@ fn Hub mut @ct_ext_undo(trace str, id int) Proc Detach Time -> () {
     if found >= 0 && found != at {
         ro c = @sessions[found]
         @rt_note(found, "▸ требование владельца отозвано")
-        if !@ct_has_steps(c) { @ct_kick(found, c.rt.last_sub(), ext_withdrawn_note(c.rt.number, rec.brief, c.rt.task_shown)) }
+        if !@ct_has_steps(c) { @ct_kick(found, c.rt.last_sub(), ext_withdrawn_note_t(@prompt("ext_withdrawn", EXT_WITHDRAWN_TEXT), rec.brief, c.rt.task_shown)) }
         @route_broadcast(found, true)
     }
     @route_broadcast(at, true)
@@ -250,7 +253,7 @@ fn Hub mut @ct_offer(at int, p0 Proposal) Proc Detach Time -> str {
     // an addition to an open task with a high confidence is applied at once, no card (in every mode)
     p.source = s.rt.last_msg
     ro own = p.extends > 0 && @cs_find_number(p.extends) == at
-    if @ct_auto_extend(at, p) { return if own { AUTO_EXTEND_OWN_TEXT } else { AUTO_EXTEND_TEXT } }
+    if @ct_auto_extend(at, p) { return if own { @prompt("auto_extend_own", AUTO_EXTEND_OWN_TEXT) } else { @prompt("auto_extend", AUTO_EXTEND_TEXT) } }
     if s.rt.route == "planning" { return NOT_NEEDED_TEXT }
     if was_refused(s.rt.dismissed, p.title) { return REFUSED_TEXT }
     if has_proposal(s.rt.props, p.title) { return SHOWN_TEXT }
@@ -381,14 +384,14 @@ fn Hub mut @ct_create_old(at int, p Proposal, how str, queued bool) Proc Detach 
     @ct_drop(at, p.id, false)
     if waits > 0 || queued {
         @ct_note(at, if waits > 0 { "▸ подзадача ${n} «${p.title}» ждёт подзадачу ${waits}" } else { "▸ подзадача ${n} «${p.title}» в очереди: в работе уже ${running.len()}" })
-        @ct_kick(at, n, decision_note("queued", n, p.title, s.rt.task_dir))
+        @ct_kick(at, n, @decision("queued", n, p.title, s.rt.task_dir))
         @route_broadcast(at, true)
         return
     }
     // two works at once: the new one gets a tree of its own (when the task has one)
     if !fresh && (how == "parallel" || running.len() > 0) && s.rt.worktree.byte_len() > 0 { @route_subtree(at, n) }
     @ct_note(at, "▸ ${if fresh { "задача ${s.rt.number}" } else { "подзадача ${n}" }} «${p.title}» начата")
-    if !@ct_has_steps(s) { @ct_kick(at, n, decision_note("new", n, p.title, s.rt.task_dir)) }
+    if !@ct_has_steps(s) { @ct_kick(at, n, @decision("new", n, p.title, s.rt.task_dir)) }
     @route_broadcast(at, true)
 }
 
@@ -409,7 +412,7 @@ fn Hub mut @ct_extend(at int, p Proposal, n int) Proc Detach Time -> () {
     @rt_task_op(at, "extend", o)
     @ct_drop(at, p.id, false)
     @ct_note(at, "▸ подзадача ${n} «${title}» дополнена (message.${n}.md)")
-    if !@ct_has_steps(s) { @ct_kick(at, n, decision_note("extend", n, title, s.rt.task_dir)) }
+    if !@ct_has_steps(s) { @ct_kick(at, n, @decision("extend", n, title, s.rt.task_dir)) }
     @route_broadcast(at, true)
 }
 
@@ -457,7 +460,7 @@ fn Hub mut @ct_do(at int, p Proposal, action str) Proc Detach Time -> () {
     if action == "dismiss" {
         @ct_drop(at, p.id, true)
         @ct_note(at, "▸ «${p.title}»: это не задача")
-        @ct_kick(at, 0, decision_note("no", 0, p.title, ""))
+        @ct_kick(at, 0, @decision("no", 0, p.title, ""))
         @route_broadcast(at, true)
         return
     }
@@ -554,7 +557,7 @@ fn Hub mut @ct_queue(at int) Proc Detach Time -> () {
                 @rt_task_op(at, "sub_start", o)
                 if running.len() > 0 && s.rt.worktree.byte_len() > 0 { @route_subtree(at, sub.n) }
                 @ct_note(at, "▸ подзадача ${sub.n} «${sub.title}» начата: место освободилось")
-                if !@ct_has_steps(s) { @ct_kick(at, sub.n, decision_note("new", sub.n, sub.title, s.rt.task_dir)) }
+                if !@ct_has_steps(s) { @ct_kick(at, sub.n, @decision("new", sub.n, sub.title, s.rt.task_dir)) }
                 @route_broadcast(at, true)
                 return
             }
@@ -688,7 +691,7 @@ fn Hub mut @ct_recognize(trace str) Proc Detach Time -> () {
     for p in s.rt.props {
         if p.listed && p.choice == "discuss" { cands.push("- «${p.title}»") }
     }
-    ro request = recognize_request(tasks_hint(s.rt.task_dir, @ct_lines(at)), cands)
+    ro request = recognize_request_t(@prompt("recognize_request", RECOGNIZE_TEXT), tasks_hint_t(@prompt("tasks_hint", TASKS_HINT_TEXT), s.rt.task_dir, @ct_lines(at)), cands)
     @hint_add(at, "Распознать задачи", request)
     ro reason = @route_agent_turn(at, "Распознать задачи", request)
     if reason.byte_len() > 0 { @tell_error(0, trace, s.engine.step_number(), "", "распознавание не начато: ${reason}") }

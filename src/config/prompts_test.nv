@@ -1,0 +1,72 @@
+// prompts_test.nv - the texts of the hub by layers: a file in a layer replaces the built-in text (task 192.12).
+module crew_harness.config
+
+import std.os.{Os, real_os, temp_dir, pid}
+import std.fs.{Fs, real_fs, write_text, write, create_dir_all, remove_dir_all, Path}
+
+fn tmp5(name str) -> str {
+    ro base = with Os = real_os() { temp_dir() }
+    ro id = with Os = real_os() { pid() }
+    ro dir = base.join("crew-prompts-${name}-${id}")
+    with Fs = real_fs() {
+        ro gone = remove_dir_all(dir)
+        ro made = create_dir_all(dir)
+    }
+    dir.display().replace("\\", "/")
+}
+
+fn drop5(root str) -> () {
+    with Fs = real_fs() {
+        ro gone = remove_dir_all(Path.from_bytes(root.bytes()))
+    }
+}
+
+fn put5(root str, rel str, text str) -> () {
+    ro path = Path.from_bytes("${root}/${rel}".bytes())
+    with Fs = real_fs() {
+        match path.parent() {
+            Some(p) => { ro made = create_dir_all(p) }
+            None => ()
+        }
+        ro written = write_text(path, text)
+    }
+}
+
+test "render: names are replaced, unknown names and lone braces stay as written" {
+    assert(render_prompt("a {x} b {y}", ["x", "1", "y", "2"]) == "a 1 b 2")
+    assert(render_prompt("a {z} b {", ["x", "1"]) == "a {z} b {")
+    assert(render_prompt("{x}{x}", ["x", "{y}", "y", "no"]) == "{y}{y}")
+    assert(render_prompt("json {\"a\": 1} {x}", ["x", "ok"]) == "json {\"a\": 1} ok")
+    assert(render_prompt("", ["x", "1"]) == "")
+}
+
+test "prompt: no file is the built-in text, a file of the user replaces it, a file of the project is stronger" {
+    ro root = tmp5("layers")
+    ro layout = layout_in("${root}/inst", "${root}/repo/.crew-harness")
+    ro none = with Fs = real_fs() { pick_prompt(layout, "reminder", "built-in text") }
+    assert(none.text == "built-in text" && none.source == "built-in" && none.note == "")
+    put5(root, "inst/config/prompts/reminder.md", "user text {x}\n")
+    ro user = with Fs = real_fs() { pick_prompt(layout, "reminder", "built-in text") }
+    assert(user.text == "user text {x}" && user.source == "${root}/inst/config/prompts/reminder.md")
+    put5(root, "repo/.crew-harness/prompts/reminder.md", "project text")
+    ro project = with Fs = real_fs() { pick_prompt(layout, "reminder", "built-in text") }
+    assert(project.text == "project text")
+    put5(root, "repo/.crew-harness/prompts/reminder.md", "changed at once")
+    assert(with Fs = real_fs() { pick_prompt(layout, "reminder", "built-in text") }.text == "changed at once")
+    drop5(root)
+}
+
+test "prompt: an empty file and a file that is not text give the built-in text and a note" {
+    ro root = tmp5("broken")
+    ro layout = layout_in("${root}/inst", "")
+    put5(root, "inst/config/prompts/empty.md", "  \n\n")
+    ro empty = with Fs = real_fs() { pick_prompt(layout, "empty", "fallback") }
+    assert(empty.text == "fallback" && empty.note.contains("is empty"))
+    with Fs = real_fs() {
+        ro made = create_dir_all(Path.from_bytes("${root}/inst/config/prompts".bytes()))
+        ro bytes = write(Path.from_bytes("${root}/inst/config/prompts/bad.md".bytes()), [255 as u8, 254 as u8, 253 as u8])
+    }
+    ro bad = with Fs = real_fs() { pick_prompt(layout, "bad", "fallback") }
+    assert(bad.text == "fallback" && bad.note.contains("cannot be read"))
+    drop5(root)
+}

@@ -31,7 +31,7 @@ fn rk_settings(name str, workdir str) -> ServerSettings {
         routes_dir: "${kit_repo_root().display()}/doc/routes", route_reviewer_order: ["second"], route_task_limit: 12, route_task_messages: 40,
         route_fix_attempts: 2, route_worktree_ask: true, route_overlap_seconds: 30, route_keep_days: 30, context_drop_percent: 40,
         route_confirm_word: "задача", route_over_limit_word: "сверх", route_max_active: 3, route_tool: true, route_auto_propose: false, route_children: false, route_wip: false, wip_timeout_ms: 300000, agent_start_ms: 60000, agent_silent_minutes: 5,
-        layout: base.layout, preset: base.preset
+        layout: base.layout, preset: base.preset, auto_extend_confidence: base.auto_extend_confidence, task_scope: base.task_scope
     }
 }
 

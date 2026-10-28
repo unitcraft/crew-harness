@@ -1,0 +1,86 @@
+// prompts.nv - the texts the hub says to the agents, as files by layers (task 192.12, ADR-0016).
+//
+// A text (the description of a tool, the note "recognise the tasks", the reminder before a message, a service turn) has a NAME and a built-in value in the code, so the product works
+// with no file. A file `prompts/<name>.md` replaces it: `.crew-harness/prompts/` of the project first, then `<home>/config/prompts/`, then the built-in text. The hub reads the
+// file at every use (a changed text acts at once). Inside the text `{name}` is replaced by the value named `name` (a variable that is not known stays as written).
+// A file that is empty or cannot be read as text is not used: the built-in text is, and the pick carries a `note` line for the log of the hub.
+module crew_harness.config
+
+import std.text
+import std.fs.{Fs, Path, read_text, try_exists}
+
+/// Prompt: the text to use, where it came from (`built-in`, or the file), and a line for the log ("" - nothing to say).
+export type Prompt { text str, source str, note str }
+
+/// The text with every `{name}` of `vars` (a flat list: name, value, name, value ...) replaced by its value; the text of a value is not scanned again.
+export fn render_prompt(template str, vars []str) -> str {
+    mut out = ""
+    mut rest = template
+    while rest.byte_len() > 0 {
+        match rest.find("{") {
+            None => {
+                out = "${out}${rest}"
+                rest = ""
+            }
+            Some(open) => {
+                out = "${out}${rest[..open]}"
+                ro after = rest[open + 1..]
+                match after.find("}") {
+                    None => {
+                        out = "${out}{"
+                        rest = after
+                    }
+                    Some(close) => {
+                        ro name = after[..close]
+                        mut value = ""
+                        mut found = false
+                        mut i = 0
+                        while i + 1 < vars.len() {
+                            if vars[i] == name && !found {
+                                value = vars[i + 1]
+                                found = true
+                            }
+                            i += 2
+                        }
+                        if found {
+                            out = "${out}${value}"
+                            rest = after[close + 1..]
+                        } else {
+                            out = "${out}{"
+                            rest = after
+                        }
+                    }
+                }
+            }
+        }
+    }
+    out
+}
+
+/// The files that can hold the text `name`, the strongest first.
+export fn prompt_files(layout ConfigLayout, name str) -> []str {
+    mut out = []str.new()
+    if layout.project.byte_len() > 0 { out.push("${layout.project}/prompts/${name}.md") }
+    if layout.config.byte_len() > 0 { out.push("${layout.config}/prompts/${name}.md") }
+    out
+}
+
+/// The text `name`: the first file that holds text, else `builtin`. An empty or unreadable file gives `builtin` and a note.
+export fn pick_prompt(layout ConfigLayout, name str, builtin str) Fs -> Prompt {
+    for file in prompt_files(layout, name) {
+        ro there = match try_exists(Path.from_bytes(file.bytes())) {
+            Ok(b) => b
+            Err(e) => false
+        }
+        if there {
+            match read_text(Path.from_bytes(file.bytes())) {
+                Err(e) => return Prompt { text: builtin, source: "built-in", note: "the text ${name}: ${file} cannot be read as text; the built-in text is used" }
+                Ok(text) => {
+                    if text.trim_ascii().byte_len() == 0 { return Prompt { text: builtin, source: "built-in", note: "the text ${name}: ${file} is empty; the built-in text is used" } }
+                    return Prompt { text: text.trim_ascii(), source: file, note: "" }
+                }
+            }
+        }
+    }
+    Prompt { text: builtin, source: "built-in", note: "" }
+}

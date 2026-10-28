@@ -530,3 +530,11 @@ test "layers: the defaults of the schema are the defaults of the settings" {
     assert(d.get("preset").unwrap().str() == Some(s.preset))
     assert(d.get("voice").unwrap().object().unwrap().get("url").unwrap().str() == Some(s.stt_url))
 }
+
+test "settings: the confidence of the addition at once and the scope of the tasks are checked" {
+    assert(must_settings("{}").auto_extend_confidence == "high" && must_settings("{}").task_scope == "session")
+    assert(must_settings("{\"auto_extend_confidence\":\"medium\"}").auto_extend_confidence == "medium")
+    assert(must_settings("{\"auto_extend_confidence\":\"off\"}").auto_extend_confidence == "off")
+    assert(is_error(parse_server_settings("{\"auto_extend_confidence\":\"low\"}")))
+    assert(is_error(parse_server_settings("{\"task_scope\":\"project\"}")))
+}

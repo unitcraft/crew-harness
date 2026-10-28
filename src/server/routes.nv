@@ -8,6 +8,7 @@
 module crew_harness.server
 
 import std.encoding.json.{Json, JsonValue, JsonObject}
+import crew_harness.config.{render_prompt}
 
 // ----- the files of the modes -----
 
@@ -348,10 +349,17 @@ export type CtxRec { ms int, before int, after int }
 export type ExtRec { id int, task int, title str, brief str, ms int, file str, added str, undone bool }
 
 /// The short reminder before every message of the owner (2-3 lines of the main): the mode, the step now, where the task and the branch are, and when to call `crew_task` / `crew_task_list`.
-export fn route_reminder(route str, step_title str, task_shown str, branch str) -> str {
+export fn route_reminder(route str, step_title str, task_shown str, branch str) -> str => route_reminder_t(REMINDER_TEXT, route, step_title, task_shown, branch)
+
+/// The text of the reminder (`route_reminder`: route, step, place).
+export const REMINDER_TEXT = "[crew] Напоминание: режим «{route}», шаг: {step}; {place}.\n[crew] crew_task — раз в начале реальной работы над файлами, до первой правки; crew_task_list — только по просьбе хаба; вопрос или беседа — не работа; файлы задачи сам не заводи."
+
+/// The same over a text of a layer.
+export fn route_reminder_t(template str, route str, step_title str, task_shown str, branch str) -> str {
     ro step = if step_title.byte_len() > 0 { step_title } else { "нет" }
-    ro place = if task_shown.byte_len() > 0 { "задача в ${task_shown}${if branch.byte_len() > 0 { ", ветка ${branch}" } else { "" }}" } else { "задачи ещё нет" }
-    "[crew] Напоминание: режим «${route}», шаг: ${step}; ${place}.\n[crew] crew_task — раз в начале реальной работы над файлами, до первой правки; crew_task_list — только по просьбе хаба; вопрос или беседа — не работа; файлы задачи сам не заводи."
+    ro branch_part = if branch.byte_len() > 0 { ", ветка ${branch}" } else { "" }
+    ro place = if task_shown.byte_len() > 0 { "задача в ${task_shown}${branch_part}" } else { "задачи ещё нет" }
+    render_prompt(template, ["route", route, "step", step, "place", place])
 }
 
 /// DiffRec: a changed file of the tree of the task against its base.

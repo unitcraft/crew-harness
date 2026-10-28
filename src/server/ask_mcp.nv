@@ -176,21 +176,57 @@ fn questions_of(arguments JsonValue) -> Result[JsonValue, str] {
 export fn mcp_handle(body str) -> McpOut => mcp_handle_for(body, "ask")
 
 /// The tools of the server for a session: "ask" (the questions), "task" (`crew_task`, task 192.2), "all" (both).
-fn tools_of(tools str) -> []JsonValue {
+fn tools_of(tools str, descs []str) -> []JsonValue {
     mut out = []JsonValue.new()
-    if tools == "ask" || tools == "all" || tools == "asklist" { out.push(tool_json()) }
+    if tools == "ask" || tools == "all" || tools == "asklist" { out.push(described(tool_json(), descs)) }
     // task 250: the tools of the plugin `crew_*` and `crew_task` with its actions are in every set but the old "ask"
     if tools != "ask" {
-        for t in ctl_tools_json() { out.push(t) }
-        for t in journal_tools_json() { out.push(t) }
-        out.push(crew_task_unified_json())
-        out.push(crew_task_list_tool_json())
+        for t in ctl_tools_json() { out.push(described(t, descs)) }
+        for t in journal_tools_json() { out.push(described(t, descs)) }
+        out.push(described(crew_task_unified_json(), descs))
+        out.push(described(crew_task_list_tool_json(), descs))
     }
     out
 }
 
+// The name of a tool from its JSON.
+fn tool_name_of(tool JsonValue) -> str {
+    match tool.object() {
+        Some(o) => match o.get("name") {
+            Some(n) => n.str() ?? ""
+            None => ""
+        }
+        None => ""
+    }
+}
+
+// The tool with the description from a file of a layer (`descs`: name, text, name, text ...), when there is one.
+fn described(tool JsonValue, descs []str) -> JsonValue {
+    ro name = tool_name_of(tool)
+    mut i = 0
+    while i + 1 < descs.len() {
+        if descs[i] == name { return tool_with_description(tool, descs[i + 1]) }
+        i += 2
+    }
+    tool_with_description(tool, tool_description(tool))
+}
+
+/// The names of the tools whose descriptions a file `prompts/tool_<name>.md` can replace.
+export fn tool_names() -> []str {
+    mut out = []str.new()
+    out.push(tool_name_of(tool_json()))
+    for t in ctl_tools_json() { out.push(tool_name_of(t)) }
+    for t in journal_tools_json() { out.push(tool_name_of(t)) }
+    out.push(tool_name_of(crew_task_unified_json()))
+    out.push(tool_name_of(crew_task_list_tool_json()))
+    out
+}
+
 /// What the server does with the body of one `POST`, for the tools of the session (`tools`: "ask", "task" or "all"). A call of `crew_task` is `task` (the checked arguments in `questions`).
-export fn mcp_handle_for(body str, tools str) -> McpOut {
+export fn mcp_handle_for(body str, tools str) -> McpOut => mcp_handle_with(body, tools, []str.new())
+
+/// The same with the descriptions of the tools from the files of the layers (`descs`: name, text, name, text ...).
+export fn mcp_handle_with(body str, tools str, descs []str) -> McpOut {
     ro message = match Json.parse(body) {
         Ok(v) => v
         Err(e) => return mout("reply", mcp_error_reply(JsonValue.null(), -32700, "parse error"))
@@ -216,7 +252,7 @@ export fn mcp_handle_for(body str, tools str) -> McpOut {
     if method == "ping" { return mout("reply", rpc_ok(id, JsonValue.object(JsonObject.new()))) }
     if method == "tools/list" {
         mut result = JsonObject.new()
-        mput(result, "tools", JsonValue.array(tools_of(tools)))
+        mput(result, "tools", JsonValue.array(tools_of(tools, descs)))
         return mout("reply", rpc_ok(id, JsonValue.object(result)))
     }
     if method == "tools/call" {

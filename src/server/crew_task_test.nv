@@ -400,6 +400,42 @@ test "crew_task: the mode, the reason and the children of an epic are read, chec
         Err(e) => panic("not read: ${e}")
     }
     assert(crew_task_tool_json().to_str().contains("children") && crew_task_list_tool_json().to_str().contains("reason"))
+
+// ----- the texts by layers and the threshold of the addition at once (task 192.12) -----
+
+test "prompts: a text of a layer replaces the built-in one, the values are put in by name" {
+    assert(ext_applied_note("7", "кратко", "doc/t") == "[crew] Новое требование владельца к твоей задаче 7: кратко; см. doc/t/message.md, раздел «Дополнение». Учти его и продолжай в рабочем каталоге.")
+    assert(ext_applied_note_t("Новое {brief} в {shown} ({number})", "7", "x", "d") == "Новое x в d (7)")
+    assert(ext_withdrawn_note_t("снято {brief}", "x", "d") == "снято x")
+    assert(decision_note_t("n={n} t={title} d={shown}", 3, "T", "dir") == "n=3 t=T d=dir")
+    assert(decision_note("queued", 2, "T", "d") == "[crew] Подзадача 2 «T» ждёт очереди и стартует сама; пока ничего по ней не делай.")
+    assert(decision_name_of("new") == "decision_new" && decision_name_of("no") == "decision_no" && decision_name_of("other") == "decision_no")
+    assert(route_reminder_t("{route}|{step}|{place}", "fast", "", "doc/t", "task/1-x") == "fast|нет|задача в doc/t, ветка task/1-x")
+    assert(route_reminder("fast", "", "", "").contains("задачи ещё нет"))
+    ro lines = [SubLine { n: 1, title: "A", state: "в работе", waits: 0, file: "" }]
+    assert(tasks_hint_t("список:\n{rows}", "doc/t", lines) == "список:\n1. «A» (в работе) — doc/t/message.1.md")
+    assert(tasks_hint("doc/t", lines).contains("Задачи в работе"))
+    assert(tasks_hint("doc/t", []SubLine.new()) == "")
+    assert(recognize_request_t("ТЕКСТ", "известные", ["c1"]) == "ТЕКСТ\n\nизвестные\n\n[crew] Эти работы уже в списке кандидатов (не повторяй их):\nc1")
+    assert(recognize_request("", []str.new()).starts_with("[crew] Распознай задачи."))
+}
+
+test "prompts: the description of a tool is replaced, the rest of the tool stays" {
+    ro tool = crew_task_tool_json()
+    assert(tool_description(tool).starts_with("Call it when"))
+    ro changed = tool_with_description(tool, "Новое описание")
+    assert(tool_description(changed) == "Новое описание")
+    assert(changed.object().unwrap().get("name").unwrap().str() == Some("crew_task"))
+    assert(changed.object().unwrap().contains("inputSchema"))
+}
+
+test "settings of the task: the confidence that applies an addition at once is high by default, medium widens it, off closes it" {
+    ro high = proposal_new("extend", "T", "s", 3, []str.new(), "high")
+    ro medium = proposal_new("extend", "T", "s", 3, []str.new(), "medium")
+    assert(auto_extend_ok_at(high, "high") && !auto_extend_ok_at(medium, "high"))
+    assert(auto_extend_ok_at(high, "medium") && auto_extend_ok_at(medium, "medium"))
+    assert(!auto_extend_ok_at(high, "off") && !auto_extend_ok_at(medium, "off"))
+    assert(!auto_extend_ok_at(proposal_new("new", "T", "s", 0, []str.new(), "high"), "medium"))
 }
 
 test "crew_task: the page gets the minutes of silence of the agent (task 192.14)" {

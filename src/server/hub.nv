@@ -21,6 +21,7 @@ import alula.engine.{Engine, Incoming, EventKind, Journal, Store, Link, PartyReq
 import crew_harness.product_machines.{find_machines_dir, load_product_machines}
 import alula.machine_run.{AlulaMachine, AlulaState}
 import crew_harness.acp.{AcpConfig, AcpClient, AcpImage, AcpPreset, AskSetup, no_ask, open_client_full, acp_link, page_event, TRACE_LIMIT}
+import crew_harness.config.{pick_prompt, ConfigLayout}
 import crew_harness.projects.{EnvEntry, projects_get, parse_dotenv, normalize_folder_path, project_has_folder, valid_project_id}
 import crew_harness.storage.{remove_session_dir, open_data_dir, file_journal, file_store, list_sessions, valid_session_name, session_file_made, migrate_flat_sessions, image_ext, decode_image, save_image, find_image, replace_file}
 import crew_harness.pgstore.{PgWorld, pg_journal, pg_store}
@@ -138,6 +139,8 @@ export type Hub {
     marks []MachMark,
     trees_tx ChanTx[TreeDone],
     trees_rx ChanRx[TreeDone],
+    notes_tx ChanTx[str],
+    notes_rx ChanRx[str],
     held []HeldMsg,
     reserved []int
 }
@@ -357,6 +360,25 @@ fn decision_text(request str, decision str) -> str {
 
 // ----- the hub -----
 
+// A text the hub says to the agents (task 192.12): the file `prompts/<name>.md` of a layer, else the built-in text. Read at every use. An empty or unreadable file gives the built-in text
+// and a line for the log (told at the next pump, because the callers are not always able to write the log).
+fn Hub @prompt(name str, builtin str) -> str {
+    ro p = with Fs = real_fs() { pick_prompt(@settings.layout, name, builtin) }
+    if p.note.byte_len() > 0 { ro sent = @notes_tx.send(p.note) }
+    p.text
+}
+
+// The lines of the texts that could not be used, into the log (once each).
+fn Hub mut @prompt_flush() -> () {
+    mut more = true
+    while more {
+        match @notes_rx.try_recv() {
+            Some(note) => { if !@log.contains(note) { @say_log(note) } }
+            None => { more = false }
+        }
+    }
+}
+
 fn Hub mut @say_log(text str) -> () {
     @log.push(text)
     if @log.len() > 200 { @log.remove(0) }
@@ -512,9 +534,9 @@ fn Hub @ask_with_tasks(base AskSetup, id str) -> AskSetup {
     if !@settings.route_tool || @mcps.len() == 0 { return AskSetup { form: base.form, mcp_url: base.mcp_url, mcp_token: base.mcp_token, hint: base.hint } }
     ro auto = @settings.route_auto_propose
     if base.mcp_url.byte_len() > 0 {
-        return AskSetup { form: base.form, mcp_url: @mcp_url_tools(id, if auto { "all" } else { "asklist" }), mcp_token: base.mcp_token, hint: if auto { "${base.hint} ${TASK_HINT}" } else { base.hint } }
+        return AskSetup { form: base.form, mcp_url: @mcp_url_tools(id, if auto { "all" } else { "asklist" }), mcp_token: base.mcp_token, hint: if auto { "${base.hint} ${@prompt("task_hint", TASK_HINT)}" } else { base.hint } }
     }
-    AskSetup { form: base.form, mcp_url: @mcp_url_tools(id, if auto { "task" } else { "list" }), mcp_token: @mcp_token_value(), hint: if auto { TASK_HINT } else { "" } }
+    AskSetup { form: base.form, mcp_url: @mcp_url_tools(id, if auto { "task" } else { "list" }), mcp_token: @mcp_token_value(), hint: if auto { @prompt("task_hint", TASK_HINT) } else { "" } }
 }
 
 fn Hub @mcp_url_tools(id str, tools str) -> str => if tools == "all" { @mcp_url_for(id) } else { "${@mcp_url_for(id)}/${tools}" }
@@ -526,7 +548,7 @@ fn Hub @ask_base(agent str, id str) -> AskSetup {
     match @settings.agent(agent) {
         Some(spec) => {
             if spec.ask == "off" { return no_ask() }
-            if spec.ask == "mcp" { return AskSetup { form: false, mcp_url: @mcp_url_for(id), mcp_token: @mcp_token_value(), hint: ASK_HINT } }
+            if spec.ask == "mcp" { return AskSetup { form: false, mcp_url: @mcp_url_for(id), mcp_token: @mcp_token_value(), hint: @prompt("ask_hint", ASK_HINT) } }
             AskSetup { form: true, mcp_url: "", mcp_token: "", hint: "" }
         }
         None => no_ask()
@@ -560,7 +582,7 @@ fn Hub @wants_mcp() -> bool {
 export fn Hub mut @start_mcp() Proc Detach Time Net -> bool {
     if @mcps.len() > 0 { return true }
     ro token = with Random = real_random() { Hex.encode(Random.bytes(24)) }
-    match start_mcp_server(token, @settings.ask_timeout_ms) {
+    match start_mcp_server_in(token, @settings.ask_timeout_ms, @settings.layout) {
         Ok(server) => {
             @mcps.push(server)
             @say_log("the MCP server of the questions listens on 127.0.0.1:${server.port}")
@@ -730,8 +752,9 @@ export fn start_hub_from(settings ServerSettings, table_text str) Proc Detach Ti
     }
     ro machine = hub_machine_with(machine_text, registry, settings.idle_term_ms)?
     ro trees_chan = Chan[TreeDone].new(64)
+    ro notes_chan = Chan[str].new(64)
     mut hub = Hub {
-        settings, machine, workdir, sessions: []Dialog.new(), conns: []int.new(), out: []Outgoing.new(), log: []str.new(), serial: 0, mcps: []McpServer.new(), mcp_pending: []McpPending.new(), mcp_serial: 0, ctl_letters: []CtlLetter.new(), ctl_waits: []CtlWait.new(), ctl_serial: 0, catalog: JsonObject.new(), catalog_dirty: false, catalog_saved_at: 0, choices: []PendingChoice.new(), reviews: []Review.new(), route_obs: 0, marks: []MachMark.new(), trees_tx: trees_chan.tx, trees_rx: trees_chan.rx, held: []HeldMsg.new(), reserved: []int.new()
+        settings, machine, workdir, sessions: []Dialog.new(), conns: []int.new(), out: []Outgoing.new(), log: []str.new(), serial: 0, mcps: []McpServer.new(), mcp_pending: []McpPending.new(), mcp_serial: 0, ctl_letters: []CtlLetter.new(), ctl_waits: []CtlWait.new(), ctl_serial: 0, catalog: JsonObject.new(), catalog_dirty: false, catalog_saved_at: 0, choices: []PendingChoice.new(), reviews: []Review.new(), route_obs: 0, marks: []MachMark.new(), trees_tx: trees_chan.tx, trees_rx: trees_chan.rx, notes_tx: notes_chan.tx, notes_rx: notes_chan.rx, held: []HeldMsg.new(), reserved: []int.new()
     }
     if hub.wants_mcp() { ro started = hub.start_mcp() }
     ro pg = settings.store == "pg"
@@ -1657,6 +1680,7 @@ export fn Hub mut @pump() Proc Detach Time -> int {
         at += 1
     }
     @catalog_save(false)
+    @prompt_flush()
     @wip_poll()
     @route_pump()
     @machine_pump()

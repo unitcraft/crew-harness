@@ -13,6 +13,8 @@
 // runs avoids `str.lines` and the like: the checker of the scheduler takes them for unsafe in a fiber, so the head of the request is cut by hand.
 module crew_harness.server
 
+import crew_harness.config.{ConfigLayout, legacy_layout, pick_prompt}
+import std.fs.{Fs, real_fs}
 import std.concurrency.nvchan.{Chan, ChanTx, ChanRx}
 import std.encoding.json.{Json, JsonValue}
 import std.net.{Net, TcpListener, TcpStream, SocketAddr}
@@ -190,7 +192,7 @@ fn id_of(text str) -> JsonValue {
 }
 
 // What to write back for one request.
-fn answer_request(request HttpRequest, token str, timeout_ms int, call int, inbox ChanTx[McpMsg]) Time -> str {
+fn answer_request(request HttpRequest, token str, timeout_ms int, call int, inbox ChanTx[McpMsg], layout ConfigLayout) Time -> str {
     if request.origin.byte_len() > 0 { return http_answer(403, "{\"error\":\"a request from a page is not accepted\"}") }
     if request.auth != "Bearer ${token}" { return http_answer(401, "{\"error\":\"the token is wrong\"}") }
     ro session = match session_of(request.path) {
@@ -198,7 +200,7 @@ fn answer_request(request HttpRequest, token str, timeout_ms int, call int, inbo
         None => return http_answer(404, "{\"error\":\"not found\"}")
     }
     if request.method != "POST" { return http_answer(405, "{\"error\":\"POST only\"}") }
-    ro out = mcp_handle_for(request.body, tools_of_session(session))
+    ro out = mcp_handle_with(request.body, tools_of_session(session), tool_descriptions(layout))
     ro session_name = session_plain(session)
     if out.kind == "none" { return "HTTP/1.1 202 Accepted\r\nContent-Length: 0\r\nConnection: close\r\n\r\n" }
     if out.kind == "reply" { return http_answer(200, out.text) }
@@ -217,10 +219,10 @@ fn answer_request(request HttpRequest, token str, timeout_ms int, call int, inbo
     }
 }
 
-fn serve_connection(consume conn TcpStream, token str, timeout_ms int, call int, inbox ChanTx[McpMsg]) Net Time -> () {
+fn serve_connection(consume conn TcpStream, token str, timeout_ms int, call int, inbox ChanTx[McpMsg], layout ConfigLayout) Net Time -> () {
     match read_request(conn) {
         Some(request) => {
-            ro written = conn.write_all(answer_request(request, token, timeout_ms, call, inbox).bytes())
+            ro written = conn.write_all(answer_request(request, token, timeout_ms, call, inbox, layout).bytes())
         }
         None => ()
     }
@@ -228,7 +230,7 @@ fn serve_connection(consume conn TcpStream, token str, timeout_ms int, call int,
 }
 
 // The loop of the listener: connections until it is cancelled.
-fn listen_loop(consume listener TcpListener, token str, timeout_ms int, inbox ChanTx[McpMsg], stop CancelToken) Net Time Detach -> () {
+fn listen_loop(consume listener TcpListener, token str, timeout_ms int, inbox ChanTx[McpMsg], stop CancelToken, layout ConfigLayout) Net Time Detach -> () {
     mut calls = 0
     supervised(cancel: stop) {
         mut serving = true
@@ -237,7 +239,7 @@ fn listen_loop(consume listener TcpListener, token str, timeout_ms int, inbox Ch
                 Ok(consume conn) => {
                     calls += 1
                     ro call = calls
-                    detach consume conn { serve_connection(conn, token, timeout_ms, call, inbox) }
+                    detach consume conn { serve_connection(conn, token, timeout_ms, call, inbox, layout) }
                 }
                 Err(e) => { serving = false }
             }
@@ -247,24 +249,37 @@ fn listen_loop(consume listener TcpListener, token str, timeout_ms int, inbox Ch
 }
 
 // The keeper: makes the listener, tells the starter its port (-1 - it could not be made), then takes connections.
-fn keep_mcp(token str, timeout_ms int, inbox ChanTx[McpMsg], ready ChanTx[int], stop CancelToken) Net Time Detach -> () {
+fn keep_mcp(token str, timeout_ms int, inbox ChanTx[McpMsg], ready ChanTx[int], stop CancelToken, layout ConfigLayout) Net Time Detach -> () {
     match TcpListener.bind(SocketAddr.loopback(0)) {
         Err(e) => {
             ro told = ready.send(-1)
         }
         Ok(consume bound) => {
             ro told = ready.send(bound.local_port())
-            listen_loop(bound, token, timeout_ms, inbox, stop)
+            listen_loop(bound, token, timeout_ms, inbox, stop, layout)
         }
     }
 }
 
 /// Start the MCP server of the questions on 127.0.0.1 and a free port. `timeout_ms` is how long a call waits for the owner.
-export fn start_mcp_server(token str, timeout_ms int) Net Detach Time -> Result[McpServer, str] {
+export fn start_mcp_server(token str, timeout_ms int) Net Detach Time -> Result[McpServer, str] => start_mcp_server_in(token, timeout_ms, legacy_layout(""))
+
+// The descriptions of the tools from the files `prompts/tool_<name>.md` of the layers, read at every request (name, text, name, text ...).
+fn tool_descriptions(layout ConfigLayout) -> []str {
+    mut out = []str.new()
+    for name in tool_names() {
+        ro p = with Fs = real_fs() { pick_prompt(layout, "tool_${name}", "") }
+        if p.text.byte_len() > 0 { out.push(name); out.push(p.text) }
+    }
+    out
+}
+
+/// The same; the descriptions of the tools can be replaced by the files of the layers of `layout`.
+export fn start_mcp_server_in(token str, timeout_ms int, layout ConfigLayout) Net Detach Time -> Result[McpServer, str] {
     ro inbox = Chan[McpMsg].new(256)
     ro ready = Chan[int].new(1)
     ro stop = CancelToken.new()
-    detach { keep_mcp(token, timeout_ms, inbox.tx, ready.tx, stop) }
+    detach { keep_mcp(token, timeout_ms, inbox.tx, ready.tx, stop, layout) }
     match ready.rx.recv() {
         Some(port) => {
             if port < 0 { return Err("the MCP server cannot listen on 127.0.0.1") }

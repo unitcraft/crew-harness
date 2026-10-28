@@ -9,6 +9,7 @@
 module crew_harness.server
 
 import std.encoding.json.{Json, JsonValue, JsonObject}
+import crew_harness.config.{render_prompt}
 
 /// The name of the tool.
 export const CREW_TASK_TOOL = "crew_task"
@@ -108,6 +109,31 @@ export fn is_code_word(text str, word str) -> bool {
 }
 
 // ----- the tool -----
+
+/// The description of a tool (the text the agent reads) from its JSON.
+export fn tool_description(tool JsonValue) -> str {
+    match tool.object() {
+        Some(o) => match o.get("description") {
+            Some(d) => d.str() ?? ""
+            None => ""
+        }
+        None => ""
+    }
+}
+
+/// The tool with another description (a file `prompts/tool_<name>.md` of a layer); the rest of the JSON is as it was.
+export fn tool_with_description(tool JsonValue, description str) -> JsonValue {
+    match tool.object() {
+        Some(o) => {
+            mut out = JsonObject.new()
+            for (k, v) in o {
+                ro replaced = out.insert(k, if k == "description" { JsonValue.str(description) } else { v })
+            }
+            JsonValue.object(out)
+        }
+        None => JsonValue.null()
+    }
+}
 
 /// The description of the tool for `tools/list`.
 export fn crew_task_tool_json() -> JsonValue {
@@ -292,7 +318,14 @@ export fn proposal_of_marker(answer str) -> Option[Proposal] {
 export const AUTO_EXTEND_CONFIDENCE = "high"
 
 /// Is the proposal an addition the hub applies without a card (the checks of the target task are the hub's)?
-export fn auto_extend_ok(p Proposal) -> bool => p.kind == "extend" && p.extends > 0 && word_key(p.confidence) == AUTO_EXTEND_CONFIDENCE
+export fn auto_extend_ok(p Proposal) -> bool => auto_extend_ok_at(p, AUTO_EXTEND_CONFIDENCE)
+
+/// The same by the setting `auto_extend_confidence`: `high` (only high), `medium` (medium and high), `off` (nothing is applied at once, every addition is a card).
+export fn auto_extend_ok_at(p Proposal, level str) -> bool {
+    if p.kind != "extend" || p.extends <= 0 || level == "off" { return false }
+    ro c = word_key(p.confidence)
+    c == "high" || (level == "medium" && c == "medium")
+}
 
 /// The text without its LAST occurrence of `part`; None - `part` is not there (the file was changed by hand).
 export fn text_without_last(text str, part str) -> Option[str] {
@@ -323,13 +356,17 @@ export fn ext_brief(p Proposal) -> str {
     "${one[..k]}…"
 }
 
-/// The service turn to the agent of the task: a new requirement of the owner.
-export fn ext_applied_note(number str, brief str, shown str) -> str =>
-    "[crew] Новое требование владельца к твоей задаче ${number}: ${brief}; см. ${shown}/message.md, раздел «Дополнение». Учти его и продолжай в рабочем каталоге."
+/// The texts the hub says to the agents have names and can be replaced by files `prompts/<name>.md` (task 192.12, `config/prompts.nv`); these are the built-in ones, `{name}` is a value.
+/// The service turn to the agent of the task: a new requirement of the owner (`ext_applied`: number, brief, shown).
+export const EXT_APPLIED_TEXT = "[crew] Новое требование владельца к твоей задаче {number}: {brief}; см. {shown}/message.md, раздел «Дополнение». Учти его и продолжай в рабочем каталоге."
 
-/// The service turn to the agent of the task: the requirement is taken back.
-export fn ext_withdrawn_note(number str, brief str, shown str) -> str =>
-    "[crew] Требование отозвано: «${brief}» — раздел «Дополнение» убран из ${shown}/message.md; не учитывай его."
+/// The service turn to the agent of the task: the requirement is taken back (`ext_withdrawn`: brief, shown).
+export const EXT_WITHDRAWN_TEXT = "[crew] Требование отозвано: «{brief}» — раздел «Дополнение» убран из {shown}/message.md; не учитывай его."
+
+export fn ext_applied_note_t(template str, number str, brief str, shown str) -> str => render_prompt(template, ["number", number, "brief", brief, "shown", shown])
+export fn ext_withdrawn_note_t(template str, brief str, shown str) -> str => render_prompt(template, ["brief", brief, "shown", shown])
+export fn ext_applied_note(number str, brief str, shown str) -> str => ext_applied_note_t(EXT_APPLIED_TEXT, number, brief, shown)
+export fn ext_withdrawn_note(number str, brief str, shown str) -> str => ext_withdrawn_note_t(EXT_WITHDRAWN_TEXT, brief, shown)
 
 /// The additions applied at once, for the page: `extensions` - the newest last, each `{id, task, title, text, at, undone}`.
 export fn ext_view_extend(base str, exts []ExtRec) -> str {
@@ -444,24 +481,50 @@ export fn crew_addition_text(summary str, source str, ms int) -> str {
 /// SubLine: a subtask of the session for the list the agent gets (the number, the title, the state).
 export type SubLine { n int, title str, state str, waits int, file str }
 
+/// The text of the note `tasks_hint` (`{rows}` is the list of the tasks).
+export const TASKS_HINT_TEXT = "[crew] Задачи в работе (в crew_task / crew_task_list: kind=extend, extends=<номер> и честный confidence, если работа дополняет одну из них — при high дополнение открытой задачи применяется сразу, без карточки, не используй его для вопроса или обсуждения; kind=child и epic=<номер>, если она явно дочерняя задача такой задачи (любая открытая задача может быть эпиком); иначе kind=new — самостоятельная задача):\n{rows}"
+
 /// The short list of the tasks of the session for the hidden note before the message of the owner ("" - there are none). The agent uses it to say that a work belongs to a task that is there.
-export fn tasks_hint(task_shown str, lines []SubLine) -> str {
+export fn tasks_hint(task_shown str, lines []SubLine) -> str => tasks_hint_t(TASKS_HINT_TEXT, task_shown, lines)
+
+/// The same over the text of a layer.
+export fn tasks_hint_t(template str, task_shown str, lines []SubLine) -> str {
     if lines.len() == 0 { return "" }
     mut rows = []str.new()
     for l in lines {
         ro state = if l.waits > 0 { "ждёт подзадачу ${l.waits}" } else { l.state }
         rows.push("${l.n}. «${l.title}» (${state}) — ${if l.file.byte_len() > 0 { l.file } else { "${task_shown}/message.${l.n}.md" }}")
     }
-    "[crew] Задачи в работе (в crew_task / crew_task_list: kind=extend, extends=<номер> и честный confidence, если работа дополняет одну из них — при high дополнение открытой задачи применяется сразу, без карточки, не используй его для вопроса или обсуждения; kind=child и epic=<номер>, если она явно дочерняя задача такой задачи (любая открытая задача может быть эпиком); иначе kind=new — самостоятельная задача):\n${joined(rows, "\n")}"
+    render_prompt(template, ["rows", joined(rows, "\n")])
 }
 
-/// The note for the agent after the owner answered the card.
-export fn decision_note(what str, n int, title str, shown str) -> str {
-    if what == "new" { return "[crew] Владелец подтвердил задачу «${title}»: подзадача ${n}, папка ${shown}. Постановка — ${shown}/message.${n}.md (в нём краткое изложение и сообщение владельца, картинки в images/). Прочитай её и выполни работу в рабочем каталоге; в конце коротко скажи, что сделано." }
-    if what == "extend" { return "[crew] Владелец подтвердил: работа дополняет подзадачу ${n} «${title}». Новое — в конце ${shown}/message.${n}.md, раздел «Дополнение». Прочитай его и продолжай в рабочем каталоге." }
-    if what == "queued" { return "[crew] Подзадача ${n} «${title}» ждёт очереди и стартует сама; пока ничего по ней не делай." }
-    "[crew] Владелец ответил, что это не задача: никаких файлов задачи не заводи. Сделай, о чём просили, как обычная правка или ответ, и коротко скажи итог."
+/// The notes for the agent after the owner answered the card: `decision_new` (n, title, shown), `decision_extend` (n, title, shown), `decision_queued` (n, title), `decision_no`.
+export const DECISION_NEW_TEXT = "[crew] Владелец подтвердил задачу «{title}»: подзадача {n}, папка {shown}. Постановка — {shown}/message.{n}.md (в нём краткое изложение и сообщение владельца, картинки в images/). Прочитай её и выполни работу в рабочем каталоге; в конце коротко скажи, что сделано."
+export const DECISION_EXTEND_TEXT = "[crew] Владелец подтвердил: работа дополняет подзадачу {n} «{title}». Новое — в конце {shown}/message.{n}.md, раздел «Дополнение». Прочитай его и продолжай в рабочем каталоге."
+export const DECISION_QUEUED_TEXT = "[crew] Подзадача {n} «{title}» ждёт очереди и стартует сама; пока ничего по ней не делай."
+export const DECISION_NO_TEXT = "[crew] Владелец ответил, что это не задача: никаких файлов задачи не заводи. Сделай, о чём просили, как обычная правка или ответ, и коротко скажи итог."
+
+/// The built-in text for the answer `what` (`new`, `extend`, `queued`, anything else is "not a task").
+export fn decision_text_of(what str) -> str {
+    if what == "new" { return DECISION_NEW_TEXT }
+    if what == "extend" { return DECISION_EXTEND_TEXT }
+    if what == "queued" { return DECISION_QUEUED_TEXT }
+    DECISION_NO_TEXT
 }
+
+/// The name of the prompt for the answer `what`.
+export fn decision_name_of(what str) -> str {
+    if what == "new" { return "decision_new" }
+    if what == "extend" { return "decision_extend" }
+    if what == "queued" { return "decision_queued" }
+    "decision_no"
+}
+
+/// The note over a text of a layer.
+export fn decision_note_t(template str, n int, title str, shown str) -> str => render_prompt(template, ["n", "${n}", "title", title, "shown", shown])
+
+/// The note for the agent after the owner answered the card.
+export fn decision_note(what str, n int, title str, shown str) -> str => decision_note_t(decision_text_of(what), n, title, shown)
 
 // ----- the view for the page -----
 

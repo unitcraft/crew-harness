@@ -25,7 +25,7 @@ export fn known_keys() -> []KeySpec => [
     ks("route_fix_attempts", "i", "2"), ks("route_worktree_ask", "b", "true"), ks("route_overlap_seconds", "i", "30"), ks("route_keep_days", "i", "30"),
     ks("context_drop_percent", "i", "40"), ks("route_confirm_word", "s", "\"задача\""), ks("route_over_limit_word", "s", "\"сверх\""), ks("route_max_active", "i", "3"),
     ks("route_tool", "b", "true"), ks("route_auto_propose", "b", "false"), ks("route_children", "b", "true"), ks("route_wip", "b", "true"),
-    ks("wip_timeout_seconds", "i", "300"), ks("agent_start_timeout_seconds", "i", "60"), ks("agent_silent_minutes", "i", "5"),
+    ks("wip_timeout_seconds", "i", "300"), ks("agent_start_timeout_seconds", "i", "60"), ks("agent_silent_minutes", "i", "5"), ks("auto_extend_confidence", "s", "\"high\""), ks("task_scope", "s", "\"session\""),
     ks("voice.url", "s", "\"http://127.0.0.1:8178/inference\""), ks("voice.language", "s", "\"auto\""), ks("voice.managed", "b", "true"), ks("voice.dir", "s", "\"\""), ks("voice.model", "s", "\"small\""),
     ks("preset", "s", "\"default\""), ks("tools_dir", "s", "\"\"")
 ]

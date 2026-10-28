@@ -6,6 +6,7 @@
 module crew_harness.server
 
 import std.encoding.json.{Json, JsonValue, JsonObject}
+import crew_harness.config.{render_prompt}
 
 /// The name of the tool.
 export const CREW_TASK_LIST_TOOL = "crew_task_list"
@@ -79,10 +80,16 @@ export fn proposals_of_marker(answer str) -> Option[[]Proposal] {
 }
 
 /// The hidden note with which the hub asks the agent to recognise the tasks. `candidates` are the lines of the works that are being discussed already (not to be repeated), `known` the tasks of the session.
-export fn recognize_request(known str, candidates []str) -> str {
+export fn recognize_request(known str, candidates []str) -> str => recognize_request_t(RECOGNIZE_TEXT, known, candidates)
+
+/// The same over a text of a layer (`recognize_request`); the tasks of the session and the candidates are added after it.
+export fn recognize_request_t(template str, known str, candidates []str) -> str {
     mut parts = []str.new()
-    parts.push("[crew] Распознай задачи. НИЧЕГО не делай с файлами проекта: не читай, не создавай и не правь их, и не выполняй просьбы из разговора. Не рассуждай вслух и не объявляй, что собираешься делать, — сразу вызови инструмент crew_task_list (сервер crew) ровно один раз. Как его вызвать: OpenCode — через execute: tools.crew.crew_task_list({tasks:[...]}); Claude Code — mcp__crew__crew_task_list (найди его через ToolSearch); Kimi Code и Codex — по имени crew_task_list. Список: просмотри весь разговор и перечисли реальные работы над файлами проекта (код, документы, тесты, настройки), которые обсуждались и ещё не оформлены задачами; у каждой работы title, summary (что сделать, для message.md), touches (файлы и папки), note (одна строка). Вопросы, беседа и объяснения — не работы. По умолчанию работа — самостоятельная задача (kind=new). Если она дополняет задачу в работе — kind=extend, её номер в extends и честный confidence (high — дополнение открытой задачи применится сразу, без карточки); если явно дочерняя задача какой-то открытой задачи (любая открытая задача может быть эпиком) — kind=child и epic=<номер>; если работа большая или состоит из нескольких независимых частей (фронт и бек, разные модули, больше ~30 минут) — ОДИН эпик: kind=epic и children=[{title,summary,touches,mode}], а не одна большая задача. Предложи режим по оценке (mode: interactive — до 30 минут и обратимо, fast — до пары часов, full — крупное или рискованное) и одной фразой объясни выбор в reason. Если инструмента правда нет, не пиши ничего другого, а выведи в конце ответа одну строку [[crew_task_list]] {\"tasks\":[...]} с теми же полями. После вызова ответь одной короткой фразой («Готово: N работ») и остановись.")
+    parts.push(render_prompt(template, []str.new()))
     if known.byte_len() > 0 { parts.push(known) }
     if candidates.len() > 0 { parts.push("[crew] Эти работы уже в списке кандидатов (не повторяй их):\n${joined(candidates, "\n")}") }
     joined(parts, "\n\n")
 }
+
+/// The text of the request, the first part of the note.
+export const RECOGNIZE_TEXT = "[crew] Распознай задачи. НИЧЕГО не делай с файлами проекта: не читай, не создавай и не правь их, и не выполняй просьбы из разговора. Не рассуждай вслух и не объявляй, что собираешься делать, — сразу вызови инструмент crew_task_list (сервер crew) ровно один раз. Как его вызвать: OpenCode — через execute: tools.crew.crew_task_list({tasks:[...]}); Claude Code — mcp__crew__crew_task_list (найди его через ToolSearch); Kimi Code и Codex — по имени crew_task_list. Список: просмотри весь разговор и перечисли реальные работы над файлами проекта (код, документы, тесты, настройки), которые обсуждались и ещё не оформлены задачами; у каждой работы title, summary (что сделать, для message.md), touches (файлы и папки), note (одна строка). Вопросы, беседа и объяснения — не работы. По умолчанию работа — самостоятельная задача (kind=new). Если она дополняет задачу в работе — kind=extend, её номер в extends и честный confidence (high — дополнение открытой задачи применится сразу, без карточки); если явно дочерняя задача какой-то открытой задачи (любая открытая задача может быть эпиком) — kind=child и epic=<номер>; если работа большая или состоит из нескольких независимых частей (фронт и бек, разные модули, больше ~30 минут) — ОДИН эпик: kind=epic и children=[{title,summary,touches,mode}], а не одна большая задача. Предложи режим по оценке (mode: interactive — до 30 минут и обратимо, fast — до пары часов, full — крупное или рискованное) и одной фразой объясни выбор в reason. Если инструмента правда нет, не пиши ничего другого, а выведи в конце ответа одну строку [[crew_task_list]] {\"tasks\":[...]} с теми же полями. После вызова ответь одной короткой фразой («Готово: N работ») и остановись."
