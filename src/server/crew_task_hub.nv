@@ -596,6 +596,7 @@ fn Hub mut @ct_pump(at int) Proc Detach Time -> () {
     ro prelude = @route_message_prelude(at)
     ro text = if prelude.byte_len() > 0 { "${prelude}\n\n${note}" } else { note }
     @hint_add(at, "решение по задаче", note)
+    @req_part(at, "tool_result_hint", "Решение по задаче", note)
     ro reason = @route_agent_turn(at, if n > 0 { "Решение по задаче (подзадача ${n})" } else { "Решение по задаче" }, text)
     if reason.byte_len() > 0 {
         @tell_error(0, me.id, me.engine.step_number(), "", "решение по задаче не передано агенту: ${reason}")

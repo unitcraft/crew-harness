@@ -1,0 +1,86 @@
+// trace_api.nv - `GET /api/session-trace/<session>?from=&to=` (task 192.11): lines of the raw exchange with the agent (`<data_dir>/<session>/acp.jsonl`) for the page "Запрос".
+//
+// The numbers are the numbers of the lines of the file, from 1, both ends included; `to` 0 or none - up to `from` + 199. At most 200 lines and 256 KiB of text go out; a line
+// over 16 KiB is cut. Every line goes through `secret_redact` (tokens, keys, user names of paths). The answer: `{"lines":[{"n","t","dir","line"}], "from", "to", "total", "truncated"}`.
+// ORACLE-WORKAROUND(25): the module is declared `module server.front` (without the package prefix) and imported as `crew_harness.server.front`: a module two folders under the source root cannot be declared with the full path; declare it with the prefix when item 25 is fixed
+module server.front
+
+import crew_harness.storage.{session_file, secret_redact}
+import std.encoding.json.{Json, JsonValue, JsonObject}
+import std.fs.{Fs, real_fs, read_text}
+
+const TRACE_MAX_LINES = 200
+const TRACE_MAX_BYTES = 262144
+const TRACE_LINE_BYTES = 16384
+
+fn trace_failure(reason str) -> str {
+    mut o = JsonObject.new()
+    ro set = o.insert("error", JsonValue.str(reason))
+    JsonValue.object(o).to_str()
+}
+
+fn trace_cut(text str, max int) -> str {
+    if text.byte_len() <= max { return text }
+    mut k = max
+    while k > 0 && !text.is_char_boundary(k) { k -= 1 }
+    "${text[..k]}... (cut, ${text.byte_len()} bytes in all)"
+}
+
+/// The lines `from`..`to` of the file `text` (the content of `acp.jsonl`) as the JSON of the answer.
+export fn trace_slice_of(text str, from_in int, to_in int) -> str {
+    ro from = if from_in < 1 { 1 } else { from_in }
+    ro last = if to_in <= 0 || to_in > from + TRACE_MAX_LINES - 1 { from + TRACE_MAX_LINES - 1 } else { to_in }
+    mut rows = []JsonValue.new()
+    mut n = 0
+    mut bytes = 0
+    mut truncated = false
+    mut to_got = from - 1
+    for raw in text.lines() {
+        if raw.byte_len() == 0 { continue }
+        n += 1
+        if n < from { continue }
+        if n > last { continue }
+        if bytes >= TRACE_MAX_BYTES {
+            truncated = true
+            continue
+        }
+        ro rec = match Json.parse(raw) {
+            Ok(v) => v.object() ?? JsonObject.new()
+            Err(e) => JsonObject.new()
+        }
+        ro line = trace_cut(secret_redact((rec.get("line") ?? JsonValue.null()).str() ?? raw), TRACE_LINE_BYTES)
+        mut row = JsonObject.new()
+        ro a = row.insert("n", JsonValue.int(n))
+        ro b = row.insert("t", rec.get("t") ?? JsonValue.int(0))
+        ro c = row.insert("dir", JsonValue.str((rec.get("dir") ?? JsonValue.null()).str() ?? ""))
+        ro d = row.insert("line", JsonValue.str(line))
+        rows.push(JsonValue.object(row))
+        bytes += line.byte_len()
+        to_got = n
+    }
+    mut o = JsonObject.new()
+    ro p1 = o.insert("lines", JsonValue.array(rows))
+    ro p2 = o.insert("from", JsonValue.int(from))
+    ro p3 = o.insert("to", JsonValue.int(to_got))
+    ro p4 = o.insert("total", JsonValue.int(n))
+    ro p5 = o.insert("truncated", JsonValue.bool(truncated || (to_in <= 0 && n > last)))
+    JsonValue.object(o).to_str()
+}
+
+/// The answer for a session and a range: the JSON text, `{"error": ...}` for a bad name or a missing file.
+export fn trace_slice(root str, session str, from int, to int) -> str {
+    ro path = match session_file(root, session, "acp.jsonl") {
+        Some(p) => p
+        None => return trace_failure("the session id is not a safe name")
+    }
+    ro text = with Fs = real_fs() {
+        match read_text(path) {
+            Ok(t) => Some(t)
+            Err(e) => None
+        }
+    }
+    match text {
+        Some(t) => trace_slice_of(t, from, to)
+        None => trace_failure("no raw exchange for this session (acp_trace is off or nothing was said yet)")
+    }
+}

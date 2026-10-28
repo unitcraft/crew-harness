@@ -476,6 +476,7 @@ export fn Hub mut @attach(conn int) -> () {
     }
     @route_attach(conn)
     @machine_attach(conn)
+    @req_attach(conn)
 }
 
 /// A page is gone (it is not told anything more).
@@ -1040,10 +1041,13 @@ fn Hub mut @say(trace str, text str, items []JsonValue) Proc Detach Time -> () {
         @route_save_images(at, prepared.files)
     }
     @ct_remember(at, text, prepared.files)
-    ro prelude0 = @route_message_prelude(at)
     ro reminder = @route_reminder_of(at)
+    @req_part(at, "reminder", "Напоминание режима", reminder)
+    ro prelude0 = @route_message_prelude(at)
     ro prelude = if prelude0.byte_len() > 0 { "${reminder}\n\n${prelude0}" } else { reminder }
     if prelude.byte_len() > 0 { s.clients[0].set_prelude(prelude) }
+    // task 192.11: the request of this turn for the page "Запрос"
+    @req_commit(at, "", req_owner_parts(text, prepared.files))
     feed_in(@settings.store == "pg", @settings.data_dir, s, Incoming.signal("user_message", text))
     s.clients[0].attach_images([]AcpImage.new())
     @drain(at)
@@ -1517,6 +1521,8 @@ export fn Hub mut @handle(conn int, text str) Proc Detach Time -> () {
         @choose(trace, jtext(input, "setting"), jtext(input, "value"))
     } else if kind == "machine_state_get" {
         @machine_get(trace)
+    } else if kind == "request_get" {
+        @req_get(trace, jint(input, "turn"))
     } else if kind == "session_route" {
         @route_set(trace, jtext(input, "route"))
     } else if kind == "route_run" {

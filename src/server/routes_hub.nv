@@ -299,11 +299,16 @@ fn Hub mut @route_message_prelude(at int) Proc -> str {
     if text.byte_len() > 0 {
         parts.push(text)
         @hint_add(at, "инструкция режима", text)
+        @req_part(at, "mode_instruction", "Инструкция режима", text)
     }
-    if hint.byte_len() > 0 { parts.push(hint) }
+    if hint.byte_len() > 0 {
+        parts.push(hint)
+        @req_part(at, "other", "Файлы задачи", hint)
+    }
     if tasks.byte_len() > 0 {
         parts.push(tasks)
         @hint_add(at, "список задач", tasks)
+        @req_part(at, "task_list", "Список задач", tasks)
     }
     joined(parts, "\n\n")
 }
@@ -562,10 +567,17 @@ fn Hub mut @route_mark_progress(at int, title str, skipped bool) -> () {
 fn Hub mut @route_agent_turn(at int, label str, prelude str) Proc Detach Time -> str {
     @route_sync_cwd(at)
     ro reason = @ensure_client(at)
-    if reason.byte_len() > 0 { return reason }
+    if reason.byte_len() > 0 {
+        @req_drop(at)
+        return reason
+    }
     mut s = @sessions[at]
-    if !@takes_message_at(at) { return "ход ещё идёт" }
+    if !@takes_message_at(at) {
+        @req_drop(at)
+        return "ход ещё идёт"
+    }
     s.clients[0].set_prelude(prelude)
+    @req_service(at, label, prelude)
     feed_in(@settings.store == "pg", @settings.data_dir, s, Incoming.signal("user_message", label))
     s.rt.awaiting = true
     @sessions[at] = s

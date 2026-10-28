@@ -1,0 +1,295 @@
+// request_view.nv - the view of the request to the agent for the pages (task 192.11): the page event `turn_request`.
+//
+// What the hub sends to the agent for each turn is made of parts (the reminder of the mode, the instruction of the mode, the list of the tasks, the
+// message of the owner, the pictures, a service turn of the hub) and of what the agent is given once (`session/new`: the folder, the MCP server of the hub).
+// This file puts that into one structure for the page "Запрос" of the right column:
+//   turn_request { session, turn, at, agent, cwd, mode, route, model, effort, label,
+//                  parts: [{kind, title, text, chars, approx_tokens, truncated}],
+//                  tools: { hub: [{name, description, schema}], agent: [{name, kind, title}] },
+//                  mcp: [{name, url_kind}], raw_ref: {file, from_line, to_line} }
+// THE HONEST BORDER: the hub sees only what it sends to the agent by ACP. The own system prompt of the agent (Claude Code, Codex, OpenCode, Kimi) and the full list
+// of its built-in tools are put together by the agent itself and never reach the hub; `tools.agent` is what the agent has shown in this session (`tool_call`), "со слов агента".
+// The event is kept in the process only (`RouteSession.reqs`, the last 20 of a session), like the service hints; it is never written to the feed or to the journal. Every
+// text and schema goes through `secret_redact` (tokens, keys, user names of paths), the text of a part is cut at 64 KiB. The addresses of the MCP servers are not shown, only their kind.
+module crew_harness.server
+
+import crew_harness.acp.{AcpImage}
+import crew_harness.storage.{secret_redact}
+import std.encoding.json.{Json, JsonValue, JsonObject}
+
+/// A part of the request that is waiting for the turn: the kind (`hub_note`, `mode_instruction`, `reminder`, `task_list`, `owner_message`, `images`, `tool_result_hint`, `other`), the title, the text.
+export type ReqPart { kind str, title str, text str }
+
+/// The longest text of a part that goes to a page (bytes).
+export const REQ_TEXT_LIMIT = 65536
+
+/// How many turns of a session are kept.
+export const REQ_KEEP = 20
+
+fn req_chars(text str) -> int {
+    mut n = 0
+    for c in text.chars() { n += 1 }
+    n
+}
+
+/// A part for the page: the text without secrets, cut at `REQ_TEXT_LIMIT`, the number of the characters and the approximate number of the tokens (characters / 4).
+export fn req_part_view(p ReqPart) -> JsonValue {
+    ro clean = secret_redact(p.text)
+    ro chars = req_chars(clean)
+    mut o = JsonObject.new()
+    jput(o, "kind", JsonValue.str(p.kind))
+    jput(o, "title", JsonValue.str(p.title))
+    jput(o, "text", JsonValue.str(cut_text(clean, REQ_TEXT_LIMIT)))
+    jput(o, "chars", JsonValue.int(chars))
+    jput(o, "approx_tokens", JsonValue.int(chars / 4))
+    jput(o, "truncated", JsonValue.bool(clean.byte_len() > REQ_TEXT_LIMIT))
+    JsonValue.object(o)
+}
+
+fn req_str_of(v JsonValue, key str) -> str {
+    match v.object() {
+        Some(o) => jtext(o, key)
+        None => ""
+    }
+}
+
+/// The tools the hub gives to the agent in its MCP server `crew` (`tools`: "ask", "task", "list", "asklist", "all" as in the address of the server): name, description, schema (the text of JSON), from the answer of the server itself to `tools/list`.
+export fn req_hub_tools(tools str) -> JsonValue {
+    ro reply = mcp_handle_for("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/list\"}", tools)
+    mut out = []JsonValue.new()
+    ro parsed = match Json.parse(reply.text) {
+        Ok(v) => v
+        Err(e) => return JsonValue.array(out)
+    }
+    ro result = match parsed.object() {
+        Some(o) => o.get("result") ?? JsonValue.null()
+        None => JsonValue.null()
+    }
+    ro list = match result.object() {
+        Some(o) => jlist(o, "tools")
+        None => []JsonValue.new()
+    }
+    for t in list {
+        mut o = JsonObject.new()
+        jput(o, "name", JsonValue.str(req_str_of(t, "name")))
+        jput(o, "description", JsonValue.str(secret_redact(req_str_of(t, "description"))))
+        ro schema = match t.object() {
+            Some(x) => x.get("inputSchema") ?? JsonValue.null()
+            None => JsonValue.null()
+        }
+        jput(o, "schema", JsonValue.str(secret_redact(schema.to_str())))
+        out.push(JsonValue.object(o))
+    }
+    JsonValue.array(out)
+}
+
+/// The tools of the MCP server of the hub by the address that was given to the agent ("" - no server).
+export fn req_tools_of_url(url str) -> str {
+    if url.byte_len() == 0 { return "" }
+    if url.ends_with("/task") { return "task" }
+    if url.ends_with("/list") { return "list" }
+    if url.ends_with("/asklist") { return "asklist" }
+    "all"
+}
+
+fn req_first_word(title str) -> str {
+    ro t = title.trim_ascii()
+    ro stop = t.find(" ") ?? t.byte_len()
+    ro end = if stop > 40 { 40 } else { stop }
+    mut k = end
+    while k > 0 && !t.is_char_boundary(k) { k -= 1 }
+    t[..k]
+}
+
+/// What the agent has shown of its tools: the entries `{name, kind, title}` (JSON texts) of `known` and of the lines of the feed from `from` on that are `tool_call`; one entry for a name and a kind, at most 40.
+export fn req_agent_tools_scan(lines []str, from int, known []str) -> []str {
+    mut out = []str.new()
+    for k in known { out.push(k) }
+    mut i = from
+    while i < lines.len() {
+        ro line = lines[i]
+        i += 1
+        if !line.contains("\"kind\":\"tool_call\"") { continue }
+        ro o = match Json.parse(line) {
+            Ok(v) => v.object() ?? JsonObject.new()
+            Err(e) => JsonObject.new()
+        }
+        ro input = (o.get("input") ?? JsonValue.null()).object() ?? JsonObject.new()
+        ro title = jtext(input, "title")
+        ro kind = jtext(input, "kind")
+        ro word = req_first_word(title)
+        ro name = if word.byte_len() > 0 { word } else { kind }
+        if name.byte_len() == 0 || out.len() >= 40 { continue }
+        mut seen = false
+        for e in out {
+            ro eo = jobject(e) ?? JsonObject.new()
+            if jtext(eo, "name") == name && jtext(eo, "kind") == kind { seen = true }
+        }
+        if !seen {
+            mut e = JsonObject.new()
+            jput(e, "name", JsonValue.str(name))
+            jput(e, "kind", JsonValue.str(kind))
+            jput(e, "title", JsonValue.str(secret_redact(cut_text(title, 200))))
+            out.push(JsonValue.object(e).to_str())
+        }
+    }
+    out
+}
+
+fn req_values(texts []str) -> JsonValue {
+    mut out = []JsonValue.new()
+    for t in texts {
+        match Json.parse(t) {
+            Ok(v) => out.push(v)
+            Err(e) => ()
+        }
+    }
+    JsonValue.array(out)
+}
+
+/// The event `turn_request` (the JSON text of the line for the page). `hub_tools` - the value of `req_hub_tools`, `agent_tools` - the entries of `req_agent_tools_scan`,
+/// `mcp_kind` - the kind of the MCP server of the hub ("" - none), `from_line` - the number of the first line of `acp.jsonl` that this turn writes (0 - the trace is off).
+export fn req_event_text(id str, session str, step int, turn int, at int, agent str, cwd str, mode str, route str, model str, effort str, label str, parts []ReqPart, hub_tools JsonValue, agent_tools []str, mcp_kind str, from_line int) -> str {
+    mut views = []JsonValue.new()
+    for p in parts { views.push(req_part_view(p)) }
+    mut tools = JsonObject.new()
+    jput(tools, "hub", hub_tools)
+    jput(tools, "agent", req_values(agent_tools))
+    mut mcp = []JsonValue.new()
+    if mcp_kind.byte_len() > 0 {
+        mut m = JsonObject.new()
+        jput(m, "name", JsonValue.str("crew"))
+        jput(m, "url_kind", JsonValue.str(mcp_kind))
+        mcp.push(JsonValue.object(m))
+    }
+    mut raw = JsonObject.new()
+    jput(raw, "file", JsonValue.str("acp.jsonl"))
+    jput(raw, "from_line", JsonValue.int(from_line))
+    jput(raw, "to_line", JsonValue.int(0))
+    mut o = JsonObject.new()
+    jput(o, "session", JsonValue.str(session))
+    jput(o, "turn", JsonValue.int(turn))
+    jput(o, "at", JsonValue.int(at))
+    jput(o, "agent", JsonValue.str(agent))
+    jput(o, "cwd", JsonValue.str(secret_redact(cwd)))
+    jput(o, "mode", JsonValue.str(mode))
+    jput(o, "route", JsonValue.str(route))
+    jput(o, "model", JsonValue.str(model))
+    jput(o, "effort", JsonValue.str(effort))
+    jput(o, "label", JsonValue.str(label))
+    jput(o, "parts", JsonValue.array(views))
+    jput(o, "tools", JsonValue.object(tools))
+    jput(o, "mcp", JsonValue.array(mcp))
+    jput(o, "raw_ref", JsonValue.object(raw))
+    event_line(id, session, step, "turn_request", o, at)
+}
+
+/// The list of the kept events with one more at the end, at most `REQ_KEEP` of them.
+export fn req_kept(list []str, text str) -> []str {
+    mut out = []str.new()
+    for t in list { out.push(t) }
+    out.push(text)
+    while out.len() > REQ_KEEP { out.remove(0) }
+    out
+}
+
+/// The event of the turn `turn` among the kept ones ("" - there is none); `turn` 0 - the last one.
+export fn req_find(list []str, turn int) -> str {
+    if list.len() == 0 { return "" }
+    if turn <= 0 { return list[list.len() - 1] }
+    for t in list {
+        ro o = jobject(t) ?? JsonObject.new()
+        ro input = (o.get("input") ?? JsonValue.null()).object() ?? JsonObject.new()
+        if jint(input, "turn") == turn { return t }
+    }
+    ""
+}
+
+// ----- the hub -----
+
+// A part of the request of the next turn is put aside (the turn collects them and `req_commit` takes them).
+fn Hub mut @req_part(at int, kind str, title str, text str) -> () {
+    if text.byte_len() == 0 { return }
+    mut s = @sessions[at]
+    s.rt.req_parts.push(ReqPart { kind, title, text })
+    @sessions[at] = s
+}
+
+fn Hub @req_setting(s Dialog, setting str) -> str {
+    for c in s.chosen {
+        if c.agent == s.agent && c.setting == setting { return c.value }
+    }
+    ""
+}
+
+/// The turn goes to the agent: the parts put aside and `extra` become one event `turn_request`, kept (the last 20) and sent to every page. Nothing is written to the journal.
+fn Hub mut @req_commit(at int, label str, extra []ReqPart) -> () {
+    mut s = @sessions[at]
+    mut parts = []ReqPart.new()
+    for p in s.rt.req_parts { parts.push(p) }
+    s.rt.req_parts = []ReqPart.new()
+    s.rt.req_turn += 1
+    s.rt.req_tools = req_agent_tools_scan(s.lines, s.rt.req_seen, s.rt.req_tools)
+    s.rt.req_seen = s.lines.len()
+    ro ask = @ask_for(s.agent, s.id)
+    mut model = ""
+    mut from_line = 0
+    if s.clients.len() > 0 {
+        model = s.clients[0].model_name()
+        ro n = s.clients[0].trace_lines()
+        if @settings.acp_trace { from_line = n + 1 }
+        // the note about the questions goes before the FIRST prompt only: it is a part of that request
+        ro due = s.clients[0].ask_hint_due()
+        if due.byte_len() > 0 { parts.push(ReqPart { kind: "hub_note", title: "Заметка хаба об инструменте вопросов", text: due }) }
+    }
+    for p in extra { parts.push(p) }
+    if model.byte_len() == 0 { model = @req_setting(s, "model") }
+    ro tools = req_tools_of_url(ask.mcp_url)
+    ro hub_tools = if tools.byte_len() > 0 { req_hub_tools(tools) } else { JsonValue.array([]JsonValue.new()) }
+    ro kind = if tools.byte_len() > 0 { "http, 127.0.0.1 (локально), адрес и токен не показываются" } else { "" }
+    @serial += 1
+    ro text = req_event_text("srv-${@serial}", s.id, s.engine.step_number(), s.rt.req_turn, now_millis(), s.agent, s.rt.agent_dir(@cwd_of(s.folder)), @req_setting(s, "mode"), s.rt.route, model, @req_setting(s, "effort"), label, parts, hub_tools, s.rt.req_tools, kind, from_line)
+    s.rt.reqs = req_kept(s.rt.reqs, text)
+    @sessions[at] = s
+    @send(0, text)
+}
+
+/// A page attached: the last turns of every session.
+fn Hub mut @req_attach(conn int) -> () {
+    for s in @sessions {
+        for t in s.rt.reqs { @send(conn, t) }
+    }
+}
+
+/// The page asked for one turn (`request_get {turn}`, 0 - the last): it comes again to every page.
+fn Hub mut @req_get(trace str, turn int) -> () {
+    ro at = @find(trace)
+    if at < 0 { return }
+    ro text = req_find(@sessions[at].rt.reqs, turn)
+    if text.byte_len() > 0 { @send(0, text) }
+}
+
+/// The parts of the request that the owner makes: the message and the pictures.
+export fn req_owner_parts(text str, files []AcpImage) -> []ReqPart {
+    mut out = []ReqPart.new()
+    out.push(ReqPart { kind: "owner_message", title: "Сообщение владельца", text })
+    if files.len() > 0 {
+        mut names = []str.new()
+        for f in files { names.push("${f.name} (${f.mime})") }
+        out.push(ReqPart { kind: "images", title: "Картинки: ${files.len()}", text: joined(names, "\n") })
+    }
+    out
+}
+
+// The parts put aside for a turn that did not go out are forgotten.
+fn Hub mut @req_drop(at int) -> () {
+    mut s = @sessions[at]
+    s.rt.req_parts = []ReqPart.new()
+    @sessions[at] = s
+}
+
+// A service turn of the hub (a step of the mode, the recognition of the tasks, the decision on a task): the parts put aside, or the whole text as one note of the hub.
+fn Hub mut @req_service(at int, label str, prelude str) -> () {
+    if @sessions[at].rt.req_parts.len() == 0 { @req_part(at, "hub_note", label, prelude) }
+    @req_commit(at, label, []ReqPart.new())
+}
