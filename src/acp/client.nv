@@ -1158,6 +1158,12 @@ export fn AcpClient mut @close() Time -> () {
 /// The phase: initializing, opening, ready, dead, failed or closed.
 export fn AcpClient @phase() -> str => @phase
 
+/// The number of the lines of `acp.jsonl` written so far (0 - the trace is off); the view of the request (task 192.11) names the lines of a turn by it.
+export fn AcpClient @trace_lines() -> int => @trace.line_count()
+
+/// The note about the tool of questions that goes before the FIRST prompt of this agent ("" - it is already sent, or there is none): the view of the request shows it.
+export fn AcpClient @ask_hint_due() -> str => if @hint_due { @ask.hint } else { "" }
+
 /// The id of the session of the agent ("" until `session/new` is answered).
 export fn AcpClient @session_id() -> str => @session
 

@@ -1,0 +1,110 @@
+// redact.nv - the text with the secrets taken out (task 192.11: the view of the request to the agent shows texts, schemas and lines of the raw exchange).
+//
+// What goes out: the token after `Bearer `, the value of a field of JSON whose name says a secret (`token`, `password`, `secret`, `api_key`, `authorization`, ...)
+// also inside an escaped line of `acp.jsonl`, the value after `NAME_TOKEN=` / `PASSWORD=` / ... , the keys of well-known kinds (`sk-...`, `ghp_...`, `github_pat_...`,
+// `xoxb-...`), the user and the password of an address (the part before the at-sign of an address), the name of the user of the machine in a path (`C:/Users/<user>/...`, `/home/<user>/...`).
+// Nothing is guessed beyond that list: it is a net for the usual leaks, not a proof that a text has no secret.
+module crew_harness.storage
+
+const RED_BS = "\\"
+const RED_DQ = "\""
+
+fn red_quote_stops() -> str => "${RED_DQ}${RED_BS} \n\r\t,}'"
+
+fn red_name_stops() -> str => "${RED_DQ}${RED_BS}/ \n\r\t'"
+
+fn red_json_stops() -> str => "${RED_DQ}${RED_BS}"
+
+// The length of the beginning of `after` up to the first byte of `stops`.
+fn red_end(after str, stops str) -> int {
+    ro set = stops.bytes()
+    mut i = 0
+    for b in after.bytes() {
+        for s in set { if b == s { return i } }
+        i += 1
+    }
+    i
+}
+
+// The length of the beginning of `after` made of letters, digits, `_` and `-`.
+fn red_token_end(after str) -> int {
+    mut i = 0
+    for b in after.bytes() {
+        ro c = b as int
+        ro fit = (c >= 97 && c <= 122) || (c >= 65 && c <= 90) || (c >= 48 && c <= 57) || c == 45 || c == 95
+        if !fit { return i }
+        i += 1
+    }
+    i
+}
+
+// Every value after `marker` (up to a byte of `stops`, or a token of letters and digits when `stops` is empty) of at least `least` bytes becomes `repl`.
+fn red_after(text str, marker str, repl str, stops str, least int) -> str {
+    if !text.contains(marker) { return text }
+    consume sb = StringBuilder.new()
+    mut rest = text
+    mut more = true
+    while more {
+        match rest.find(marker) {
+            None => {
+                sb.append(rest)
+                more = false
+            }
+            Some(at) => {
+                sb.append(rest[..at + marker.byte_len()])
+                ro after = rest[at + marker.byte_len()..]
+                ro end = if stops.byte_len() == 0 { red_token_end(after) } else { red_end(after, stops) }
+                if end == 0 || end < least {
+                    rest = after
+                } else {
+                    sb.append(repl)
+                    rest = after[end..]
+                }
+            }
+        }
+    }
+    sb.into_str()
+}
+
+// The part of an address before the at-sign (the user and the password) is dropped.
+fn red_userinfo(text str) -> str {
+    if !text.contains("://") { return text }
+    mut out = ""
+    mut first = true
+    for part in text.split("://") {
+        if first {
+            out = part
+            first = false
+        } else {
+            ro end = red_end(part, "/ \n\r\t${RED_DQ}'${RED_BS}")
+            ro auth = part[..end]
+            ro rest = part[end..]
+            ro at = auth.rfind("@") ?? -1
+            ro clean = if at >= 0 { auth[at + 1..] } else { auth }
+            out = "${out}://${clean}${rest}"
+        }
+    }
+    out
+}
+
+fn red_users_markers() -> []str => ["${RED_BS}${RED_BS}Users${RED_BS}${RED_BS}", "${RED_BS}Users${RED_BS}", "/Users/", "/home/"]
+
+/// The text with the secrets taken out (see the head of the file).
+export fn secret_redact(text str) -> str {
+    mut t = red_userinfo(text)
+    t = red_after(t, "Bearer ", "<token>", red_quote_stops(), 1)
+    for k in ["token", "access_token", "refresh_token", "password", "passwd", "secret", "client_secret", "api_key", "apiKey", "authorization", "Authorization", "cookie", "Cookie"] {
+        t = red_after(t, "${RED_DQ}${k}${RED_DQ}:${RED_DQ}", "<hidden>", red_json_stops(), 1)
+        t = red_after(t, "${RED_BS}${RED_DQ}${k}${RED_BS}${RED_DQ}:${RED_BS}${RED_DQ}", "<hidden>", red_json_stops(), 1)
+    }
+    for m in ["TOKEN=", "SECRET=", "PASSWORD=", "PASSWD=", "API_KEY=", "APIKEY=", "token=", "password=", "secret=", "api_key=", "apikey="] {
+        t = red_after(t, m, "<hidden>", "${red_quote_stops()}&", 1)
+    }
+    for m in ["sk-", "ghp_", "gho_", "ghs_", "github_pat_", "xoxb-", "xoxp-", "AKIA"] {
+        t = red_after(t, m, "<secret>", "", 16)
+    }
+    for m in red_users_markers() {
+        t = red_after(t, m, "<user>", red_name_stops(), 1)
+    }
+    t
+}

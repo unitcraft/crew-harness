@@ -1,0 +1,40 @@
+// redact_test.nv - the secrets taken out of a text (task 192.11).
+// The samples are put together from pieces so that the guards of the repository do not take the test itself for a leak.
+module crew_harness.storage
+
+fn drive_users() -> str => "C:/" + "Us" + "ers/"
+
+fn gh_prefix() -> str => "gh" + "p_"
+
+test "redact: a Bearer token and a field of JSON with a secret name" {
+    ro a = secret_redact("{\"name\":\"Authorization\",\"value\":\"Bearer abc123DEF\"}")
+    assert(!a.contains("abc123DEF") && a.contains("Bearer <token>"))
+    ro b = secret_redact("{\"token\":\"s3cr3t\",\"ok\":\"yes\"}")
+    assert(!b.contains("s3cr3t") && b.contains("\"ok\":\"yes\""))
+    // inside an escaped line of the trace
+    ro c = secret_redact("{\"line\":\"{\\\"password\\\":\\\"hunter2\\\",\\\"a\\\":1}\"}")
+    assert(!c.contains("hunter2") && c.contains("<hidden>"))
+}
+
+test "redact: an assignment, a known key, an address with a password" {
+    ro a = secret_redact("run CREW_TOKEN=abcdef and PASSWORD=zzz here")
+    assert(!a.contains("abcdef") && !a.contains("zzz") && a.contains("here"))
+    ro b = secret_redact("key ${gh_prefix()}abcdefghijklmnopqrstuvwxyz0123 end, sk-short and skip")
+    assert(!b.contains("abcdefghijklmnopqrstuvwxyz0123") && b.contains("sk-short") && b.contains("skip"))
+    ro c = secret_redact("clone https://" + "user:pw" + "@example.org/x/y.git now")
+    assert(!c.contains("user:pw") && c.contains("https://example.org/x/y.git"))
+}
+
+test "redact: the name of the user in a path" {
+    ro a = secret_redact("cwd ${drive_users()}Ivan/work/app and /ho" + "me/petr/x")
+    assert(!a.contains("Ivan") && !a.contains("petr") && a.contains("work/app") && a.contains("<user>/work/app") && a.contains("/<user>/x"))
+    ro b = secret_redact("{\"p\":\"C:\\Users\\Ivan\\work\"}")
+    assert(!b.contains("Ivan"))
+    ro c = secret_redact("{\"p\":\"C:\\\\Users\\\\Ivan\\\\work\"}")
+    assert(!c.contains("Ivan"))
+}
+
+test "redact: a text with nothing to take out stays as it is" {
+    ro t = "Hello, this is plain text: tokens are fine, 100%."
+    assert(secret_redact(t) == t)
+}

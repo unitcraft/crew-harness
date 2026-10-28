@@ -11,17 +11,17 @@
 module crew_harness.acp
 
 import std.encoding.json.{JsonValue, JsonObject}
-import std.fs.{Fs, real_fs, File, Path, rename, metadata, remove_file}
+import std.fs.{Fs, real_fs, File, Path, rename, metadata, remove_file, read}
 import std.io.{write_all, stderr}
 
 /// The limit of one trace file: 50 MB.
 export const TRACE_LIMIT = 52428800
 
 /// AcpTrace: the state of the record of one session. `on` false - nothing is written.
-export type AcpTrace { path str, size int, limit int, on bool }
+export type AcpTrace { path str, size int, limit int, on bool, lines int }
 
 /// No trace.
-export fn trace_off() -> AcpTrace => { path: "", size: 0, limit: 0, on: false }
+export fn trace_off() -> AcpTrace => { path: "", size: 0, limit: 0, on: false, lines: 0 }
 
 fn trace_size(path Path) Fs -> int {
     match metadata(path) {
@@ -34,8 +34,24 @@ fn trace_size(path Path) Fs -> int {
 export fn trace_open(path str, limit int) -> AcpTrace {
     if path.byte_len() == 0 { return trace_off() }
     ro size = with Fs = real_fs() { trace_size(Path.from_bytes(path.bytes())) }
-    { path, size, limit, on: true }
+    ro lines = if size > 0 { with Fs = real_fs() { trace_count_lines(Path.from_bytes(path.bytes())) } } else { 0 }
+    { path, size, limit, on: true, lines }
 }
+
+// The number of the lines already in the file (task 192.11: the view of the request names the lines of a turn in `acp.jsonl`); 0 when it cannot be read.
+fn trace_count_lines(path Path) Fs -> int {
+    match read(path) {
+        Ok(bytes) => {
+            mut n = 0
+            for b in bytes { if b == (10 as u8) { n += 1 } }
+            n
+        }
+        Err(e) => 0
+    }
+}
+
+/// How many lines the file of the session holds now (the next line to be written is this number + 1).
+export fn AcpTrace @line_count() -> int => @lines
 
 /// The name of the rotated file: `<session>/acp.jsonl` -> `<session>/acp.1.jsonl`.
 export fn trace_rotated_name(path str) -> str {
@@ -140,9 +156,11 @@ export fn AcpTrace mut @record(dir str, line str) Time -> () {
         if @size > 0 && @size + n > @limit {
             trace_rotate(@path)
             @size = 0
+            @lines = 0
         }
         if trace_append(@path, text) {
             @size = @size + n
+            @lines = @lines + 1
         } else {
             @on = false
             trace_warn("the ACP trace cannot be written (${@path}), it is off for this session")
