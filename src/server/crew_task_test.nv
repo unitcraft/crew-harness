@@ -87,16 +87,16 @@ test "crew_task: the proposal goes through its text and through the marker line"
 test "crew_task: the tools are listed by the path of the session" {
     ro all = mcp_handle_for("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/list\"}", "all")
     ro names_all = ct_items(ct_get(ct_get(ctj(all.text), "result"), "tools"))
-    assert(names_all.len() == 15)
+    assert(names_all.len() == 18)
     ro only = mcp_handle_for("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/list\"}", "list")
     ro names_list = ct_items(ct_get(ct_get(ctj(only.text), "result"), "tools"))
-    // task 250: the tools crew_* (12) and crew_task with its actions come with every set but the old one
-    assert(names_list.len() == 14)
+    // task 250: the tools crew_* (15) and crew_task with its actions come with every set but the old one
+    assert(names_list.len() == 17)
     assert(ct_get(names_list[names_list.len() - 1], "name").str() == Some("crew_task_list"))
     ro asked = mcp_handle_for("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/list\"}", "asklist")
-    assert(ct_items(ct_get(ct_get(ctj(asked.text), "result"), "tools")).len() == 15)
+    assert(ct_items(ct_get(ct_get(ctj(asked.text), "result"), "tools")).len() == 18)
     ro auto = mcp_handle_for("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/list\"}", "task")
-    assert(ct_items(ct_get(ct_get(ctj(auto.text), "result"), "tools")).len() == 14)
+    assert(ct_items(ct_get(ct_get(ctj(auto.text), "result"), "tools")).len() == 17)
 }
 
 test "crew_task: a call of crew_task is a task message with the checked arguments, a call of the wrong tool for the path is refused" {

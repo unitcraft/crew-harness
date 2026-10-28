@@ -47,6 +47,15 @@ fn ctl_ask(mut rig Rig, trace str, tool str, args str) Proc Detach Time Net Fs O
     said
 }
 
+// How many non-empty lines a text has.
+fn ctl_line_count(text str) -> int {
+    mut n = 0
+    for l in text.lines() {
+        if l.trim_ascii().byte_len() > 0 { n += 1 }
+    }
+    n
+}
+
 // The text between the first `from` and the next `to` after it ("" - none).
 fn ctl_between(text str, from str, to str) -> str {
     match text.find(from) {
@@ -209,6 +218,37 @@ export fn scenario_crew_tools(settings ServerSettings) Proc Detach Time Net Fs O
     ro r_bn_bad = ctl_ask(rig, p1, "crew_branch_note", "{\"what\":\"git switch main\"}")
     c.expect(r_bn_bad.contains("ERR"), "crew_branch_note without the reason and the one who allowed is refused")
     c.expect(ctl_notes_with(rig, p1, "▸ crew_list") && ctl_notes_with(rig, p1, "▸ crew_send"), "every call is written to the journal of the session")
+
+    // 10. the journals of the task: the lines are built by the hub, checked against the earlier ones, written only in the folder of the task of the session
+    ro tdir = "${ck_tree(rig, 1, p1)}/doc/tasks/${ck_task_id(rig, 1, p1)}/task"
+    ro j0 = ctl_ask(rig, p1, "crew_progress_line", "{\"code\":\"С9\",\"kind\":\"step\",\"k\":1,\"n\":2,\"text\":\"до старта\"}")
+    c.expect(j0.contains("Не записано") && j0.contains("нет строки старт") && !path_there("${tdir}/progress.log"), "a step before the start is refused and no file is made: ${cut_text(j0, 160)}")
+    ro j1 = ctl_ask(rig, p1, "crew_progress_line", "{\"code\":\"С9\",\"kind\":\"start\",\"n\":2,\"text\":\"две единицы\"}")
+    c.expect(j1.contains("Записано: С9 0/2 [") && j1.contains("старт — две единицы"), "start is written with the stamp of the hub: ${cut_text(j1, 200)}")
+    ro j2 = ctl_ask(rig, p1, "crew_progress_line", "{\"code\":\"С9\",\"kind\":\"step\",\"k\":2,\"n\":2,\"text\":\"пропуск\"}")
+    c.expect(j2.contains("Не записано") && j2.contains("пропущены единицы 1"), "a skipped unit is refused: ${cut_text(j2, 160)}")
+    c.expect(ctl_ask(rig, p1, "crew_progress_line", "{\"code\":\"С9\",\"kind\":\"step\",\"k\":1,\"n\":2,\"text\":\"первая единица\"}").contains("Записано: С9 1/2"), "step 1")
+    c.expect(ctl_ask(rig, p1, "crew_progress_line", "{\"code\":\"С9\",\"kind\":\"step\",\"unit\":\"2/2\",\"text\":\"вторая единица\"}").contains("Записано: С9 2/2"), "step 2 by the old form k/N")
+    c.expect(ctl_ask(rig, p1, "crew_progress_line", "{\"code\":\"С9\",\"kind\":\"done\",\"text\":\"итог\"}").contains("С9 2/2 ["), "done")
+    ro j3 = ctl_ask(rig, p1, "crew_progress_line", "{\"code\":\"С9\",\"kind\":\"step\",\"k\":3,\"n\":3,\"text\":\"после готово\"}")
+    c.expect(j3.contains("Не записано") && j3.contains("закончена"), "nothing after done: ${cut_text(j3, 160)}")
+    ro plog = rk_text("${tdir}/progress.log")
+    c.expect(ctl_line_count(plog) == 4 && plog.contains("С9 0/2 [") && plog.contains("готово — итог"), "the file holds exactly the four lines in the order: ${cut_text(plog, 300)}")
+    ro j4 = ctl_ask(rig, p1, "crew_progress_line", "{\"code\":\"С9\",\"kind\":\"start\",\"n\":1,\"file\":\"../../../outside/progress.log\"}")
+    c.expect(j4.contains("Не записано") && j4.contains("вне папки"), "a path that leaves the folder is refused: ${cut_text(j4, 160)}")
+    ro j5 = ctl_ask(rig, p1, "crew_progress_line", "{\"code\":\"С9\",\"kind\":\"start\",\"n\":1,\"file\":\"doc/tasks/999-чужая/task/progress.log\"}")
+    c.expect(j5.contains("Не записано") && j5.contains("вне папки") && j5.contains("чужая"), "the folder of another task is refused: ${cut_text(j5, 160)}")
+    c.expect(ctl_ask(rig, p1, "crew_progress_line", "{\"code\":\"С9\",\"kind\":\"start\",\"n\":1,\"file\":\"notes.md\"}").contains("только в файл"), "the name of the file is fixed")
+    ro j6 = ctl_ask(rig, p1, "crew_log_line", "{\"kind\":\"документ\",\"text\":\"spec.md передан на С2\"}")
+    c.expect(j6.contains("Записано в log.md: ") && j6.contains(" документ: spec.md передан на С2") && rk_text("${tdir}/log.md").contains("документ: spec.md"), "crew_log_line: ${cut_text(j6, 160)}")
+    c.expect(ctl_ask(rig, p1, "crew_log_line", "{\"kind\":\"мнение\",\"text\":\"x\"}").contains("не из списка"), "a kind outside the closed list is refused")
+    ro j7 = ctl_ask(rig, p1, "crew_usage_line", "{\"code\":\"С9\",\"result\":\"готово: 2 из 2\"}")
+    c.expect(j7.contains("Записано в usage.log") && rk_text("${tdir}/usage.log").contains("\"v\":1") && rk_text("${tdir}/usage.log").contains("готово: 2 из 2"), "crew_usage_line: ${cut_text(j7, 200)}")
+    ro j8 = ctl_ask(rig, "s-t1", "crew_progress_line", "{\"code\":\"С9\",\"kind\":\"start\",\"n\":1}")
+    c.expect(j8.contains("задачи нет"), "a session with no task has no journals: ${cut_text(j8, 160)}")
+    c.expect(ctl_ask(rig, "s-t1", "crew_log_line", "{\"kind\":\"документ\",\"text\":\"x\"}").contains("задачи нет"), "and no log")
+    c.expect(ctl_ask(rig, p1, "progress_line", "{\"code\":\"С9\",\"kind\":\"start\",\"n\":1}").contains("unknown tool"), "the old name progress_line is not a tool: no alias")
+    c.expect(ctl_notes_with(rig, p1, "▸ crew_progress_line"), "the calls are in the journal of the session")
 
     // 9. crew_config is not there; the old crew_task_list still works by its name
     ro r_cfg = ctl_ask(rig, p1, "crew_config", "{\"action\":\"show\"}")

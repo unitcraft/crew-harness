@@ -1,9 +1,9 @@
-// crew_journal_hub.nv - task 246: the hub side of the tools of the journals of a task: `crew_progress_line`, `crew_log_line`, `crew_usage_line` (the pure part is `crew_journal.nv`).
+// crew_journal_hub.nv - task 250: the hub side of the tools of the journals of a task: `crew_progress_line`, `crew_log_line`, `crew_usage_line` (the pure part is `crew_journal.nv`).
 //
 // The files lie in the folder of the task of the SESSION that calls (`rt.task_dir`: `doc/tasks/NNN-slug/task/` in the tree of the task, or a folder in the data folder, as for message.md); the names are fixed
 // (progress.log, log.md, usage.log), only appending, the path cannot leave the folder: the optional argument `file` is checked against the folder of the task of the caller, so a session can write the
 // journals of its own task only. A session with no task is refused («задачи нет»). The time is the local time of the machine, put by the hub. A step of progress.log whose N is the number of the boxes of
-// `progress.md` also marks the k-th box of the checklist of the mode (the decision of the task 246: the journal of the units and the checklist of the steps are one progress of the session).
+// `progress.md` also marks the k-th box of the checklist of the mode (the decision of the task 250: the journal of the units and the checklist of the steps are one progress of the session).
 module crew_harness.server
 
 import std.encoding.json.{Json, JsonValue, JsonObject}

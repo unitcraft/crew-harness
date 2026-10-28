@@ -246,7 +246,7 @@ the integrator for the tasks of a project: `show`, `assign`, `submit`...; the `c
 
 ### The tools `crew_*` of the plugin in the product (task 250, ADR-0015)
 
-The tools that the plugin of OpenCode gives its agents (`opencode-plugin/core.ts`) work in the product itself, over the same MCP server (`crew`), by the same names (the owner, 2026-10-28: «инструменты crew_* должны работать
+The tools that the plugin of OpenCode gives its agents (`opencode-plugin/core.ts` and the three journals of `journal.ts`) work in the product itself, over the same MCP server (`crew`), by the same names (the owner, 2026-10-28: «инструменты crew_* должны работать
 в самом продукте Крю; плагин OpenCode в этом никак не участвует»). The plugin is read only for the ideas; the hub does not call it. The inventory with the decision for every tool is
 `doc/tasks/250-crew-tools-port/task/inventory.md`. A call is a message of the MCP server of kind `ctl` (`ask_mcp.nv` checks the arguments that need no hub, `crew_tools_hub.nv` does the work); the result is a text for the agent.
 Every call is written to the journal of the session (a line `▸ crew_…` in the feed) and to the panel «Машины» («Служебные подсказки»: the arguments and the result).
@@ -265,6 +265,9 @@ Every call is written to the journal of the session (a line `▸ crew_…` in th
 | `crew_doctor` | the hub and the session: folder, tree, branch, limit, children that wait, unread letters | no settings |
 | `crew_step_note {reason, minutes?, done?}` | a note of the step in the journal of the session | no terms and no owner's decisions of the plugin |
 | `crew_branch_note {what, why, who, directory?, branch?}` | the reason of a change of the folder or the branch (AGENTS.md, 6a) in the journal, with the folder and the branch the hub knows | the hub does not block commands |
+| `crew_progress_line {code, kind, k?, n?, pass?, stop?, text?, to?}` | the line of `progress.log` of the task of THIS session, built by the hub (the keyword, the local time) and checked against the earlier lines of the session: start, then steps with no gap, then done or stop; a correction; a step also marks the k-th box of `progress.md` when N is the number of the boxes. A session with no task: «задачи нет»; a path out of the folder of the task, the folder of another task and another file name are refused | `progress_line` of the plugin under a new name; no launch line |
+| `crew_log_line {kind, text}` | an entry `YYYY-MM-DD HH:MM <kind>: <text>` of `log.md` of the task, the kind from the closed list of the Canon | `log_line` under a new name |
+| `crew_usage_line {code, result}` | one JSON line (`v: 1`) of `usage.log` next to the `progress.log` of the task | `usage_line` under a new name; no tokens or cost (the hub does not measure them) |
 | `crew_help` | this table, shortened | |
 | `crew_config` | **not here**: the structure of the configs is being discussed with the owner; the call answers «not available yet», no settings file is read or written | postponed |
 
@@ -523,7 +526,8 @@ The events a live session shows come from the engine itself (`Engine.take_events
 | `catalog.nv`, `front/agent_catalog.nv` | the catalog of the families (task 192o): the last lists and values of every agent kept in `agents.json`, told to the page; the route `/api/agents` of the front |
 | `ask_mcp.nv`, `ask_mcp_server.nv` | the MCP tool `ask_user_question` for agents with no tool of their own (task 192i) |
 | `crew_tools.nv`, `crew_tools_hub.nv` | the tools `crew_*` of the plugin in the product (task 250): the definitions and checks (pure), the part of the hub (letters, waits, timers, watches, spawn, doctor, notes) |
-| `crew_tools_kit.nv`, `crew_tools_test.nv`, `../server_crew_live/crew_tools_live_test.nv` | tests of the above |
+| `crew_journal.nv`, `crew_journal_hub.nv` | the journals of a task as tools (task 250): the lines of `progress.log`, `log.md`, `usage.log` built and checked (pure), the files of the task of the session (hub) |
+| `crew_journal_test.nv`, `crew_tools_kit.nv`, `crew_tools_test.nv`, `../server_crew_live/crew_tools_live_test.nv` | tests of the above |
 | `transfer.nv` | the protocol of a conversation handed to another agent (task 192) |
 | `front/projects_api.nv`, `front/images.nv` | `/api/projects`, `/api/fs/*` (task 192m) and `/api/session-image` (task 192) |
 | `routes_kit.nv`, `testkit_project.nv` | settings and repositories of the tests of the modes and of the projects |

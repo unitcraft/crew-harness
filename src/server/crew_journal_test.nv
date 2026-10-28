@@ -1,0 +1,144 @@
+// crew_journal_test.nv - task 250: the pure part of the tools of the journals of a task (crew_progress_line, crew_log_line, crew_usage_line).
+module crew_harness.server
+
+import std.encoding.json.{Json, JsonValue, JsonObject}
+
+fn pa(code str, kind str, k int, n int, text str) -> ProgressArgs => { code, kind, k, n, pass: -1, stop: "", text, to: "" }
+
+fn pa_pass(code str, kind str, n int, pass int) -> ProgressArgs => { code, kind, k: -1, n, pass, stop: "", text: "", to: "" }
+
+fn stamp() -> str => "2026-10-29 10:15"
+
+// Lines of the file after a list of calls: each call is built against the lines written before it; a refused call writes nothing.
+fn jt_run(calls []ProgressArgs) -> []str {
+    mut text = ""
+    mut out = []str.new()
+    for c in calls {
+        ro built = journal_build_progress(c, journal_parse(text), stamp())
+        if built.ok {
+            text = "${text}${built.line}\n"
+            out.push(built.line)
+        } else {
+            out.push("REFUSED: ${built.reason}")
+        }
+    }
+    out
+}
+
+test "journal: the lines are read with and without the field of the time" {
+    match journal_line_of("С2 3/13 [2026-10-29 10:15] spec.md прочитан") {
+        Some(l) => {
+            assert(l.code == "С2" && l.k == 3 && l.n == 13)
+            assert(l.text == "spec.md прочитан")
+        }
+        None => panic("the line is not read")
+    }
+    match journal_line_of("С2 0/5 [10:15] старт") {
+        Some(l) => assert(l.text == "старт")
+        None => panic("the short time is not read")
+    }
+    match journal_line_of("С2 1/5 без времени") {
+        Some(l) => assert(l.text == "без времени")
+        None => panic("a line with no time is not read")
+    }
+    assert(journal_line_of("просто текст").is_none())
+    assert(journal_line_of("С2 x/5 текст").is_none())
+    assert(journal_parse("С2 0/2 старт\nмусор\nС2 1/2 раз\n").len() == 2)
+}
+
+test "journal: the keywords, the final lines, the kinds of a stop" {
+    assert(journal_keyword("старт заход 1") == "старт")
+    assert(journal_keyword("готово — итог") == "готово")
+    assert(journal_keyword("стоп: вопрос — нужен ответ") == "стоп")
+    assert(journal_keyword("стоп без двоеточия") == "")
+    assert(journal_keyword("поправка: к строке") == "поправка")
+    assert(journal_keyword("стартовал вчера") == "")
+    assert(journal_final("готово") == "done" && journal_final("Готово — всё") == "done")
+    assert(journal_final("стоп: ворота — x") == "stop" && journal_final("стоп без двоеточия") == "stop")
+    assert(journal_final("шаг сделан") == "")
+    assert(journal_overstated("готово — N завышено: единиц меньше"))
+    assert(!journal_overstated("готово — всё"))
+    assert(journal_stop_kind("стоп: ворота — вопрос владельцу") == "ворота")
+    assert(journal_stop_kind("стоп: другое — x") == "")
+    assert(journal_kind_of("старт") == "start" && journal_kind_of("done") == "done" && journal_kind_of("ерунда") == "")
+}
+
+test "journal: start, steps, done in order is accepted and the line is built by the hub" {
+    ro out = jt_run([pa("С5д", "start", -1, 2, "опись"), pa("С5д", "step", 1, 2, "первый файл прочитан"), pa("С5д", "step", 2, 2, "второй файл прочитан"), pa("С5д", "done", -1, -1, "итог")])
+    assert(out[0] == "С5д 0/2 [2026-10-29 10:15] старт — опись")
+    assert(out[1] == "С5д 1/2 [2026-10-29 10:15] первый файл прочитан")
+    assert(out[2] == "С5д 2/2 [2026-10-29 10:15] второй файл прочитан")
+    assert(out[3] == "С5д 2/2 [2026-10-29 10:15] готово — итог")
+}
+
+test "journal: the order is checked against the earlier lines of the session" {
+    ro out = jt_run([pa("С5д", "step", 1, 3, "до старта"), pa("С5д", "start", -1, 3, ""), pa("С5д", "start", -1, 3, ""), pa("С5д", "step", 2, 3, "пропуск"), pa("С5д", "step", 1, 3, "первый"), pa("С5д", "step", 1, 3, "повтор"), pa("С5д", "step", 4, 3, "лишний")])
+    assert(out[0].starts_with("REFUSED") && out[0].contains("нет строки старт"))
+    assert(out[1].starts_with("С5д 0/3"))
+    assert(out[2].starts_with("REFUSED") && out[2].contains("одна"))
+    assert(out[3].starts_with("REFUSED") && out[3].contains("пропущены единицы 1"))
+    assert(out[4].starts_with("С5д 1/3"))
+    assert(out[5].starts_with("REFUSED") && out[5].contains("уже записана"))
+    assert(out[6].starts_with("REFUSED") && out[6].contains("больше n"))
+}
+
+test "journal: done needs the units, a stop needs a kind from the list, nothing is written after the final line" {
+    ro out = jt_run([pa("С1", "start", -1, 2, ""), pa("С1", "done", -1, -1, "рано"), pa("С1", "step", 1, 2, "раз"), pa("С1", "step", 2, 2, "два"), pa("С1", "done", -1, -1, "итог"), pa("С1", "step", 3, 3, "после"), pa("С1", "start", -1, 2, "")])
+    assert(out[1].starts_with("REFUSED") && out[1].contains("не записаны единицы"))
+    assert(out[4].starts_with("С1 2/2"))
+    assert(out[5].starts_with("REFUSED") && out[5].contains("закончена"))
+    assert(out[6].starts_with("С1 0/2"))
+    ro stops = jt_run([pa("С8", "start", -1, 2, ""), ProgressArgs { code: "С8", kind: "stop", k: -1, n: -1, pass: -1, stop: "нечто", text: "причина", to: "" }, ProgressArgs { code: "С8", kind: "stop", k: -1, n: -1, pass: -1, stop: "вопрос", text: "нужен ответ", to: "" }, pa("С8", "step", 1, 2, "после стопа")])
+    assert(stops[1].starts_with("REFUSED") && stops[1].contains("не из списка"))
+    assert(stops[2] == "С8 0/2 [2026-10-29 10:15] стоп: вопрос — нужен ответ")
+    assert(stops[3].starts_with("REFUSED") && stops[3].contains("остановлена"))
+}
+
+test "journal: a review session needs the pass, the signature is at most 80 characters, the launch line is not for the agent, a keyword is not text" {
+    ro review = jt_run([pa("С2", "start", -1, 3, ""), pa_pass("С2", "start", 3, 4)])
+    assert(review[0].starts_with("REFUSED") && review[0].contains("pass"))
+    assert(review[1] == "С2 0/3 [2026-10-29 10:15] старт заход 4")
+    ro long = "очень длинная подпись очень длинная подпись очень длинная подпись очень длинная подпись"
+    ro out = jt_run([pa("С7", "start", -1, 2, ""), pa("С7", "step", 1, 2, long), pa("С7", "step", 1, 2, "готово совсем"), pa("С7", "launch", -1, -1, ""), pa("1234567890", "start", -1, 1, "")])
+    assert(out[1].starts_with("REFUSED") && out[1].contains("предел 80"))
+    assert(out[2].starts_with("REFUSED") && out[2].contains("ключевого слова"))
+    assert(out[3].starts_with("REFUSED") && out[3].contains("запуск"))
+    assert(out[4].starts_with("REFUSED") && out[4].contains("код сессии"))
+}
+
+test "journal: a correction quotes the wrong line of the session and keeps k" {
+    ro args = ProgressArgs { code: "С3", kind: "correction", k: -1, n: -1, pass: -1, stop: "", text: "подпись слишком длинная", to: "первый файл" }
+    ro out = jt_run([pa("С3", "start", -1, 2, ""), pa("С3", "step", 1, 2, "первый файл прочитан целиком"), args])
+    assert(out[2].starts_with("С3 1/2 [2026-10-29 10:15] поправка: к строке «первый файл» — подпись слишком длинная"))
+    ro missing = jt_run([pa("С3", "start", -1, 2, ""), args])
+    assert(missing[1].starts_with("REFUSED") && missing[1].contains("не нашлась"))
+}
+
+test "journal: the entries of log.md and the line of usage.log" {
+    ro good = journal_build_log("решение владельца", "владелец, 2026-10-29, чат: «по рекомендации»", stamp())
+    assert(good.reason == "" && good.line == "2026-10-29 10:15 решение владельца: владелец, 2026-10-29, чат: «по рекомендации»")
+    assert(journal_build_log("мнение", "x", stamp()).reason.contains("не из списка"))
+    assert(journal_build_log("документ", "", stamp()).reason == "текст пустой")
+    assert(journal_build_log("документ", "две\nстроки", stamp()).reason.contains("одна запись"))
+    assert(journal_build_log("пуск", "запуск №3 С2 [10:00]", stamp()).reason.contains("агент сессии не пишет"))
+    ro usage = journal_build_usage("С5д", "готово: 13 из 13", "s-1", "claude", 1000, 61000, "2026-10-29 10:15", "abc123")
+    assert(usage.reason == "")
+    match Json.parse(usage.line) {
+        Ok(v) => {
+            ro o = v.object() ?? JsonObject.new()
+            assert((o.get("v") ?? JsonValue.null()).int() == Some(1))
+            assert((o.get("seconds") ?? JsonValue.null()).int() == Some(60))
+            assert((o.get("code") ?? JsonValue.null()).str() == Some("С5д"))
+        }
+        Err(e) => panic("the usage line is not JSON")
+    }
+    assert(journal_build_usage("С5д", "", "s", "a", 0, 0, "t", "").reason == "итог пустой")
+    assert(journal_build_usage("плохой код!", "x", "s", "a", 0, 0, "t", "").reason.contains("код сессии"))
+}
+
+test "journal: the three tools are listed under the new names and the old names are not tools" {
+    assert(journal_tools_json().len() == 3)
+    assert(journal_is_tool("crew_progress_line") && journal_is_tool("crew_log_line") && journal_is_tool("crew_usage_line"))
+    assert(!journal_is_tool("progress_line") && !journal_is_tool("log_line") && !journal_is_tool("usage_line"))
+    assert(ctl_is_tool("crew_log_line") && !ctl_is_tool("log_line"))
+}

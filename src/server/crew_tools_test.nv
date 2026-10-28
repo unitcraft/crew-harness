@@ -43,7 +43,7 @@ fn has_name(names []str, name str) -> bool {
 test "crew_tools: every set but the old one lists the twelve tools of the plugin and crew_task, crew_config is not among them" {
     for set in ["all", "list", "asklist", "task"] {
         ro names = tnames(mcp_handle_for("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/list\"}", set).text)
-        for want in ["crew_list", "crew_role", "crew_send", "crew_inbox", "crew_wait", "crew_spawn", "crew_timer", "crew_watch", "crew_doctor", "crew_step_note", "crew_branch_note", "crew_help", "crew_task", "crew_task_list"] {
+        for want in ["crew_list", "crew_role", "crew_send", "crew_inbox", "crew_wait", "crew_spawn", "crew_timer", "crew_watch", "crew_doctor", "crew_step_note", "crew_branch_note", "crew_help", "crew_task", "crew_task_list", "crew_progress_line", "crew_log_line", "crew_usage_line"] {
             assert(has_name(names, want))
         }
         assert(!has_name(names, "crew_config"))
@@ -134,6 +134,7 @@ test "crew_tools: the letters read well and a question tells how to answer" {
 test "crew_tools: the help names every tool and says crew_config is not here" {
     ro help = ctl_help_text()
     for name in ctl_names() { assert(help.contains(name)) }
+    for name in journal_tool_names() { assert(help.contains(name)) }
     assert(help.contains("crew_task"))
     assert(!help.contains("crew_config {"))
 }

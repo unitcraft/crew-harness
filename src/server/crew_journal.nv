@@ -1,4 +1,4 @@
-// crew_journal.nv - task 246: the journals of a task as tools of the agent (the pure part): `crew_progress_line`, `crew_log_line`, `crew_usage_line`.
+// crew_journal.nv - task 250: the journals of a task as tools of the agent (the pure part): `crew_progress_line`, `crew_log_line`, `crew_usage_line`.
 //
 // They are the tools `progress_line`, `log_line` and `usage_line` of the plugin of OpenCode (`opencode-plugin/journal.ts`, `progress.ts`) under NEW names (the owner, 2026-10-29: no aliases of the old names).
 // The journals of a task are the territory of the product (the Canon, «Три журнала сессии»): the agent names the KIND of a line and the numbers, the hub builds the line itself (the keyword, the date and the
