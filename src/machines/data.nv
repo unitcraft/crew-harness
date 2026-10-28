@@ -685,12 +685,13 @@ export fn library_files() -> []NamedText => [
 ]
 
 /// The called machines of the methodology (Alula 0.27, AL-146): a party `machine <имя>` names no types, the translator takes the input and the result from the file of the called machine
-/// beside the caller (`machine: <имя>` in its header). `agent_step` is called by `session_start`, `session_start` by `cycle_check` and `task_runner`, `cycle_check` by `task_runner`.
-/// `meeting`, called by `cycle_check`, is not a file of the product: `cycle_check` does not translate without it, the place of the owner (task 246).
+/// beside the caller (`machine: <имя>` in its header). `agent_step` is called by `session_start`, `session_start` by `cycle_check` and `task_runner`, `cycle_check` by `task_runner`,
+/// `meeting` by `cycle_check`: the file of the methodology as it is (its commit 1db4005, task 247), a called machine only: it has no tree, the program does not build it alone.
 export fn callee_files() -> []NamedText => [
     NamedText { name: "agent_step.alula.md", text: embed_str("../../machines/methodology/agent_step.alula.md") },
     NamedText { name: "session_start.alula.md", text: embed_str("../../machines/methodology/session_start.alula.md") },
-    NamedText { name: "cycle_check.alula.md", text: embed_str("../../machines/methodology/cycle_check.alula.md") }
+    NamedText { name: "cycle_check.alula.md", text: embed_str("../../machines/methodology/cycle_check.alula.md") },
+    NamedText { name: "meeting.alula.md", text: embed_str("../../machines/methodology/meeting.alula.md") }
 ]
 
 /// The files that a translation of a table is given: the libraries and the called machines.

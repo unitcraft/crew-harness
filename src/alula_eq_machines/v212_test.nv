@@ -24,11 +24,6 @@ test "v212 compile makes the json of the product" {
         // the tree of the chat is kept by hand with Latin names; its table is compared with a tolerance for the names in `chat_test` of `machine_text`
         if name == "chat.alula.md" { continue }
         ro made = run_with(["compile", "/m/${name}"], one("/m/${name}", text_of_file(table_files(), name)))
-        // Alula 0.27 (AL-146): `meeting`, called by the cycle check, is not beside; the place of the owner (task 246)
-        if name == "cycle_check.alula.md" {
-            assert(made.code != 0 && made.err.contains("вызываемой машины `meeting` нет в реестре хозяина"))
-            continue
-        }
         if made.code != 0 { panic("compile ${name}: ${made.err}") }
         assert(same_tree(text_of_file(machine_files(), json_of_table(name)), made.out) == "")
     }
@@ -37,11 +32,6 @@ test "v212 compile makes the json of the product" {
 test "v212 check takes every table" {
     for name in product_tables() {
         ro made = run_with(["check", "/m/${name}"], one("/m/${name}", text_of_file(table_files(), name)))
-        // the place of the owner (task 246): `meeting` is not beside the cycle check
-        if name == "cycle_check.alula.md" {
-            assert(made.code != 0 && made.err.contains("вызываемой машины `meeting` нет в реестре хозяина"))
-            continue
-        }
         if made.code != 0 { panic("check ${name}: ${made.err}") }
         assert(made.code == 0)
     }
@@ -99,11 +89,6 @@ test "v212 the connection of the library in english" {
 
 test "v212 circle of every machine that includes the fragment" {
     for name in ["dialog_steps.alula.json", "session_start.alula.json", "cycle_check.alula.json", "agent_step.alula.json", "dialog.alula.json"] {
-        if name == "cycle_check.alula.json" {
-            // Alula 0.27 (AL-146): `meeting`, called by the cycle check, is not beside, the written file does not compile; the place of the owner (task 246)
-            assert(circle(name, "ru").contains("вызываемой машины `meeting` нет в реестре хозяина"))
-            continue
-        }
         assert(circle(name, "ru") == "")
         assert(circle(name, "en") == "")
         assert(convert_circle(name) == "")

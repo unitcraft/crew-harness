@@ -9,19 +9,21 @@ import alula.machine_run.{load_alula_machine}
 import alula.machine_text.{translate_checked_with, translate_report_with, render_summary, render_machine}
 import crew_harness.machines.{methodology_registry, cycle_check_machine_text, cycle_check_table_text, machine_files, table_files, translation_files}
 
-// Alula 0.27 (AL-146): the table does not translate while `meeting`, which the cycle check calls, is not beside (see "cc circle ru"): the place of the owner (task 246). The tests prove that
-// the first error is that one and the others follow from it (the party `совещание` is not made); the committed tree is moved by the script of the package by its keys. When `meeting` lies beside, the table translates and its translation is the tree again.
+// Alula 0.27 (AL-146): the table translates with the called machines beside (`translation_files`: `session_start` and `meeting` of the methodology, task 247), and its translation is the tree.
 test "cc clean" {
     ro report = table_report()
-    assert(report.errors.len() > 0)
-    assert(without_meeting(report.errors[0].message))
+    if report.errors.len() > 0 { panic(errors_text(report)) }
+    assert(report.errors.len() == 0)
+    assert(report.warnings.len() == 0)
+    assert(report.rows_noted == 0)
+    assert(report.rows_total > 80)
 }
 
 test "cc file is translation" {
-    assert(table_report().json != cycle_check_machine_text())
-    ro plain = translate_report_with(cycle_check_table_text(), translation_files())
-    assert(plain.errors.len() > 0)
-    assert(without_meeting(plain.errors[0].message))
+    assert(table_report().json == cycle_check_machine_text())
+    // Alula 2.26 (AL-138): the tree carries the reads of the states that the check derives, with the hidden reads of the external functions of the registry of the host; the translation
+    // without the registry does not know them, so only the checked translation is the committed file
+    assert(translate_report_with(cycle_check_table_text(), translation_files()).errors.len() == 0)
 }
 
 test "cc in the lists" {
@@ -121,12 +123,8 @@ test "cc header" {
     assert(cycle_check_table_text().contains("- alula_version: 0.27"))
 }
 
-// Alula 0.27 (AL-146): a party `machine <имя>` takes its types from the called machine beside; `meeting`, called by the cycle check, is not a file of the product, so the written file does not
-// translate back. The place of the owner (task 246): the test proves the refusal and its reason, the circle comes back when `meeting` lies beside.
-fn without_meeting(text str) -> bool => text.contains("вызываемой машины `meeting` нет в реестре хозяина")
-
 test "cc circle ru" {
-    assert(without_meeting(circle(cycle_check_machine_text(), "ru")))
+    assert(circle(cycle_check_machine_text(), "ru") == "")
 }
 
 // Alula 2.26 (the package 0.9.0, task 239): a Russian table that connects a library keeps the path of its Russian file in the English text, and a library is read in the language of the
@@ -143,8 +141,8 @@ test "cc circle same file" {
     ro first = render_machine(cycle_check_machine_text(), "ru")
     assert(first.notes.len() == 0)
     ro again = translate_checked_with(first.text, methodology_registry(), translation_files())
-    // the place of the owner (task 246): `meeting` is not beside, see "cc circle ru"
-    assert(without_meeting(notes_of(again).join(" ## ")))
+    assert(again.errors.len() == 0)
+    assert(render_machine(again.json, "ru").text == first.text)
 }
 
 test "cc english file" {
