@@ -63,3 +63,11 @@ test('боковая панель не меняется: остаётся на v
   assert.match(rule('.side-col'), /background:\s*var\(--side\)/);
   assert.doesNotMatch(rule('.side-col'), /var\(--center\)/);
 });
+
+test('шапка чата: одна строка высотой не больше 48 px, без вертикальных отступов', () => {
+  const r = rule('.topbar');
+  const h = Number(/(?:^|[;\s])height:\s*(\d+)px/.exec(r)[1]);
+  assert.ok(h >= 44 && h <= 48, `высота шапки ${h}px`);
+  assert.match(r, /padding:\s*0 /);
+  assert.doesNotMatch(css, /\.topbar \{ min-height/);
+});

@@ -146,7 +146,15 @@ test('groupSessions: по projectId, удалённый проект — в «Б
 test('groupSessions: includeEmpty добавляет проекты без сессий в конец по имени; без списка проектов id остаётся ключом', () => {
   const projects = [{ id: 'p1', name: 'Бета' }, { id: 'p2', name: 'Альфа' }];
   const g = groupSessions([S('a', { projectId: 'p1', updatedAt: 3 })], { projects, includeEmpty: true });
-  assert.deepEqual(g.projects.map((x) => [x.project, x.rows.length]), [['Бета', 1], ['Альфа', 0]]);
+  assert.deepEqual(g.projects.map((x) => [x.project, x.rows.length]), [['Бета', 1], ['Альфа', 0], ['', 0]]);
   const unknown = groupSessions([S('a', { projectId: 'px', project: 'Имя' })], {});
   assert.deepEqual(unknown.projects.map((x) => [x.project, x.id]), [['Имя', 'px']]);
+});
+
+test('groupSessions: «Без проекта» есть всегда при includeEmpty, сессии без проекта и с неизвестным проектом лежат в ней', () => {
+  const projects = [{ id: 'p1', name: 'Один' }];
+  const empty = groupSessions([], { projects, includeEmpty: true });
+  assert.deepEqual(empty.projects.map((x) => [x.project, x.id, x.rows.length]), [['Один', 'p1', 0], ['', '', 0]]);
+  const g = groupSessions([S('a', { projectId: 'p1' }), S('b'), S('c', { projectId: 'gone' })], { projects, includeEmpty: true });
+  assert.deepEqual(g.projects.find((x) => x.project === '').rows.map((r) => r.session.id).sort(), ['b', 'c']);
 });

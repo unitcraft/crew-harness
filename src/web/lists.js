@@ -133,6 +133,7 @@ export function groupSessions(sessions, { pinned = new Set(), projects = null, i
       slot('', '', '').list.push(s);
     }
   }
+  if (includeEmpty) slot('', '', ''); // «Без проекта» есть всегда: с «+» справа, даже пока в ней пусто
   if (includeEmpty && known) for (const p of known.values()) slot(`id:${p.id}`, p.name, p.id);
   // порядок проектов — тот, что владелец задал перетаскиванием и сервер хранит (порядок списка projects); остальные группы после них, свежие выше
   const place = new Map((projects ?? []).map((p, i) => [p.id, i]));

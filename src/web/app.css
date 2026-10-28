@@ -424,8 +424,9 @@ input, select, textarea {
   display: flex;
   align-items: center;
   gap: 8px;
-  min-height: 56px;
-  padding: 8px 12px 8px 20px;
+  height: 46px;
+  box-sizing: border-box;
+  padding: 0 12px 0 20px;
   border-bottom: 1px solid var(--border);
   background: var(--center);
 }
@@ -836,7 +837,7 @@ body { font-size: 14px; line-height: 1.55; letter-spacing: .005em; }
 
 .session-item { min-height: var(--hit); font-size: 13.5px; }
 .session-item:focus-visible { position: relative; z-index: 1; }
-.topbar { min-height: 60px; padding-inline: 24px; }
+.topbar { height: 46px; padding-inline: 24px; }
 .title-block h2 { font-size: 17px; letter-spacing: -.025em; }
 .thread { gap: 19px; padding-top: 30px; }
 .item-user { max-width: min(78%, 620px); }
@@ -904,7 +905,7 @@ body { font-size: 14px; line-height: 1.55; letter-spacing: .005em; }
   .composer { padding-inline: 16px; }
 }
 @media (max-width: 799px) {
-  .topbar { min-height: 54px; padding-inline: 10px; }
+  .topbar { height: 46px; padding-inline: 10px; }
   .thread { padding: 16px 14px 8px; }
   .composer { padding: 6px 10px 10px; }
   .item-user { max-width: 94%; }
