@@ -1,0 +1,172 @@
+// crew_journal_hub.nv - task 246: the hub side of the tools of the journals of a task: `crew_progress_line`, `crew_log_line`, `crew_usage_line` (the pure part is `crew_journal.nv`).
+//
+// The files lie in the folder of the task of the SESSION that calls (`rt.task_dir`: `doc/tasks/NNN-slug/task/` in the tree of the task, or a folder in the data folder, as for message.md); the names are fixed
+// (progress.log, log.md, usage.log), only appending, the path cannot leave the folder: the optional argument `file` is checked against the folder of the task of the caller, so a session can write the
+// journals of its own task only. A session with no task is refused («задачи нет»). The time is the local time of the machine, put by the hub. A step of progress.log whose N is the number of the boxes of
+// `progress.md` also marks the k-th box of the checklist of the mode (the decision of the task 246: the journal of the units and the checklist of the steps are one progress of the session).
+module crew_harness.server
+
+import std.encoding.json.{Json, JsonValue, JsonObject}
+
+// The local date and time `YYYY-MM-DD HH:MM` of the machine.
+fn Hub @jr_stamp() Time -> str {
+    ro offset = Time.local_offset_sec() as int
+    civil_stamp(now_millis() + offset * 1000)
+}
+
+// The folder of the task of a session ("" - there is no task).
+fn Hub @jr_dir(at int) -> str {
+    ro s = @sessions[at]
+    if !s.rt.task_open || s.rt.task_closed || s.rt.task_dir.byte_len() == 0 { return "" }
+    s.rt.task_dir
+}
+
+fn jr_last_name(path str) -> str {
+    ro p = path.replace("\\", "/")
+    mut rest = p
+    mut more = true
+    while more {
+        match rest.find("/") {
+            Some(i) => { rest = rest[i + 1..] }
+            None => { more = false }
+        }
+    }
+    rest
+}
+
+// The reason a `file` argument is refused ("" - it is good): the name is fixed and the folder is the folder of the task of the caller.
+fn Hub @jr_file_reason(at int, file str, name str) -> str {
+    ro f = file.trim_ascii().replace("\\", "/")
+    if f.byte_len() == 0 { return "" }
+    ro s = @sessions[at]
+    if f.contains("..") { return "файл вне папки задачи этой сессии (путь с «..»): журналы пишутся только в папку своей задачи, имя файла фиксировано — ${name}" }
+    if jr_last_name(f) != name { return "писать можно только в файл с именем ${name}" }
+    if f == name { return "" }
+    ro dir = s.rt.task_dir.replace("\\", "/")
+    ro shown = s.rt.task_shown.replace("\\", "/")
+    if f == "${dir}/${name}" || f == "${shown}/${name}" || f == "doc/tasks/${s.rt.task_id}/${name}" || f == "doc/tasks/${s.rt.task_id}/task/${name}" { return "" }
+    "файл вне папки задачи этой сессии (${shown}): журналы пишутся только в папку своей задачи — чужая задача и любой другой путь отклоняются"
+}
+
+// An integer argument: -1 - not given, -2 - given and not a whole number from 0.
+fn ctl_opt_int(a JsonObject, key str) -> int {
+    match a.get(key) {
+        None => -1
+        Some(v) => {
+            if v.is_null() { return -1 }
+            match v.int() {
+                Some(x) => { return if x >= 0 { x } else { -2 } }
+                None => ()
+            }
+            match v.str() {
+                Some(t) => {
+                    if t.trim_ascii().byte_len() == 0 { return -1 }
+                    match t.trim_ascii().to_int() {
+                        Ok(x) => { return if x >= 0 { x } else { -2 } }
+                        Err(e) => { return -2 }
+                    }
+                }
+                None => -2
+            }
+        }
+    }
+}
+
+// The text to append to a file: a newline first when the file does not end with one.
+fn jr_append_text(path str, line str) -> str {
+    ro old = read_file(path) ?? ""
+    if old.byte_len() > 0 && !old.ends_with("\n") { return "\n${line}\n" }
+    "${line}\n"
+}
+
+// The k-th box of the checklist of the mode is marked when the N of the step is the number of the boxes. "" - nothing marked, else the note for the answer.
+fn Hub mut @jr_mark_box(at int, k int, n int) -> str {
+    ro s = @sessions[at]
+    if s.rt.last_sub() == 0 { return "" }
+    ro path = "${s.rt.task_dir}/${s.rt.prog_file(s.rt.last_sub())}"
+    match read_file(path) {
+        Some(old) => {
+            ro prog = parse_progress(old)
+            if prog.total == 0 || prog.total != n || k < 1 || k > prog.total { return "" }
+            if prog.items[k - 1].done { return "" }
+            if write_file(path, progress_mark(old, prog.items[k - 1].text, false)) { return " Пункт чек-листа «${prog.items[k - 1].text}» в ${s.rt.prog_file(s.rt.last_sub())} отмечен." }
+            ""
+        }
+        None => ""
+    }
+}
+
+fn Hub mut @jr_progress(at int, a JsonObject) Proc Detach Time -> CtlRes {
+    ro dir = @jr_dir(at)
+    if dir.byte_len() == 0 { return ctl_err("Не записано: задачи нет — у этой сессии нет папки задачи, журналу некуда писать. Задача появляется после «да» владельца на карточке (crew_task, crew_spawn).") }
+    ro bad_file = @jr_file_reason(at, jtext(a, "file"), "progress.log")
+    if bad_file.byte_len() > 0 { return ctl_err("Не записано: ${bad_file}") }
+    ro kind_word = jtext(a, "kind").trim_ascii().to_ascii_lower()
+    mut kind = ""
+    if kind_word.byte_len() > 0 {
+        kind = journal_kind_of(kind_word)
+        if kind == "" { return ctl_err("Не записано: вид строки «${kind_word}» неизвестен; kind — одно из: start (старт), step (шаг), done (готово), stop (стоп), correction (поправка); строку запуск агент не пишет") }
+    }
+    mut k = ctl_opt_int(a, "k")
+    mut n = ctl_opt_int(a, "n")
+    if k == -2 { return ctl_err("Не записано: k — целое число от 0") }
+    if n == -2 { return ctl_err("Не записано: n — целое число от 0") }
+    ro unit = jtext(a, "unit").trim_ascii()
+    if unit.byte_len() > 0 {
+        ro cut = unit.find("/") ?? -1
+        mut parsed = false
+        if cut > 0 {
+            match unit[..cut].to_int() {
+                Ok(x) => match unit[cut + 1..].to_int() {
+                    Ok(y) => {
+                        parsed = true
+                        if k < 0 { k = x }
+                        if n < 0 { n = y }
+                    }
+                    Err(e) => ()
+                }
+                Err(e) => ()
+            }
+        }
+        if !parsed { return ctl_err("Не записано: счёт «${unit}» не k/N числами; лучше k и n отдельно: crew_progress_line {code: \"С2\", kind: \"step\", k: 4, n: 13, text: \"что сделано\"}") }
+    }
+    ro path = "${dir}/progress.log"
+    ro was_there = path_there(path)
+    ro args = ProgressArgs { code: jtext(a, "code").trim_ascii(), kind, k, n, pass: ctl_opt_int(a, "pass"), stop: jtext(a, "stop").trim_ascii().to_ascii_lower(), text: jtext(a, "text").trim_ascii(), to: jtext(a, "to").trim_ascii() }
+    ro built = journal_build_progress(args, journal_parse(read_file(path) ?? ""), @jr_stamp())
+    if !built.ok { return ctl_err("Не записано: ${built.reason}") }
+    if !was_there && built.kind != "start" { return ctl_err("Не записано: файла нет: журнал создаёт строка старт (kind \"start\")") }
+    if !dir_there(dir) { return ctl_err("Не записано: папки журнала нет: инструмент создаёт только файл progress.log в существующей папке") }
+    if !append_file(path, jr_append_text(path, built.line)) { return ctl_err("Не записано: файловая система отказала") }
+    ro mark = if built.kind == "step" { @jr_mark_box(at, built.k, built.n) } else { "" }
+    ctl_ok("Записано: ${built.line}\n${built.hint}${mark}")
+}
+
+fn Hub mut @jr_log(at int, a JsonObject) Proc Detach Time -> CtlRes {
+    ro dir = @jr_dir(at)
+    if dir.byte_len() == 0 { return ctl_err("Не записано: задачи нет — у этой сессии нет папки задачи, журналу некуда писать. Задача появляется после «да» владельца на карточке (crew_task, crew_spawn).") }
+    ro bad_file = @jr_file_reason(at, jtext(a, "file"), "log.md")
+    if bad_file.byte_len() > 0 { return ctl_err("Не записано: ${bad_file}") }
+    ro built = journal_build_log(jtext(a, "kind"), jtext(a, "text"), @jr_stamp())
+    if built.reason.byte_len() > 0 { return ctl_err("Не записано: ${built.reason}") }
+    if !dir_there(dir) { return ctl_err("Не записано: папки задачи нет: log.md создаётся только в существующей папке") }
+    ro path = "${dir}/log.md"
+    if !append_file(path, jr_append_text(path, built.line)) { return ctl_err("Не записано: файловая система отказала") }
+    ctl_ok("Записано в log.md: ${built.line}")
+}
+
+fn Hub mut @jr_usage(at int, a JsonObject) Proc Detach Time -> CtlRes {
+    ro dir = @jr_dir(at)
+    if dir.byte_len() == 0 { return ctl_err("Не записано: задачи нет — у этой сессии нет папки задачи, журналу некуда писать. Задача появляется после «да» владельца на карточке (crew_task, crew_spawn).") }
+    ro bad_file = @jr_file_reason(at, jtext(a, "file"), "usage.log")
+    if bad_file.byte_len() > 0 { return ctl_err("Не записано: ${bad_file}") }
+    if !path_there("${dir}/progress.log") { return ctl_err("Не записано: рядом нет progress.log: usage.log заводится только в папке задачи с журналом хода") }
+    ro s = @sessions[at]
+    ro head = git_run(if s.rt.worktree.byte_len() > 0 { s.rt.worktree } else { dir }, ["rev-parse", "HEAD"])
+    ro commit = if head.ok { head.text.trim_ascii() } else { "" }
+    ro built = journal_build_usage(jtext(a, "code").trim_ascii(), jtext(a, "result"), s.id, s.agent, s.started_at, now_millis(), "${@jr_stamp()}", commit)
+    if built.reason.byte_len() > 0 { return ctl_err("Не записано: ${built.reason}") }
+    ro path = "${dir}/usage.log"
+    if !append_file(path, jr_append_text(path, built.line)) { return ctl_err("Не записано: файловая система отказала") }
+    ctl_ok("Записано в usage.log: ${built.line}")
+}

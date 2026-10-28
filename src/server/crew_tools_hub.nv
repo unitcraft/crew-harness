@@ -490,7 +490,8 @@ fn Hub mut @ctl_spawn(at int, a JsonObject) Proc Detach Time -> CtlRes {
             if agent.byte_len() > 0 && @agent_ids().contains(agent) { p.agent = agent }
             ro shown = @ct_offer(at, p)
             ro limit = if limit_reached(@cs_active_all(), @settings.route_max_active) { " Сейчас в работе ${@cs_active_all()} из ${@settings.route_max_active}: после «да» работа встанет в очередь или владелец скажет «сверх»." } else { "" }
-            return ctl_ok("${shown}${limit}\nПредложен ${if kind == "child" { "дочерний" } else { "самостоятельный" }} исполнитель «${title}». Когда владелец ответит «да», ждать его: crew_wait {target: \"${title}\"}; писать ему: crew_send.")
+            ro own = if has_task { "" } else { "\nУ этой сессии ещё нет задачи: принятая работа станет задачей ЭТОЙ ЖЕ сессии (в её дереве), а новый исполнитель появляется, когда у сессии уже есть задача." }
+            return ctl_ok("${shown}${limit}\nПредложен ${if kind == "child" { "дочерний" } else { "самостоятельный" }} исполнитель «${title}». Когда владелец ответит «да», ждать его: crew_wait {target: \"${title}\"}; писать ему: crew_send.${own}")
         }
     }
     ctl_err("crew_spawn: not reached")
@@ -683,6 +684,9 @@ fn Hub mut @ctl_run(at int, tool str, a JsonObject, msg McpMsg) Proc Detach Time
     if tool == "crew_doctor" { return @ctl_doctor(at) }
     if tool == "crew_step_note" { return @ctl_step_note(at, a) }
     if tool == "crew_branch_note" { return @ctl_branch_note(at, a) }
+    if tool == "crew_progress_line" { return @jr_progress(at, a) }
+    if tool == "crew_log_line" { return @jr_log(at, a) }
+    if tool == "crew_usage_line" { return @jr_usage(at, a) }
     if tool == "crew_help" { return ctl_ok(ctl_help_text()) }
     ctl_err("unknown tool: ${tool}")
 }

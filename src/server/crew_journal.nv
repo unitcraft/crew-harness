@@ -1,0 +1,530 @@
+// crew_journal.nv - task 246: the journals of a task as tools of the agent (the pure part): `crew_progress_line`, `crew_log_line`, `crew_usage_line`.
+//
+// They are the tools `progress_line`, `log_line` and `usage_line` of the plugin of OpenCode (`opencode-plugin/journal.ts`, `progress.ts`) under NEW names (the owner, 2026-10-29: no aliases of the old names).
+// The journals of a task are the territory of the product (the Canon, «Три журнала сессии»): the agent names the KIND of a line and the numbers, the hub builds the line itself (the keyword, the date and the
+// time of the machine) and checks it against the earlier lines of the same session in the file. The file names are fixed, only appending. The files lie in the folder of the task of the session; the hub side
+// is `crew_journal_hub.nv`.
+//
+// progress.log: `<code> k/N [YYYY-MM-DD HH:MM] <signature>`, the kinds start / step / done / stop / correction (a launch line is written by the runner, never by the agent), the signature is at most 80
+// characters. log.md: `YYYY-MM-DD HH:MM <kind>: <text>`, the kind from the closed list of the Canon. usage.log: one JSON line with the field of the version `v`.
+module crew_harness.server
+
+import std.encoding.json.{Json, JsonValue, JsonObject}
+
+/// The names of the tools of the journals.
+export fn journal_tool_names() -> []str => ["crew_progress_line", "crew_log_line", "crew_usage_line"]
+
+export fn journal_is_tool(name str) -> bool {
+    for n in journal_tool_names() {
+        if n == name { return true }
+    }
+    false
+}
+
+/// The kinds of a stop (the Canon, the runner of the methodology).
+export fn stop_kinds() -> []str => ["вопрос", "план", "ревизия", "требования", "ворота"]
+
+/// The kinds of an entry of log.md (the Canon, process.md).
+export fn log_kinds() -> []str => ["решение владельца", "заседание", "ворота", "документ", "пуск", "слияние", "находка"]
+
+/// The longest signature of a line of progress.log without the field of the time.
+export const SIGNATURE_MAX = 80
+const CORRECTION_QUOTE_MAX = 30
+const CORRECTION_QUOTE_MIN = 10
+const SEP = " — "
+const BOUNDARY = " \t.,:;!—–-"
+
+/// A parsed line of progress.log: the code, k and N, the signature as written and the text after the field of the time.
+export type JLine { code str, k int, n int, sig str, text str }
+
+/// What is known about the last session of a code in the journal (the rules of the methodology, task-runner.md, «Строки progress.log»). -1: none.
+export type SState { started bool, starts int, start_n int, k int, n int, fin str, stop_kind str, low bool, skipped bool, rows []JLine }
+
+// ----- small helpers -----
+
+fn j_digit(s str, i int) -> int {
+    if i < 0 || i + 1 > s.byte_len() || !s.is_char_boundary(i) || !s.is_char_boundary(i + 1) { return -1 }
+    match "0123456789".find(s[i..i + 1]) {
+        Some(v) => v
+        None => -1
+    }
+}
+
+fn j_two(s str, i int) -> int {
+    ro a = j_digit(s, i)
+    ro b = j_digit(s, i + 1)
+    if a < 0 || b < 0 { return -1 }
+    a * 10 + b
+}
+
+fn j_at(s str, i int, ch str) -> bool => i >= 0 && i + ch.byte_len() <= s.byte_len() && s.is_char_boundary(i) && s.is_char_boundary(i + ch.byte_len()) && s[i..i + ch.byte_len()] == ch
+
+// The first character of a text ("" - none).
+fn j_first(s str) -> str {
+    for c in s.chars() { return "${c}" }
+    ""
+}
+
+fn j_is_boundary(c str) -> bool => c.byte_len() > 0 && BOUNDARY.contains(c)
+
+fn j_starts_word(text str, word str) -> bool {
+    if !text.starts_with(word) { return false }
+    ro rest = text[word.byte_len()..]
+    rest.byte_len() == 0 || j_is_boundary(j_first(rest))
+}
+
+fn j_has_control(text str) -> bool {
+    for c in text.chars() {
+        ro s = "${c}"
+        if s == "\n" || s == "\r" || s == "\t" { return true }
+        if s.byte_len() == 1 {
+            // a control character of ASCII: below the space or DEL
+            ro known = " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~"
+            if !known.contains(s) { return true }
+        }
+    }
+    false
+}
+
+fn j_chars(text str) -> int {
+    mut n = 0
+    for c in text.chars() { n += 1 }
+    n
+}
+
+// The first `count` characters of a text.
+fn j_take(text str, count int) -> str {
+    mut out = ""
+    mut i = 0
+    for c in text.chars() {
+        if i < count { out = "${out}${c}" }
+        i += 1
+    }
+    out
+}
+
+// ----- the parse of the journal -----
+
+// The length of the field of the time at the start of a signature (`[HH:MM] ` is 8, `[YYYY-MM-DD HH:MM] ` is 19), 0 - none.
+fn j_time_len(sig str) -> int {
+    if !j_at(sig, 0, "[") { return 0 }
+    if j_at(sig, 3, ":") && j_at(sig, 6, "]") && j_at(sig, 7, " ") {
+        ro h = j_two(sig, 1)
+        ro m = j_two(sig, 4)
+        if h >= 0 && h <= 23 && m >= 0 && m <= 59 { return 8 }
+        return 0
+    }
+    if j_at(sig, 5, "-") && j_at(sig, 8, "-") && j_at(sig, 11, " ") && j_at(sig, 14, ":") && j_at(sig, 17, "]") && j_at(sig, 18, " ") {
+        ro mo = j_two(sig, 6)
+        ro d = j_two(sig, 9)
+        ro h = j_two(sig, 12)
+        ro m = j_two(sig, 15)
+        if mo >= 1 && mo <= 12 && d >= 1 && d <= 31 && h >= 0 && h <= 23 && m >= 0 && m <= 59 && j_two(sig, 1) >= 0 && j_two(sig, 3) >= 0 { return 19 }
+    }
+    0
+}
+
+// A number at the place `from` of a text: the value and the place after it; -1 - none.
+fn j_number(s str, from int) -> []int {
+    mut i = from
+    mut v = 0
+    while j_digit(s, i) >= 0 {
+        v = v * 10 + j_digit(s, i)
+        i += 1
+    }
+    if i == from { return [-1, from] }
+    [v, i]
+}
+
+/// One line of the text of the journal, or None when it is not in the form `<code> k/N <signature>`.
+export fn journal_line_of(s str) -> Option[JLine] {
+    ro sp = s.find(" ")?
+    if sp == 0 { return None }
+    ro code = s[..sp]
+    if code.contains("\t") { return None }
+    ro a = j_number(s, sp + 1)
+    if a[0] < 0 || !j_at(s, a[1], "/") { return None }
+    ro b = j_number(s, a[1] + 1)
+    if b[0] < 0 || !j_at(s, b[1], " ") || b[1] + 1 >= s.byte_len() { return None }
+    ro sig = s[b[1] + 1..]
+    ro cut = j_time_len(sig)
+    Some(JLine { code, k: a[0], n: b[0], sig, text: if cut > 0 { sig[cut..] } else { sig } })
+}
+
+/// The whole journal: the lines in the form, in the order of the file.
+export fn journal_parse(text str) -> []JLine {
+    mut out = []JLine.new()
+    for raw in text.lines() {
+        ro line = if raw.ends_with("\r") { raw[..raw.byte_len() - 1] } else { raw }
+        match journal_line_of(line) {
+            Some(l) => out.push(l)
+            None => ()
+        }
+    }
+    out
+}
+
+// ----- the words -----
+
+/// The keyword at the start of a text: готово, запуск, старт; стоп and поправка only with a colon; "" - none.
+export fn journal_keyword(text str) -> str {
+    for w in ["готово", "запуск", "старт"] {
+        if j_starts_word(text, w) { return w }
+    }
+    if text.starts_with("стоп:") { return "стоп" }
+    if text.starts_with("поправка:") { return "поправка" }
+    ""
+}
+
+/// A final line, also with a mistake in the keyword (a capital letter, no colon): "done", "stop", "" - none.
+export fn journal_final(text str) -> str {
+    if j_starts_word(text, "готово") || j_starts_word(text, "Готово") || j_starts_word(text, "ГОТОВО") { return "done" }
+    if j_starts_word(text, "стоп") || j_starts_word(text, "Стоп") || j_starts_word(text, "СТОП") { return "stop" }
+    ""
+}
+
+/// `готово — N завышено: <reason>`: the work is done, the N of the start line was too high.
+export fn journal_overstated(text str) -> bool {
+    if !text.starts_with("готово") { return false }
+    mut rest = text["готово".byte_len()..]
+    mut seps = 0
+    while j_is_boundary(j_first(rest)) {
+        rest = rest[j_first(rest).byte_len()..]
+        seps += 1
+    }
+    seps > 0 && rest.starts_with("N завышено:")
+}
+
+/// The kind of a stop in `стоп: <kind> — ...`: the first word after the colon, if it is in the list; "" - none.
+export fn journal_stop_kind(text str) -> str {
+    if !text.starts_with("стоп:") { return "" }
+    mut rest = text["стоп:".byte_len()..].trim_ascii_start()
+    mut word = ""
+    while rest.byte_len() > 0 && !j_is_boundary(j_first(rest)) {
+        word = "${word}${j_first(rest)}"
+        rest = rest[j_first(rest).byte_len()..]
+    }
+    for k in stop_kinds() {
+        if k == word { return word }
+    }
+    ""
+}
+
+fn j_in_stops(word str) -> bool {
+    for k in stop_kinds() {
+        if k == word { return true }
+    }
+    false
+}
+
+// ----- the state of the session -----
+
+fn j_fresh() -> SState => { started: false, starts: 0, start_n: -1, k: -1, n: -1, fin: "", stop_kind: "", low: false, skipped: false, rows: []JLine.new() }
+
+/// The state of the last session of the code `code` in the lines of the journal (the same reading as the panel of the plugin).
+export fn journal_session(lines []JLine, code str) -> SState {
+    mut st = j_fresh()
+    for l in lines {
+        if l.code != code { continue }
+        ro kw = journal_keyword(l.text)
+        if kw == "поправка" {
+            if st.k >= 0 { st.rows.push(l) }
+            continue
+        }
+        if kw == "запуск" && l.k == 0 && l.n == 0 {
+            st = j_fresh()
+            continue
+        }
+        ro fin = journal_final(l.text)
+        if st.fin != "" {
+            if l.k == st.k && (fin == st.fin || (st.fin == "done" && kw == "стоп")) {
+                st.n = l.n
+                st.fin = fin
+                st.stop_kind = if fin == "stop" { journal_stop_kind(l.text) } else { "" }
+                st.rows.push(l)
+                continue
+            }
+            st = j_fresh()
+        }
+        if kw == "старт" && st.k < 0 {
+            st = j_fresh()
+            st.started = true
+            st.starts = 1
+            st.start_n = l.n
+            st.k = l.k
+            st.n = l.n
+            st.rows.push(l)
+        } else if kw == "старт" && st.starts == 0 {
+            st.started = true
+            st.starts = 1
+            st.start_n = l.n
+            st.n = l.n
+            st.low = false
+            st.rows.push(l)
+        } else if kw == "старт" {
+            st.starts += 1
+            st.n = l.n
+            st.low = false
+            st.rows.push(l)
+        } else if st.k >= 0 && l.k < st.k {
+            st = j_fresh()
+            st.k = l.k
+            st.n = l.n
+            st.fin = fin
+            st.stop_kind = if fin == "stop" { journal_stop_kind(l.text) } else { "" }
+            st.rows.push(l)
+        } else {
+            st.skipped = st.skipped || (st.k >= 0 && l.k > st.k + 1)
+            st.k = l.k
+            st.n = l.n
+            st.fin = fin
+            st.stop_kind = if fin == "stop" { journal_stop_kind(l.text) } else { "" }
+            st.low = false
+            st.rows.push(l)
+        }
+        if kw == "готово" && st.started && st.starts == 1 && st.start_n >= 0 && l.k < st.start_n && !journal_overstated(l.text) {
+            st.fin = ""
+            st.low = true
+        }
+    }
+    st
+}
+
+// A finished session: one start line and k not below the N of it.
+fn j_finishes(st SState) -> bool => st.started && st.starts == 1 && st.start_n >= 0 && st.k >= st.start_n
+
+fn j_defect(st SState) -> str {
+    if !st.started { return "; у сессии старт не первой строкой — это поправкой не исправить: если строки старт ещё нет, допиши её сейчас (kind start) и продолжай работу, новую попытку сессии не начинай" }
+    ro what = if st.starts > 1 { "вторая строка старт" } else if st.skipped { "пропуск единицы" } else { "" }
+    if what.byte_len() > 0 { return "; у сессии ${what} — это поправкой не исправить: продолжай работу, новую попытку сессии не начинай" }
+    ""
+}
+
+fn j_ex(code str, rest str) -> str => "crew_progress_line {code: \"${code}\", ${rest}}"
+
+fn j_range(a int, b int) -> str => if b > a { "${a}–${b}" } else { "${a}" }
+
+fn j_is_review(code str) -> bool => code.starts_with("С2") || code.starts_with("С4") || code.starts_with("С6") || code.starts_with("C2") || code.starts_with("C4") || code.starts_with("C6")
+
+fn j_code_ok(code str) -> bool {
+    ro n = j_chars(code)
+    if n < 1 || n > 8 { return false }
+    for c in code.chars() {
+        ro s = "${c}"
+        ro plain = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZабвгдеёжзийклмнопрстуфхцчшщъыьэюяАБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯ"
+        if !plain.contains(s) { return false }
+    }
+    true
+}
+
+/// The kind of a line by its name (the English and the Russian word): start, step, done, stop, correction, launch; "" - unknown.
+export fn journal_kind_of(word str) -> str {
+    if word == "start" || word == "старт" { return "start" }
+    if word == "step" || word == "шаг" { return "step" }
+    if word == "done" || word == "готово" { return "done" }
+    if word == "stop" || word == "стоп" { return "stop" }
+    if word == "launch" || word == "запуск" { return "launch" }
+    if word == "correction" || word == "поправка" { return "correction" }
+    ""
+}
+
+/// The arguments of `crew_progress_line` after the hub has read them: -1 means "not given" for the numbers.
+export type ProgressArgs { code str, kind str, k int, n int, pass int, stop str, text str, to str }
+
+/// A line built, or the reason it is refused (the rule, the expected form, an example).
+export type ProgressOut { ok bool, line str, kind str, hint str, k int, n int, reason str }
+
+fn p_no(reason str) -> ProgressOut => { ok: false, line: "", kind: "", hint: "", k: 0, n: 0, reason }
+
+/// Build a line of progress.log by the kind and check it against the earlier lines of the session. `stamp` is `YYYY-MM-DD HH:MM` of the machine.
+export fn journal_build_progress(a ProgressArgs, prior []JLine, stamp str) -> ProgressOut {
+    ro code = a.code
+    if !j_code_ok(code) { return p_no("код сессии: 1–8 букв или цифр без пробелов, дословно из строки «Сессия:» (например С2 или С5д)") }
+    mut kind = a.kind
+    if kind == "" { kind = "step" }
+    if kind == "launch" { return p_no("строку запуск агент сессии не пишет: её пишет запускающий (интегратор проекта или раннер); первая строка сессии агента — старт: ${j_ex(code, "kind: \"start\", n: <число единиц>")}") }
+    ro text = a.text
+    if j_has_control(text) { return p_no("текст в одну строку, без переводов строки и управляющих символов") }
+    ro st = journal_session(prior, code)
+    ro review = j_is_review(code)
+    mut k = a.k
+    mut n = a.n
+    mut sig = ""
+    mut hint = ""
+    ro start_call = j_ex(code, "kind: \"start\", n: <число единиц>${if review { ", pass: <номер захода>" } else { "" }}")
+    ro closed = if st.fin == "stop" {
+        "сессия ${code} остановлена строкой стоп: (${st.k}/${st.n}); после неё строки той же сессии не пишутся, кроме её повтора с тем же k в верной форме; продолжение после ответа — новой сессией, её первая строка — старт: ${start_call}"
+    } else {
+        "сессия ${code} уже закончена строкой готово ${st.k}/${st.n}; после неё пишется только её повтор с тем же k для исправления формы, новая работа — новой сессией: ${start_call}"
+    }
+    if kind == "start" {
+        if n < 0 { return p_no("у строки старт нужен n — число единиц, видимое сессии (первая строка сессии — <код> 0/<N> [время] старт); пример: ${j_ex(code, "kind: \"start\", n: 34, pass: 1, text: \"опись 34 источника\"")}") }
+        if a.pass == -2 || a.pass == 0 { return p_no("pass — номер захода, целое число от 1") }
+        if a.pass < 0 && review { return p_no("у проверяющей сессии ${code} нужен pass — номер захода (в подписи первой строки «старт заход 7»); пример: ${j_ex(code, "kind: \"start\", n: ${n}, pass: 9")}") }
+        if text.byte_len() > 0 && journal_keyword(text) != "" { return p_no("в text не пиши ключевое слово: «старт» и номер захода ставит инструмент; в text — что предстоит (например «опись 34 источника»)") }
+        ro late = st.k >= 0 && st.fin == "" && st.starts == 0
+        if st.k >= 0 && st.fin == "" && !late { return p_no("строка старт в сессии одна: у сессии ${code} уже есть строка старт (последняя строка — ${st.k}/${st.n}); продолжай работу следующей единицей (k: ${st.k + 1}), новую попытку сессии не начинай") }
+        k = 0
+        sig = "старт${if a.pass > 0 { " заход ${a.pass}" } else { "" }}${if text.byte_len() > 0 { "${SEP}${text}" } else { "" }}"
+        hint = if late {
+            "строка старт дописана не первой строкой — это находка формы, не повод начинать заново; продолжай работу: ${j_ex(code, "kind: \"step\", k: ${st.k + 1}, n: ${n}, text: \"что сделано\"")}"
+        } else if n > 0 {
+            "дальше — строка сразу после каждой завершённой единицы: ${j_ex(code, "kind: \"step\", k: 1, n: ${n}, text: \"что сделано\"")}"
+        } else {
+            "единиц нет: конец — kind \"done\""
+        }
+    } else if kind == "step" {
+        if k < 0 || n < 0 { return p_no("у шага нужны k и n — номер завершённой единицы и число единиц; пример: ${j_ex(code, "kind: \"step\", k: 4, n: 13, text: \"spec.md прочитан целиком\"")}") }
+        if text.byte_len() == 0 { return p_no("у шага нужен text — что сделано, начиная с предмета (до 80 знаков вместе со всем, кроме времени)") }
+        if journal_keyword(text) != "" { return p_no("text шага начинается с ключевого слова: старт, готово, стоп и поправку ставит инструмент по виду строки — kind start, done, stop, correction; в шаге первое слово — предмет (что сделано)") }
+        if st.fin != "" { return p_no(closed) }
+        if st.k < 0 { return p_no("у сессии ${code} в этом файле нет строки старт: первая строка сессии — старт, её пишут до чтения и работы. Сначала: ${j_ex(code, "kind: \"start\", n: ${n}${if review { ", pass: <номер захода>" } else { "" }}")}") }
+        if k < 1 { return p_no("k шага — номер завершённой единицы, от 1 (0 — только у старта)") }
+        if k > n { return p_no("k=${k} больше n=${n}; если единиц оказалось больше, назови новое n") }
+        if k <= st.k { return p_no("единица ${k} уже записана (последняя строка сессии ${code} — ${st.k}/${st.n}); k не повторяется и не уменьшается — следующая единица ${st.k + 1}") }
+        if k > st.k + 1 { return p_no("пропущены единицы ${j_range(st.k + 1, k - 1)}: строка пишется на каждую завершённую единицу, сразу после неё, по одной. Запиши сначала: ${j_ex(code, "kind: \"step\", k: ${st.k + 1}, n: ${n}, text: \"что сделано\"")}") }
+        sig = text
+        hint = "${if k < n { "следующая — k: ${k + 1}" } else { "все единицы записаны; конец — ${j_ex(code, "kind: \"done\", text: \"итог\"")}, остановка на воротах — kind \"stop\"" }}${j_defect(st)}"
+    } else if kind == "done" {
+        if st.k < 0 { return p_no("у сессии ${code} в этом файле нет строки старт — готово пишет начатая сессия; начало: ${start_call}") }
+        if text.byte_len() > 0 && journal_keyword(text) != "" { return p_no("в text не пиши «готово»: ключевое слово ставит инструмент; в text — итог") }
+        ro stop_instead = "останови сессию строкой стоп с тем же k (${st.k}): ${j_ex(code, "kind: \"stop\", stop: \"ворота\", text: \"причина\"")}"
+        ro repeat = st.fin == "done"
+        ro overstated = text.starts_with("N завышено:")
+        if st.fin == "stop" { return p_no(closed) }
+        if repeat {
+            if !j_finishes(st) { return p_no("строка готово этой сессии завершением не считается (нет строки старт или их две) — её повтор не пишется; ${stop_instead}") }
+            if n >= 0 && n != st.n { return p_no("сессия ${code} уже закончена строкой готово ${st.k}/${st.n}; после неё пишется только её повтор с тем же k (${st.k}) и n (${st.n}) для исправления формы, новая работа — новой сессией (kind \"start\")") }
+            k = st.k
+            n = st.n
+        } else {
+            if !st.started { return p_no("у сессии ${code} без строки старт готово не пишется: такое готово завершением не считается; строки старт ещё нет — допиши её сейчас: ${start_call}, затем готово; или ${stop_instead}") }
+            if st.starts > 1 { return p_no("у сессии ${code} со второй строкой старт готово не пишется: такое готово завершением не считается (строка старт в сессии одна); ${stop_instead}") }
+            if overstated {
+                k = st.k
+                if n < 0 { n = st.n }
+            } else {
+                if n < 0 { n = st.n }
+                if n < 0 { return p_no("не известно n сессии: назови n") }
+                if st.k < n - 1 { return p_no("до готово не записаны единицы ${j_range(st.k + 1, n - 1)} из ${n}: готово — строка последней единицы N/N; сессия, вставшая раньше, пишет kind \"stop\" с видом остановки") }
+                k = if st.k > n { st.k } else { n }
+                if st.start_n >= 0 && k < st.start_n { return p_no("готово при k=${k} меньше N из строки старт (${st.start_n}) завершением не считается; исправь по делу: работа сделана, а N завышено — ${j_ex(code, "kind: \"done\", text: \"N завышено: <причина>\"")}; работа идёт — следующая единица k: ${st.k + 1}; остановился — ${stop_instead}") }
+            }
+        }
+        sig = "готово${if text.byte_len() > 0 { "${SEP}${text}" } else { "" }}"
+        hint = "${if repeat { "повтор итоговой строки записан, читается последняя; " } else { "" }}сессия закончена; дальнейшее — новой сессией: ${start_call}"
+    } else if kind == "correction" {
+        if st.k < 0 { return p_no("у сессии ${code} в этом файле нет строк — нечего поправлять; поправка пишется к строке той же сессии") }
+        if st.fin != "" {
+            ro again = if st.fin == "done" { "kind: \"done\", text: \"итог\"" } else { "kind: \"stop\", stop: \"<вид из списка>\", text: \"причина\"" }
+            return p_no("после итоговой строки (готово или стоп:) поправка не пишется: итоговую строку исправляют её повтором с тем же k (${st.k}) и ключевым словом в верной форме: ${j_ex(code, again)}")
+        }
+        if a.to.byte_len() == 0 { return p_no("у поправки нужен to — начало ошибочной строки той же сессии (подпись после времени, до ${CORRECTION_QUOTE_MAX} знаков); пример: ${j_ex(code, "kind: \"correction\", to: \"опись source inventory\", text: \"подпись 93 знака, предел 80\"")}") }
+        if j_has_control(a.to) || a.to.contains("«") || a.to.contains("»") { return p_no("to — начало строки в одну строку, без кавычек « » и управляющих символов") }
+        if text.byte_len() == 0 { return p_no("у поправки нужен text — что не так в строке") }
+        mut hit = -1
+        mut at = 0
+        for l in st.rows {
+            if l.text.starts_with(a.to) { hit = at }
+            at += 1
+        }
+        if hit < 0 { return p_no("строка сессии ${code}, подпись которой начинается с «${a.to}», в этом файле не нашлась: to — начало подписи после времени строки этой сессии; поправка исправляет только форму записанной строки. Пропуск единицы и старт не первой строкой поправкой не исправить: продолжай работу, новую попытку сессии не начинай") }
+        ro line_text = st.rows[hit].text
+        ro total = j_chars(line_text)
+        ro least = if total < CORRECTION_QUOTE_MIN { total } else { CORRECTION_QUOTE_MIN }
+        ro want = if j_chars(a.to) > least { j_chars(a.to) } else { least }
+        mut quote = j_take(line_text, if want < CORRECTION_QUOTE_MAX { want } else { CORRECTION_QUOTE_MAX })
+        if j_chars(quote.trim_ascii()) >= least { quote = quote.trim_ascii() }
+        k = st.k
+        n = st.n
+        sig = "поправка: к строке «${quote}»${SEP}${text}"
+        hint = "поправка записана, k не меняется (не единица); следующая единица — k: ${st.k + 1}${j_defect(st)}"
+    } else {
+        ro word = a.stop
+        if !j_in_stops(word) { return p_no("вид остановки ${if word.byte_len() > 0 { "«${word}» не из списка" } else { "не назван" }}: stop — одно из слов ${joined(stop_kinds(), ", ")} (стоп: <вид> — <причина>); пример: ${j_ex(code, "kind: \"stop\", stop: \"вопрос\", text: \"нужен ответ интегратора о составе описи\"")}") }
+        if text.byte_len() == 0 { return p_no("у остановки нужен text — причина") }
+        if st.fin == "done" { return p_no("сессия ${code} уже закончена строкой готово ${st.k}/${st.n}; остановка пишется до неё (после готово строка стоп: — только исправление готово при k меньше N из строки старт)") }
+        if st.fin == "stop" && st.stop_kind != "" && st.stop_kind != word { return p_no("сессия ${code} уже остановлена строкой стоп: ${st.stop_kind}; её повтор пишется с тем же k, а вид остановки меняется, только если прежний не из списка — повтори stop: \"${st.stop_kind}\"") }
+        k = if st.k >= 0 { st.k } else { 0 }
+        n = if st.n >= 0 { st.n } else if n >= 0 { n } else { 0 }
+        sig = "стоп: ${word}${SEP}${text}"
+        hint = "сессия остановлена; после строки стоп: единицы этой сессии не пишутся — продолжение после ответа идёт новой сессией, её первая строка — старт: ${start_call}"
+    }
+    ro len = j_chars(sig)
+    if len > SIGNATURE_MAX { return p_no("подпись «${sig}» — ${len} знаков, предел ${SIGNATURE_MAX} без поля времени; сократи text на ${len - SIGNATURE_MAX}, подробности — в отчёт или log.md") }
+    ProgressOut { ok: true, line: "${code} ${k}/${n} [${stamp}] ${sig}", kind, hint, k, n, reason: "" }
+}
+
+// ----- log.md -----
+
+/// An entry of log.md: `<stamp> <kind>: <text>`, or the reason it is refused ("" in `line`).
+export type LogOut { line str, reason str }
+
+export fn journal_build_log(kind_raw str, text_raw str, stamp str) -> LogOut {
+    ro kind = kind_raw.trim_ascii()
+    ro text = text_raw.trim_ascii()
+    mut known = false
+    for k in log_kinds() {
+        if k == kind { known = true }
+    }
+    if !known { return LogOut { line: "", reason: "вид записи ${if kind.byte_len() > 0 { "«${kind}» не из списка" } else { "не назван" }}: kind — одно из: ${joined(log_kinds(), ", ")} (Канон, process.md); пример: crew_log_line {kind: \"документ\", text: \"spec.md передан на С2\"}" } }
+    if text.byte_len() == 0 { return LogOut { line: "", reason: "текст пустой" } }
+    if j_has_control(text) { return LogOut { line: "", reason: "одна запись — одна строка: без переводов строки и управляющих символов (две записи — два вызова)" } }
+    if text.starts_with("запуск №") || text.starts_with("запуск №") { return LogOut { line: "", reason: "запись о запуске («запуск №<n> <код> [время]») агент сессии не пишет: её пишет запускающий — интегратор проекта или раннер" } }
+    if j_chars(text) > 2000 { return LogOut { line: "", reason: "текст длиннее 2000 знаков; подробности — в отчёт, в журнал — итог и ссылка" } }
+    LogOut { line: "${stamp} ${kind}: ${text}", reason: "" }
+}
+
+// ----- usage.log -----
+
+/// A line of usage.log (`v` is the version of the form), or the reason it is refused.
+export fn journal_build_usage(code str, result_raw str, session str, agent str, started_ms int, now_ms int, at_text str, commit str) -> LogOut {
+    ro result = result_raw.trim_ascii()
+    if !j_code_ok(code) { return LogOut { line: "", reason: "код сессии: 1–8 букв или цифр без пробелов (например С5д)" } }
+    if result.byte_len() == 0 { return LogOut { line: "", reason: "итог пустой" } }
+    if j_has_control(result) { return LogOut { line: "", reason: "итог в одну строку, без управляющих символов" } }
+    if j_chars(result) > 200 { return LogOut { line: "", reason: "итог длиннее 200 знаков; сократи" } }
+    mut o = JsonObject.new()
+    mput(o, "v", JsonValue.int(1))
+    mput(o, "code", JsonValue.str(code))
+    mput(o, "at", JsonValue.str(at_text))
+    mput(o, "session", JsonValue.str(session))
+    mput(o, "agent", JsonValue.str(agent))
+    mput(o, "started_ms", JsonValue.int(started_ms))
+    mput(o, "seconds", JsonValue.int(if started_ms > 0 && now_ms >= started_ms { (now_ms - started_ms) / 1000 } else { 0 }))
+    mput(o, "commit", JsonValue.str(commit))
+    mput(o, "result", JsonValue.str(result))
+    LogOut { line: JsonValue.object(o).to_str(), reason: "" }
+}
+
+// ----- the definitions of the tools -----
+
+fn jp(name str, value JsonValue) -> CtlProp => { name, value }
+
+/// The definitions of the three tools for `tools/list`.
+export fn journal_tools_json() -> []JsonValue {
+    mut out = []JsonValue.new()
+    out.push(ctl_def("crew_progress_line", "The way to write the progress journal of the task (progress.log in the folder of the task of THIS session): name the KIND of the line and the numbers, the hub builds the line itself - keyword, pass number, stop kind, date and time of the machine - and checks it against the earlier lines of the same session in the file (never write these lines by hand). Kinds: start {n, pass for a review session С2/С4/С6, text optional} -> '<code> 0/N [time] старт заход P — text', written BEFORE reading or work, creates the file if missing; one start per session; step {k, n, text} -> '<code> k/N [time] text', one line right after EACH finished unit, k = previous + 1 (when n is the number of the boxes of progress.md, the k-th box of the checklist of the mode is marked too); done {text optional} -> '<code> N/N [time] готово — text', the last line of a finished session (k at least N of the start line; with k below it: next units, stop, or done {text: 'N завышено: <reason>'}); stop {stop: вопрос|план|ревизия|требования|ворота, text = reason}; correction {to = the start of the signature of the wrong line of the same session, text = what is wrong} keeps k and is not a unit. The launch line is not written by the agent. The whole signature (all but the time) is at most 80 characters. A refusal names the rule, the expected form and an example; nothing is written. The session has to have a task (the folder of the task); only the journals of its own task can be written. Example: {code: 'С2', kind: 'start', n: 34, pass: 1, text: 'опись 34 источника'}, then {code: 'С2', kind: 'step', k: 1, n: 34, text: 'spec.md прочитан целиком'}.", [
+        jp("code", cp("string", "session code exactly from the 'Сессия:' line, e.g. С2 or С5д")),
+        jp("kind", cp_enum("kind of the line; step when omitted", ["start", "step", "done", "stop", "correction"])),
+        jp("k", cp("integer", "step: number of the finished unit, previous + 1")),
+        jp("n", cp("integer", "start and step: number of units the session sees")),
+        jp("pass", cp("integer", "start: number of the review pass (заход); required for С2, С4, С6")),
+        jp("stop", cp_enum("stop: kind of the stop", stop_kinds())),
+        jp("text", cp("string", "step: what is done, starting with the subject; start: what is ahead; done: the result; stop: the reason; correction: what is wrong. One line, no keyword")),
+        jp("to", cp("string", "correction: the start of the signature after the time of the wrong line (no code, k/N or time); 10 to 30 characters")),
+        jp("unit", cp("string", "old form of k and n for a step: 'k/N', e.g. 4/13")),
+        jp("file", cp("string", "optional: progress.log of the task folder of THIS session; any other path is refused"))
+    ], ["code"]))
+    out.push(ctl_def("crew_log_line", "The way to write an entry of the task log (log.md in the folder of the task of THIS session): appends ONE line 'YYYY-MM-DD HH:MM <kind>: <text>' with the date and time of the machine (never type the time by hand). kind is one of: решение владельца, заседание, ворота, документ, пуск, слияние, находка. One entry - one call, one line, up to 2000 characters. The launch record is not written by the agent. Example: {kind: 'решение владельца', text: 'владелец, 2026-10-15, чат: «по рекомендации»'}.", [
+        jp("kind", cp_enum("kind of the entry", log_kinds())),
+        jp("text", cp("string", "the entry, one line")),
+        jp("file", cp("string", "optional: log.md of the task folder of THIS session; any other path is refused"))
+    ], ["kind", "text"]))
+    out.push(ctl_def("crew_usage_line", "Append ONE JSON line with the accounting of this session to usage.log of the folder of the task (format version v:1). Call it once, when the session is finished. The hub fills everything itself (time, session, agent, duration, last commit of the folder); you pass the session code and the result. Only next to an existing progress.log of the same task. Example: {code: 'С5д', result: 'готово: 13 из 13 шагов, тесты зелёные'}.", [
+        jp("code", cp("string", "session code, e.g. С5д")),
+        jp("result", cp("string", "outcome of the session, one line, up to 200 characters")),
+        jp("file", cp("string", "optional: usage.log of the task folder of THIS session; any other path is refused"))
+    ], ["code", "result"]))
+    out
+}

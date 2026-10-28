@@ -16,7 +16,7 @@ export fn ctl_names() -> []str => ["crew_list", "crew_role", "crew_send", "crew_
 
 /// Is this a tool of the port (`crew_task` included)?
 export fn ctl_is_tool(name str) -> bool {
-    if name == "crew_task" { return true }
+    if name == "crew_task" || journal_is_tool(name) { return true }
     for n in ctl_names() {
         if n == name { return true }
     }
@@ -265,6 +265,9 @@ export fn ctl_help_text() -> str {
         "  crew_doctor                    — самопроверка хаба и твоей сессии.\n",
         "  crew_step_note {reason, minutes?, done?} — заметка шага режима в журнал.\n",
         "  crew_branch_note {what, why, who, directory?, branch?} — причина смены каталога или ветки (AGENTS.md, п. 6а) в журнал.\n",
+        "  crew_progress_line {code, kind, k?, n?, text?, ...} — строка журнала хода progress.log твоей задачи: хаб сам ставит слово и время и сверяет с прежними строками сессии (start → step… → done / stop).\n",
+        "  crew_log_line {kind, text}     — запись log.md твоей задачи с датой и временем хаба (вид из списка Канона).\n",
+        "  crew_usage_line {code, result} — одна строка JSON учёта сессии в usage.log (когда сессия закончена).\n",
         "  crew_help                      — эта справка.\n",
         "Новые задачи, дети и эпики появляются только после «да» владельца на карточке; изменяющих настройки инструментов здесь нет (структура конфигов обсуждается с владельцем)."
     ], "")

@@ -182,6 +182,7 @@ fn tools_of(tools str) -> []JsonValue {
     // task 250: the tools of the plugin `crew_*` and `crew_task` with its actions are in every set but the old "ask"
     if tools != "ask" {
         for t in ctl_tools_json() { out.push(t) }
+        for t in journal_tools_json() { out.push(t) }
         out.push(crew_task_unified_json())
         out.push(crew_task_list_tool_json())
     }
