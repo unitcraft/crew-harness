@@ -71,3 +71,12 @@ test('шапка чата: одна строка высотой не больш�
   assert.match(r, /padding:\s*0 /);
   assert.doesNotMatch(css, /\.topbar \{ min-height/);
 });
+
+test('кнопка «вниз» строго круглая: width = height, 50%, без минимальных размеров общей кнопки', () => {
+  const r = rule('.jump-btn');
+  assert.equal(/(?:^|[;\s])width:\s*(\d+)px/.exec(r)[1], /(?:^|[;\s])height:\s*(\d+)px/.exec(r)[1]);
+  assert.match(r, /border-radius:\s*50%/);
+  assert.match(r, /min-height:\s*0/);
+  assert.match(r, /min-width:\s*0/);
+  assert.match(r, /padding:\s*0;/);
+});

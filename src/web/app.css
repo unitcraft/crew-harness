@@ -1196,11 +1196,11 @@ input[aria-invalid="true"] { border-color: var(--danger); }
 
 /* ---- кнопка «вниз» над полем ввода ---- */
 .jump-wrap { position: relative; height: 0; z-index: 5; }
-.jump-btn { position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%); display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; padding: 0; border: 1px solid var(--border); border-radius: 50%; background: var(--bg); color: var(--fg); box-shadow: var(--shadow-card); cursor: pointer; }
+.jump-btn { position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%); display: inline-flex; align-items: center; justify-content: center; flex: none; width: 36px; height: 36px; min-width: 0; min-height: 0; padding: 0; border: 1px solid var(--border); border-radius: 50%; background: var(--bg); color: var(--fg); box-shadow: var(--shadow-card); cursor: pointer; }
 .jump-btn[hidden] { display: none; }
-.jump-btn .icon { width: 18px; height: 18px; }
+.jump-btn .icon { width: 20px; height: 20px; }
 .jump-btn:hover { background: var(--hover); }
-.jump-dot { position: absolute; top: 4px; right: 4px; width: 9px; height: 9px; border-radius: 50%; background: var(--accent); }
+.jump-dot { position: absolute; top: 2px; right: 2px; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
 .jump-dot[hidden] { display: none; }
 
 /* ---- сообщения: ряд мелких иконок под пузырём (задача 192) ----
