@@ -219,6 +219,31 @@ Tests: `src/acp/ask_test.nv` (the forms and the answers, pure), `src/acp_live/cl
 `src/server/ask_mcp_test.nv` (the messages), `src/server_live/mcp_test.nv` (the sockets: the token, the origin, a call that waits, a term), `src/server_live/hub_test.nv` (the scenarios `scenario_question`,
 `scenario_question_off`, `scenario_question_mcp`, `scenario_question_mcp_timeout`; the fake agent `src/acp/testdata/fake_agent.mjs` asks with `ask`, `ask2`, calls the tool with `askmcp`).
 
+### The tools of the hub in the four families (task 192.9)
+
+The tools `crew_task_list` (the button "Распознать задачи"), `crew_task` (with `route_auto_propose`) and, for `ask: mcp`, `ask_user_question` are the MCP server `crew` of the hub; it is handed to every agent in `session/new`
+(`mcpServers`, type `http`, the token in `Authorization`) when the agent says `mcpCapabilities.http` (all four do). Checked live with the four adapters of this machine (a probe client with its own MCP server):
+
+| Family | How the agent sees the tool | Leave to call | Note |
+|---|---|---|---|
+| OpenCode 2.0.26 | in the tool `execute` as `tools.crew.crew_task_list({...})` (a list `tools.crew.*`, not a tool of its own) | none | the hidden request of the hub names this form; the plugin of the owner is not loaded (below) |
+| Claude Code (`claude-agent-acp` 0.94) | `mcp__crew__crew_task_list`, a deferred tool: the agent finds it with `ToolSearch` first | none | the request names `ToolSearch` |
+| Kimi Code 2.1.1 | `mcp__crew__crew_task_list` | `session/request_permission` for every MCP tool | the client answers `allow_once` itself for the tools of the server `crew` (`is_crew_tool_title`), the owner is not asked |
+| Codex (`codex-acp` 2.2.2) | `mcp.crew.crew_task_list` | none (its own "Guardian" approves a call that the user asked for) | |
+
+**The fallback marker.** An agent that does not call the tool writes one line `[[crew_task_list]] {json}` (or `[[crew_task]] {json}`) at the end of its answer. The client of ACP (`src/acp/marker.nv`, `AcpClient.on_update`)
+cuts it out of the chunks of the answer while they travel: it holds back the beginning of a name and an open marker until it is closed, so a marker that comes in parts is never shown; in the middle or at the end of the answer, in a code
+fence (the lines of the fence go with it), a marker that is cut off (no closing brace) is dropped, a name in an ordinary sentence (not followed by `{`) stays text. The marker is given to the hub as the event `crew_marker` `{text}`
+(a line of the page, not a text of the answer: the journal has no marker in the text of the answer); when the turn is over the hub reads these lines (`markers_of`, `ct_marker`) and shows the card or the table as for a call of the tool.
+
+**OpenCode without the plugin.** The plugin `opencode-plugin/` is an experiment of the owner and is not a part of the product of Crew: the plugin of OpenCode crew-harness is not a part of the product; the agents the hub starts do not get it. OpenCode reads
+its global configuration (`~/.config/opencode/opencode.jsonc` and `cli.json`, `XDG_CONFIG_HOME` moves the folder) and loads the plugins named there; the lists `plugins` of the files are summed up with the project ones, not replaced.
+The global files of the owner are not touched (his live service uses them). At every start of an agent whose id or program is `opencode` the hub makes `<data_dir>/agent-config/xdg/opencode/` (`agent_config.nv`): the same files without the entries
+of the `plugins` that name `crew-harness/opencode-plugin` and without the property `crewMcp` (the path to the MCP of the plugin in the settings of the claude-code provider); the providers, the models, the other plugins and the rules stay,
+the text is cut, not parsed, so the comments stay. The agent is started with `XDG_CONFIG_HOME=<data_dir>/agent-config/xdg` (over the variables of the project); the data of OpenCode (`XDG_DATA_HOME`, the sign-in) are shared as before.
+`CREW_OPENCODE_KEEP_PLUGIN=1` in the environment of the hub keeps the configuration of the owner as it is. The names of the tools of the hub do not clash with the plugin's ones in the agent any more (the plugin has its own `crew_task`, the tool of
+the integrator for the tasks of a project: `show`, `assign`, `submit`...; the `crew_task` of the hub proposes one task to the owner).
+
 ### The projects of the control panel (task 192m)
 
 A project is a name, folders and environment variables for the agents; the sessions are made inside a project (the folder is chosen from the project's folders).
