@@ -126,6 +126,9 @@ export type Hub {
     mcps []McpServer,
     mcp_pending []McpPending,
     mcp_serial int,
+    ctl_letters []CtlLetter,
+    ctl_waits []CtlWait,
+    ctl_serial int,
     catalog JsonObject,
     catalog_dirty bool,
     catalog_saved_at int,
@@ -727,7 +730,7 @@ export fn start_hub_from(settings ServerSettings, table_text str) Proc Detach Ti
     ro machine = hub_machine_with(machine_text, registry, settings.idle_term_ms)?
     ro trees_chan = Chan[TreeDone].new(64)
     mut hub = Hub {
-        settings, machine, workdir, sessions: []Dialog.new(), conns: []int.new(), out: []Outgoing.new(), log: []str.new(), serial: 0, mcps: []McpServer.new(), mcp_pending: []McpPending.new(), mcp_serial: 0, catalog: JsonObject.new(), catalog_dirty: false, catalog_saved_at: 0, choices: []PendingChoice.new(), reviews: []Review.new(), route_obs: 0, marks: []MachMark.new(), trees_tx: trees_chan.tx, trees_rx: trees_chan.rx, held: []HeldMsg.new()
+        settings, machine, workdir, sessions: []Dialog.new(), conns: []int.new(), out: []Outgoing.new(), log: []str.new(), serial: 0, mcps: []McpServer.new(), mcp_pending: []McpPending.new(), mcp_serial: 0, ctl_letters: []CtlLetter.new(), ctl_waits: []CtlWait.new(), ctl_serial: 0, catalog: JsonObject.new(), catalog_dirty: false, catalog_saved_at: 0, choices: []PendingChoice.new(), reviews: []Review.new(), route_obs: 0, marks: []MachMark.new(), trees_tx: trees_chan.tx, trees_rx: trees_chan.rx, held: []HeldMsg.new()
     }
     if hub.wants_mcp() { ro started = hub.start_mcp() }
     ro pg = settings.store == "pg"
@@ -1156,6 +1159,7 @@ fn withdrawn_answer(key str, why str) -> JsonObject {
 fn Hub mut @mcp_withdraw(trace str) Proc Detach Time -> () {
     ro at = @find(trace)
     if at < 0 { return }
+    @ctl_withdraw(trace)
     mut keys = []str.new()
     for p in @mcp_pending {
         if p.session == trace { keys.push(p.key) }
@@ -1181,7 +1185,12 @@ fn Hub mut @mcp_message(msg McpMsg) Proc Detach Time -> () {
         @ct_list_call(msg)
         return
     }
+    if msg.kind == "ctl" {
+        @ctl_call(msg)
+        return
+    }
     if msg.kind == "gone" {
+        @ctl_gone(msg.call)
         match @mcp_take_call(msg.call) {
             Some(pending) => {
                 ro at = @find(pending.session)

@@ -1,0 +1,712 @@
+// crew_tools_hub.nv - task 246: the hub side of the tools `crew_*` of the plugin (the pure part and the definitions are `crew_tools.nv`).
+//
+// A call of a tool is a message of the MCP server of kind `ctl` (`{"tool":..,"arguments":..}`). The hub answers at once ("ok:" / "err:" for the agent), or, for a wait, later from the pump. What the tools stand on: the
+// sessions of the hub (`Dialog`), their journal (`route_note` is the record of a call), the children (`child_hub.nv`), the proposals of tasks (`crew_task_hub.nv`: a new worker is shown to the owner as a card
+// and starts only after his answer; the limit `route_max_active` counts it), the letters and the waits that the hub keeps in memory (they live while the hub runs). `crew_config` is not here (the owner, 2026-10-28:
+// the structure of the configs is being discussed). A call is recorded in the journal of the session (a line `▸ crew_...` in the feed) and in the panel "Машины" (the service hints).
+module crew_harness.server
+
+import std.concurrency.nvchan.{Chan, ChanTx}
+import std.encoding.json.{Json, JsonValue, JsonObject}
+
+const CTL_WAIT_DEFAULT_S = 120
+const CTL_WAIT_MAX_S = 300
+const CTL_WATCH_MAX = 20
+const CTL_LETTERS_KEEP = 300
+
+// ----- who is who -----
+
+fn Hub @ctl_label(i int) -> str {
+    ro s = @sessions[i]
+    "${s.name} (${s.id})"
+}
+
+// A session is busy when its turn goes on or the machine does not take a message now.
+fn Hub @ctl_busy(i int) -> bool {
+    ro s = @sessions[i]
+    s.rt.running || s.rt.awaiting || s.rt.reviewing || s.rt.job.byte_len() > 0 || !@takes_message_at(i)
+}
+
+fn Hub @ctl_role(i int) -> str {
+    ro s = @sessions[i]
+    ctl_role_word(s.rt.kind == "child", @cs_kids(s.id).len() > 0, s.rt.epic, s.rt.reviewing, s.rt.task_open && !s.rt.task_closed)
+}
+
+fn Hub @ctl_state_word(i int) -> str {
+    ro st = @cs_state(i)
+    if st == "merged" { return "слита" }
+    if st == "ready" { return "готово" }
+    if st == "waits" { return "ждёт очереди" }
+    "идёт"
+}
+
+fn Hub @ctl_done(i int) -> bool {
+    ro st = @cs_state(i)
+    st == "ready" || st == "merged"
+}
+
+// The session `tgt` means for the session `at`: a child by number, id or title, then any session by id or by the number of its open task; -1 - none.
+fn Hub @ctl_find(at int, tgt str) -> int {
+    ro t = tgt.trim_ascii()
+    if t.byte_len() == 0 { return -1 }
+    ro me = @sessions[at]
+    for i in @cs_kids(me.id) {
+        ro c = @sessions[i]
+        if c.id == t || ctl_same_number(c.rt.number, t) || word_key(c.rt.title) == word_key(t) { return i }
+    }
+    for i in @cs_kids(me.id) {
+        if word_key(@sessions[i].rt.title).contains(word_key(t)) { return i }
+    }
+    ro by_id = @find(t)
+    if by_id >= 0 { return by_id }
+    match t.to_int() {
+        Ok(n) => { return @cs_find_number(n) }
+        Err(e) => ()
+    }
+    -1
+}
+
+// The recipients of an address: `parent` (`orchestrator`), `children`, or one session; the sender itself is never one.
+fn Hub @ctl_addr(at int, to str) -> []int {
+    mut out = []int.new()
+    ro me = @sessions[at]
+    if to == "parent" || to == "orchestrator" {
+        if me.rt.parent.byte_len() > 0 {
+            ro p = @find(me.rt.parent)
+            if p >= 0 { out.push(p) }
+        }
+        return out
+    }
+    if to == "children" || to == "all-children" {
+        for i in @cs_kids(me.id) { out.push(i) }
+        return out
+    }
+    ro i = @ctl_find(at, to)
+    if i >= 0 && i != at { out.push(i) }
+    out
+}
+
+// The state of a session as the text of a result: the task, the state, the branch, the tree and the last words of the agent.
+fn Hub @ctl_session_text(i int) -> str {
+    ro s = @sessions[i]
+    mut parts = []str.new()
+    parts.push("Сессия ${s.id} «${s.name}», роль ${@ctl_role(i)}, ${if @ctl_busy(i) { "занята" } else { "свободна" }}")
+    if s.rt.task_open && s.rt.number.byte_len() > 0 {
+        parts.push("задача ${s.rt.number} «${s.rt.title}», состояние: ${@ctl_state_word(i)}")
+        if s.rt.branch.byte_len() > 0 { parts.push("ветка ${s.rt.branch}") }
+        if s.rt.worktree.byte_len() > 0 { parts.push("дерево ${s.rt.worktree}") }
+    }
+    ro head = joined(parts, ", ")
+    ro said = answer_of(s.lines, s.turn).trim_ascii()
+    if said.byte_len() == 0 { return head }
+    "${head}.\nПоследнее слово агента: ${cut_text(said, 1200)}"
+}
+
+// ----- the letters -----
+
+fn Hub mut @ctl_letter(from str, from_name str, to str, text str, wake bool, qid str, reply_to str) -> () {
+    @ctl_serial += 1
+    @ctl_letters.push(CtlLetter { id: @ctl_serial, qid, reply_to, from, from_name, to, text, wake, at: now_millis(), taken: false })
+    // the old letters that were read go away
+    if @ctl_letters.len() > CTL_LETTERS_KEEP {
+        mut keep = []CtlLetter.new()
+        mut dropped = 0
+        for l in @ctl_letters {
+            if l.taken && dropped < @ctl_letters.len() - CTL_LETTERS_KEEP { dropped += 1 } else { keep.push(l) }
+        }
+        @ctl_letters = keep
+    }
+}
+
+fn Hub mut @ctl_take(j int) -> () {
+    mut l = @ctl_letters[j]
+    l.taken = true
+    @ctl_letters[j] = l
+}
+
+// A letter that wakes the agent goes to it as a service turn when the agent is free (with the letters that were sent without waking it).
+fn Hub mut @ctl_deliver(at int) Proc Detach Time -> () {
+    ro s = @sessions[at]
+    if s.rt.running || s.rt.awaiting || s.rt.reviewing || s.rt.job.byte_len() > 0 { return }
+    if !@takes_message_at(at) { return }
+    if @cs_state(at) == "waits" { return }
+    mut first = -1
+    mut j = 0
+    while j < @ctl_letters.len() {
+        ro l = @ctl_letters[j]
+        if first < 0 && l.to == s.id && l.wake && !l.taken { first = j }
+        j += 1
+    }
+    if first < 0 { return }
+    ro lead = @ctl_letters[first]
+    mut texts = []str.new()
+    texts.push(ctl_turn_text(lead))
+    @ctl_take(first)
+    j = 0
+    while j < @ctl_letters.len() {
+        ro l = @ctl_letters[j]
+        if l.to == s.id && !l.taken && !l.wake {
+            texts.push(ctl_turn_text(l))
+            @ctl_take(j)
+        }
+        j += 1
+    }
+    ro text = joined(texts, "\n\n")
+    ro prelude = @route_message_prelude(at)
+    ro full = if prelude.byte_len() > 0 { "${prelude}\n\n${text}" } else { text }
+    @hint_add(at, "письмо crew_send", text)
+    ro who = if lead.from.byte_len() == 0 { "хаб" } else { lead.from_name }
+    ro asked = if lead.qid.byte_len() > 0 { " [вопрос ${lead.qid}]" } else { "" }
+    ro reason = @route_agent_turn(at, "[crew] Письмо от ${who}${asked}: ${cut_text(lead.text, 300)}", full)
+    if reason.byte_len() > 0 {
+        @tell_error(0, s.id, s.engine.step_number(), "", "письмо crew_send не передано агенту: ${reason}")
+    }
+}
+
+// ----- the waits -----
+
+fn Hub @ctl_has_proposal(at int, tgt str) -> bool {
+    for p in @sessions[at].rt.props {
+        if word_key(p.title).contains(word_key(tgt)) { return true }
+    }
+    false
+}
+
+// What a wait is waiting for, if it has come: the text of the answer; the letters it takes are read.
+fn Hub mut @ctl_wait_got(at int, w CtlWait) -> Option[str] {
+    ro s = @sessions[at]
+    if w.kind == "letter" {
+        mut lines = []str.new()
+        mut j = 0
+        while j < @ctl_letters.len() {
+            ro l = @ctl_letters[j]
+            if l.to == s.id && !l.taken {
+                lines.push(ctl_letter_line(l))
+                @ctl_take(j)
+            }
+            j += 1
+        }
+        if lines.len() > 0 { return Some("Письма:\n${joined(lines, "\n")}") }
+        return None
+    }
+    if w.kind == "reply" {
+        mut j = 0
+        while j < @ctl_letters.len() {
+            ro l = @ctl_letters[j]
+            if l.reply_to == w.tgt && l.to == s.id && !l.taken {
+                @ctl_take(j)
+                return Some("Ответ на ${w.tgt} ${ctl_letter_line(l)}")
+            }
+            j += 1
+        }
+        return None
+    }
+    if w.kind == "child" {
+        ro i = @ctl_find(at, w.tgt)
+        if i >= 0 && @ctl_done(i) { return Some("Готово. ${@ctl_session_text(i)}") }
+        return None
+    }
+    if w.kind == "children" {
+        ro kids = @cs_kids(s.id)
+        if kids.len() == 0 { return None }
+        mut all = true
+        mut parts = []str.new()
+        for i in kids {
+            if !@ctl_done(i) { all = false }
+            parts.push(@ctl_session_text(i))
+        }
+        if all { return Some("Все дочерние сессии готовы:\n${joined(parts, "\n")}") }
+        return None
+    }
+    if w.kind == "idle" {
+        ro i = @ctl_find(at, w.tgt)
+        if i >= 0 && !@ctl_busy(i) { return Some("Свободна. ${@ctl_session_text(i)}") }
+        return None
+    }
+    None
+}
+
+fn Hub @ctl_wait_timeout_text(at int, w CtlWait) -> str {
+    if w.kind == "timer" { return "Таймер «${w.note}» сработал." }
+    ro secs = (w.until - w.created) / 1000
+    if w.kind == "child" {
+        ro i = @ctl_find(at, w.tgt)
+        if i < 0 {
+            if @ctl_has_proposal(at, w.tgt) { return "За ${secs} с дочерняя «${w.tgt}» не появилась: владелец ещё не ответил на карточку предложения." }
+            return "За ${secs} с дочерней «${w.tgt}» нет: такой дочерней сессии не найдено (карточка отклонена или название другое; crew_list покажет сессии)."
+        }
+        return "За ${secs} с дочерняя не стала готовой. ${@ctl_session_text(i)}"
+    }
+    if w.kind == "children" { return "За ${secs} с готовы не все дочерние сессии (crew_list покажет состояние)." }
+    if w.kind == "reply" { return "Ответа на ${w.tgt} за ${secs} с нет. Когда придёт — придёт обычным письмом, оно разбудит эту сессию." }
+    if w.kind == "idle" { return "За ${secs} с сессия ${w.tgt} не стала свободной." }
+    "За ${secs} с писем нет."
+}
+
+// The wait is over: the call gets the text, a watch or a timer wakes the session with a letter.
+fn Hub mut @ctl_finish(w CtlWait, text str) Proc Detach Time -> () {
+    if w.wake {
+        @ctl_letter("", "", w.session, "Наблюдение${if w.note.byte_len() > 0 { " «${w.note}»" } else { "" }} (${w.id}): ${text}", true, "", "")
+        return
+    }
+    ro at = @find(w.session)
+    if at >= 0 { @hint_add(at, "crew_wait", cut_text(text, 600)) }
+    ro told = w.reply.send("ok:${text}")
+}
+
+fn Hub mut @ctl_check_waits() Proc Detach Time -> () {
+    mut keep = []CtlWait.new()
+    ro now = now_millis()
+    for w in @ctl_waits {
+        ro at = @find(w.session)
+        if at < 0 {
+            if !w.wake { ro told = w.reply.send("err:the session ${w.session} is not known to the hub") }
+            continue
+        }
+        match @ctl_wait_got(at, w) {
+            Some(text) => {
+                @ctl_finish(w, text)
+                continue
+            }
+            None => ()
+        }
+        if now >= w.until {
+            @ctl_finish(w, @ctl_wait_timeout_text(at, w))
+            continue
+        }
+        keep.push(w)
+    }
+    @ctl_waits = keep
+}
+
+/// At every pump: the waits that came true are answered, the letters that wake an agent are handed over.
+fn Hub mut @ctl_pump() Proc Detach Time -> () {
+    if @ctl_waits.len() > 0 { @ctl_check_waits() }
+    if @ctl_letters.len() == 0 { return }
+    mut at = 0
+    while at < @sessions.len() {
+        @ctl_deliver(at)
+        at += 1
+    }
+}
+
+/// The turn of a session is cancelled: its calls of `crew_wait` end (the agent is told).
+fn Hub mut @ctl_withdraw(trace str) Proc Detach Time -> () {
+    mut keep = []CtlWait.new()
+    for w in @ctl_waits {
+        if w.session == trace && !w.wake {
+            ro told = w.reply.send("ok:Ожидание прервано: ход отменён владельцем.")
+        } else {
+            keep.push(w)
+        }
+    }
+    @ctl_waits = keep
+}
+
+/// The call of the server whose term passed is not waited for any more.
+fn Hub mut @ctl_gone(call int) -> () {
+    mut keep = []CtlWait.new()
+    for w in @ctl_waits {
+        if w.call != call || w.wake { keep.push(w) }
+    }
+    @ctl_waits = keep
+}
+
+// ----- the tools -----
+
+fn Hub mut @ctl_list(at int, a JsonObject) -> CtlRes {
+    ro me = @sessions[at]
+    ro every = jflag(a, "all")
+    mut rows = []str.new()
+    mut i = 0
+    while i < @sessions.len() {
+        ro s = @sessions[i]
+        if every || s.project_id == me.project_id {
+            mut line = "${if i == at { "* " } else { "  " }}${s.id} — «${s.name}», роль ${@ctl_role(i)}, ${if @ctl_busy(i) { "занята" } else { "свободна" }}, агент ${s.agent}"
+            if s.rt.task_open && !s.rt.task_closed && s.rt.number.byte_len() > 0 { line = "${line}, задача ${s.rt.number} «${s.rt.title}»${if s.rt.epic { " (эпик)" } else { "" }}" }
+            if s.rt.parent.byte_len() > 0 { line = "${line}, родитель ${s.rt.parent}" }
+            rows.push(line)
+        }
+        i += 1
+    }
+    mut tasks = []str.new()
+    for s in @sessions {
+        if (every || s.project_id == me.project_id) && s.rt.task_open && !s.rt.task_closed && s.rt.number.byte_len() > 0 {
+            tasks.push("  ${s.rt.number} «${s.rt.title}» — ${if s.rt.epic { "эпик" } else if s.rt.tstate == "ready" { "готово" } else { "идёт" }}, сессия ${s.id}")
+        }
+    }
+    ro tail = if tasks.len() > 0 { "\nОткрытые задачи:\n${joined(tasks, "\n")}" } else { "" }
+    ro limit = "\nВ работе ${@cs_active_all()} из ${@settings.route_max_active} (route_max_active)."
+    ctl_ok("${joined(rows, "\n")}${tail}${limit}")
+}
+
+fn Hub @ctl_role_call(at int, a JsonObject) -> CtlRes {
+    ro role = @ctl_role(at)
+    ro want = jtext(a, "role").trim_ascii().to_ascii_lower()
+    ro s = @sessions[at]
+    mut lines = []str.new()
+    lines.push("Твоя роль: ${role} (сессия ${s.id}).")
+    if s.rt.parent.byte_len() > 0 { lines.push("Оркестратор — сессия ${s.rt.parent}: ему сдают отчёт (crew_task submit) и пишут crew_send {to: \"parent\"}.") }
+    ro kids = @cs_kids(s.id).len()
+    if kids > 0 { lines.push("Дочерних сессий: ${kids} (crew_list, crew_wait {target: \"children\"}).") }
+    if want.byte_len() > 0 && want != role && want != "assistant" {
+        return ctl_err("Роль «${want}» вызовом не назначается: в продукте она выводится из режима и дерева сессий (сейчас ${role}). ${joined(lines, " ")}")
+    }
+    ctl_ok(joined(lines, "\n"))
+}
+
+fn Hub mut @ctl_send(at int, a JsonObject) Proc Detach Time -> CtlRes {
+    ro me = @sessions[at]
+    ro text = jtext(a, "text").trim_ascii()
+    ro reply_to = jtext(a, "reply_to").trim_ascii()
+    mut to = jtext(a, "to").trim_ascii()
+    if to.byte_len() == 0 {
+        for l in @ctl_letters {
+            if l.qid == reply_to && l.from.byte_len() > 0 && l.to == me.id { to = l.from }
+        }
+    }
+    if to.byte_len() == 0 { return ctl_err("Не отправлено: адресат не назван и вопрос ${reply_to} не найден среди твоих писем.") }
+    ro targets = @ctl_addr(at, to)
+    if targets.len() == 0 { return ctl_err("Не отправлено: адресат «${to}» не найден (или это сама эта сессия). Адреса: id сессии, номер задачи, parent, children; crew_list покажет сессии.") }
+    ro wake = match a.get("wake") {
+        Some(v) => v.bool() ?? true
+        None => true
+    }
+    ro expect = jflag(a, "expect_reply")
+    mut qid = ""
+    if expect {
+        qid = "q${@ctl_serial + 1}"
+    }
+    mut named = []str.new()
+    for i in targets {
+        @ctl_letter(me.id, me.name, @sessions[i].id, text, wake, qid, reply_to)
+        named.push(@ctl_label(i))
+    }
+    ro qid_tail = if qid.byte_len() > 0 { " Вопрос ${qid}: ответ жди crew_wait {target: \"${qid}\"} в этом же ходе." } else { "" }
+    ctl_ok("Отправлено: ${joined(named, "; ")}${if wake { "" } else { " (без пробуждения: письмо ждёт в crew_inbox получателя)" }}.${qid_tail}")
+}
+
+fn Hub mut @ctl_inbox(at int, a JsonObject) -> CtlRes {
+    ro s = @sessions[at]
+    mut limit = jint(a, "limit")
+    if limit <= 0 { limit = 10 }
+    mut fresh = []str.new()
+    mut old = []str.new()
+    mut j = 0
+    while j < @ctl_letters.len() {
+        ro l = @ctl_letters[j]
+        if l.to == s.id {
+            if !l.taken {
+                fresh.push(ctl_letter_line(l))
+                @ctl_take(j)
+            } else {
+                old.push(ctl_letter_line(l))
+            }
+        }
+        j += 1
+    }
+    mut shown = []str.new()
+    mut k = if old.len() > limit { old.len() - limit } else { 0 }
+    while k < old.len() {
+        shown.push(old[k])
+        k += 1
+    }
+    ro head = if fresh.len() > 0 { "НОВЫЕ ПИСЬМА (${fresh.len()}) — выданы здесь, отдельно не придут:\n${joined(fresh, "\n")}\n\n" } else { "" }
+    ctl_ok("${head}Прочитанные:\n${if shown.len() > 0 { joined(shown, "\n") } else { "Прочитанных писем нет." }}")
+}
+
+fn Hub mut @ctl_add_wait(at int, kind str, tgt str, note str, until int, wake bool, call int, reply ChanTx[str]) -> CtlWait {
+    @ctl_serial += 1
+    ro w = CtlWait { id: "w${@ctl_serial}", call, session: @sessions[at].id, kind, tgt, note, until, wake, created: now_millis(), reply }
+    w
+}
+
+fn Hub @ctl_kind_of(at int, target str) -> str {
+    if target.byte_len() == 0 || target == "letter" { return "letter" }
+    if target == "children" { return "children" }
+    for l in @ctl_letters {
+        if l.qid == target && l.from == @sessions[at].id { return "reply" }
+    }
+    "child"
+}
+
+fn Hub mut @ctl_wait(at int, a JsonObject, msg McpMsg) Proc Detach Time -> CtlRes {
+    mut target = jtext(a, "target").trim_ascii()
+    if target.byte_len() == 0 { target = jtext(a, "qid").trim_ascii() }
+    ro kind = @ctl_kind_of(at, target)
+    if kind == "children" && @cs_kids(@sessions[at].id).len() == 0 && @sessions[at].rt.props.len() == 0 {
+        return ctl_ok("Дочерних сессий нет, ждать нечего.")
+    }
+    ro ms = ctl_wait_ms(jint(a, "seconds"), CTL_WAIT_DEFAULT_S, CTL_WAIT_MAX_S)
+    ro w = @ctl_add_wait(at, kind, target, "", now_millis() + ms, false, msg.call, msg.reply)
+    match @ctl_wait_got(at, w) {
+        Some(text) => { return ctl_ok(text) }
+        None => ()
+    }
+    @ctl_waits.push(w)
+    ctl_later()
+}
+
+fn Hub mut @ctl_spawn(at int, a JsonObject) Proc Detach Time -> CtlRes {
+    ro me = @sessions[at]
+    ro goal = jtext(a, "goal").trim_ascii()
+    ro has_task = me.rt.task_open && !me.rt.task_closed && me.rt.number.byte_len() > 0
+    mut kind = jtext(a, "kind").trim_ascii()
+    if kind != "new" && kind != "child" { kind = if has_task { "child" } else { "new" } }
+    if kind == "child" && !has_task { kind = "new" }
+    mut title = jtext(a, "title").trim_ascii()
+    if title.byte_len() == 0 {
+        ro cut = goal.find("\n") ?? goal.byte_len()
+        title = cut_text(goal[..cut], 60)
+    }
+    mut summary = goal
+    ro criteria = match a.get("criteria") {
+        Some(v) => match v.array() {
+            Some(items) => {
+                mut lines = []str.new()
+                for it in items { lines.push("- ${it.str() ?? ""}") }
+                joined(lines, "\n")
+            }
+            None => v.str() ?? ""
+        }
+        None => ""
+    }
+    if criteria.trim_ascii().byte_len() > 0 { summary = "${goal}\n\nКритерии приёмки:\n${criteria.trim_ascii()}" }
+    mut o = JsonObject.new()
+    js(o, "kind", kind)
+    js(o, "title", title)
+    js(o, "summary", summary)
+    ji(o, "epic", if kind == "child" { cs_number_int(me.rt.number) } else { 0 })
+    js(o, "confidence", "low")
+    match a.get("touches") {
+        Some(v) => { jput(o, "touches", v) }
+        None => ()
+    }
+    match proposal_of_arguments(JsonValue.object(o)) {
+        Err(reason) => { return ctl_err(reason) }
+        Ok(p0) => {
+            mut p = proposal_copy(p0)
+            ro agent = jtext(a, "agent").trim_ascii()
+            if agent.byte_len() > 0 && @agent_ids().contains(agent) { p.agent = agent }
+            ro shown = @ct_offer(at, p)
+            ro limit = if limit_reached(@cs_active_all(), @settings.route_max_active) { " Сейчас в работе ${@cs_active_all()} из ${@settings.route_max_active}: после «да» работа встанет в очередь или владелец скажет «сверх»." } else { "" }
+            return ctl_ok("${shown}${limit}\nПредложен ${if kind == "child" { "дочерний" } else { "самостоятельный" }} исполнитель «${title}». Когда владелец ответит «да», ждать его: crew_wait {target: \"${title}\"}; писать ему: crew_send.")
+        }
+    }
+    ctl_err("crew_spawn: not reached")
+}
+
+fn Hub @ctl_task_list(at int, a JsonObject) -> CtlRes {
+    ro me = @sessions[at]
+    ro all = jflag(a, "all")
+    mut rows = []str.new()
+    for s in @sessions {
+        if s.project_id != me.project_id || s.rt.number.byte_len() == 0 { continue }
+        if !all && (!s.rt.task_open || s.rt.task_closed) { continue }
+        rows.push("${s.rt.number} «${s.rt.title}» — ${if s.rt.task_closed { "закрыта" } else if s.rt.epic { "эпик" } else if s.rt.tstate == "ready" { "готово" } else { "идёт" }}${if s.rt.parent.byte_len() > 0 { ", дочерняя к ${s.rt.parent_no}" } else { "" }}, сессия ${s.id}")
+    }
+    if rows.len() == 0 { return ctl_ok("Открытых задач нет.") }
+    ctl_ok(joined(rows, "\n"))
+}
+
+fn Hub @ctl_task_show(at int, a JsonObject) -> CtlRes {
+    ro n = jint(a, "n")
+    if n <= 0 { return ctl_err("crew_task show: нужен n — номер задачи (crew_task {action: \"list\"})") }
+    mut found = @cs_find_number(n)
+    if found < 0 {
+        mut i = 0
+        while i < @sessions.len() {
+            if ctl_same_number(@sessions[i].rt.number, "${n}") { found = i }
+            i += 1
+        }
+    }
+    if found < 0 { return ctl_err("Задачи ${n} в хабе нет.") }
+    ro s = @sessions[found]
+    mut lines = []str.new()
+    lines.push(@ctl_session_text(found))
+    lines.push("папка ${s.rt.task_dir}")
+    if s.rt.epic || @cs_kids(s.id).len() > 0 {
+        for r in @cs_rows(s.id, false) { lines.push("  дочерняя ${r.number} «${r.title}» — ${r.state}, ветка ${r.branch}, сессия ${r.session}") }
+    }
+    ctl_ok(joined(lines, "\n"))
+}
+
+fn Hub mut @ctl_task(at int, a JsonObject) Proc Detach Time -> CtlRes {
+    ro action = jtext(a, "action").trim_ascii()
+    ro me = @sessions[at]
+    if action == "list" { return @ctl_task_list(at, a) }
+    if action == "show" { return @ctl_task_show(at, a) }
+    if action == "submit" {
+        if me.rt.parent.byte_len() == 0 || @find(me.rt.parent) < 0 {
+            return ctl_err("Некому сдавать: у этой сессии нет оркестратора. Готовность задачи отмечает владелец кнопками сессии.")
+        }
+        ro text = jtext(a, "text").trim_ascii()
+        if text.byte_len() == 0 { return ctl_err("crew_task submit: нужен text — отчёт (что сделано, как проверено, что осталось)") }
+        @ctl_letter(me.id, me.name, me.rt.parent, "Отчёт по задаче ${me.rt.number} «${me.rt.title}»: ${text}", true, "", "")
+        return ctl_ok("Отчёт отправлен оркестратору (сессия ${me.rt.parent}). Остановись: дальше решает он и владелец.")
+    }
+    if action == "push" {
+        ro n = jint(a, "n")
+        ro i = if n > 0 { @cs_find_number(n) } else { -1 }
+        if i < 0 || i == at { return ctl_err("crew_task push: задача ${n} не найдена среди открытых (crew_task list)") }
+        @ctl_letter(me.id, me.name, @sessions[i].id, "Подтолкни: ${if jtext(a, "text").byte_len() > 0 { jtext(a, "text") } else { "проверь, не стоит ли работа" }}", true, "", "")
+        return ctl_ok("Сессия ${@ctl_label(i)} разбудит письмом, когда её агент свободен.")
+    }
+    ctl_err("crew_task ${action}: в продукте этого действия нет — assign, order, reassign, cancel, backlog, resume, priority, route, deliver, review, check, round, precheck, merge, unlock, rework, accept, cleanup, track, contour, migrate, plan_decide делает владелец кнопками (карточка «Агент распознал задачи», шаги режима, «Слить»/«Влить», закрытие сессии). Тебе доступны: list, show, submit, push и предложение задачи без action.")
+}
+
+// A timer or a watch of the session.
+fn Hub mut @ctl_timer(at int, a JsonObject) Proc Detach Time -> CtlRes {
+    ro secs = ctl_timer_seconds(jint(a, "minutes"), jint(a, "seconds"))
+    if secs == 0 { return ctl_err("crew_timer: нужны minutes или seconds больше нуля; не больше 719 минут") }
+    if @ctl_watches_of(@sessions[at].id) >= CTL_WATCH_MAX { return ctl_err("У сессии уже ${CTL_WATCH_MAX} таймеров и наблюдений: сними лишние (crew_watch {action: \"cancel\", id})") }
+    ro note = if jtext(a, "note").trim_ascii().byte_len() > 0 { jtext(a, "note").trim_ascii() } else { "таймер ${secs} с" }
+    ro w = @ctl_add_wait(at, "timer", "", note, now_millis() + secs * 1000, true, 0, Chan[str].new(1).tx)
+    @ctl_waits.push(w)
+    ctl_ok("Таймер «${note}» ${w.id} поставлен: письмо придёт через ${secs} с. Отмена — crew_watch {action: \"cancel\", id: \"${w.id}\"}. Заканчивай ход: письмо разбудит эту сессию. Таймер живёт, пока работает хаб.")
+}
+
+fn Hub @ctl_watches_of(id str) -> int {
+    mut n = 0
+    for w in @ctl_waits {
+        if w.session == id && w.wake { n += 1 }
+    }
+    n
+}
+
+fn Hub mut @ctl_watch(at int, a JsonObject) Proc Detach Time -> CtlRes {
+    ro me = @sessions[at]
+    if jtext(a, "command").trim_ascii().byte_len() > 0 {
+        return ctl_err("crew_watch: хаб команды не запускает (они шли бы мимо прав агента). Для долгого ожидания используй фон своего агента или подпишись на событие: on=child, children, reply, idle; для времени — crew_timer.")
+    }
+    if jtext(a, "action") == "cancel" {
+        ro id = jtext(a, "id").trim_ascii()
+        mut keep = []CtlWait.new()
+        mut removed = false
+        for w in @ctl_waits {
+            if w.id == id && w.session == me.id && w.wake { removed = true } else { keep.push(w) }
+        }
+        @ctl_waits = keep
+        return if removed { ctl_ok("Наблюдение ${id} снято.") } else { ctl_err("Наблюдения ${id} у этой сессии нет (crew_watch без аргументов покажет список).") }
+    }
+    ro on = jtext(a, "on").trim_ascii()
+    if on.byte_len() == 0 {
+        mut rows = []str.new()
+        for w in @ctl_waits {
+            if w.session == me.id && w.wake {
+                rows.push("— ${w.id} ${w.kind}${if w.tgt.byte_len() > 0 { " ${w.tgt}" } else { "" }}${if w.note.byte_len() > 0 { " «${w.note}»" } else { "" }}, осталось ${(w.until - now_millis()) / 1000} с")
+            }
+        }
+        return ctl_ok(if rows.len() > 0 { "Наблюдения сессии (отмена — crew_watch {action: \"cancel\", id}):\n${joined(rows, "\n")}" } else { "Наблюдений нет." })
+    }
+    if on != "child" && on != "children" && on != "reply" && on != "idle" { return ctl_err("crew_watch: on — одно из child, children, reply, idle") }
+    ro target = jtext(a, "target").trim_ascii()
+    if on != "children" && target.byte_len() == 0 { return ctl_err("crew_watch on=${on}: нужен target") }
+    if on == "idle" && (@ctl_find(at, target) < 0 || @ctl_find(at, target) == at) { return ctl_err("crew_watch on=idle: сессия «${target}» не найдена или это эта же сессия (crew_list)") }
+    if @ctl_watches_of(me.id) >= CTL_WATCH_MAX { return ctl_err("У сессии уже ${CTL_WATCH_MAX} таймеров и наблюдений: сними лишние (crew_watch {action: \"cancel\", id})") }
+    mut minutes = jint(a, "minutes")
+    if minutes <= 0 { minutes = 120 }
+    if minutes > 719 { minutes = 719 }
+    ro w = @ctl_add_wait(at, on, target, jtext(a, "note").trim_ascii(), now_millis() + minutes * 60000, true, 0, Chan[str].new(1).tx)
+    @ctl_waits.push(w)
+    ctl_ok("Наблюдение ${w.id} (${on}${if target.byte_len() > 0 { " ${target}" } else { "" }}) поставлено, предел ${minutes} мин. Когда событие наступит, эту сессию разбудит письмо. Заканчивай ход. Наблюдение живёт, пока работает хаб.")
+}
+
+fn Hub mut @ctl_doctor(at int) Proc -> CtlRes {
+    ro s = @sessions[at]
+    mut problems = []str.new()
+    mut notes = []str.new()
+    if s.clients.len() == 0 { notes.push("агент сессии не запущен (запустится с её первым ходом)") }
+    if s.folder.byte_len() > 0 && !dir_there(s.folder) { problems.push("папка сессии ${s.folder} не существует") }
+    if s.rt.worktree.byte_len() > 0 && !dir_there(s.rt.worktree) { problems.push("дерево задачи ${s.rt.worktree} не существует: работа идёт не там, где записана") }
+    if s.rt.task_open && !s.rt.task_closed && s.rt.task_dir.byte_len() > 0 && !dir_there(s.rt.task_dir) { problems.push("папка задачи ${s.rt.task_dir} не найдена") }
+    ro dir = if s.rt.worktree.byte_len() > 0 && dir_there(s.rt.worktree) { s.rt.worktree } else { s.folder }
+    if dir.byte_len() > 0 && dir_there(dir) {
+        ro br = git_run(dir, ["branch", "--show-current"])
+        if br.ok {
+            ro now_branch = br.text.trim_ascii()
+            notes.push("каталог ${dir}, ветка ${if now_branch.byte_len() > 0 { now_branch } else { "(отсоединённый коммит)" }}")
+            if s.rt.branch.byte_len() > 0 && now_branch != s.rt.branch && now_branch.byte_len() > 0 { problems.push("в каталоге ветка ${now_branch}, а у задачи записана ${s.rt.branch}: объясни смену crew_branch_note") }
+        }
+    }
+    if limit_reached(@cs_active_all(), @settings.route_max_active) { notes.push("лимит задач в работе достигнут: ${@cs_active_all()} из ${@settings.route_max_active}; новые работы встанут в очередь") }
+    mut waiting = 0
+    for i in @cs_kids(s.id) { if @cs_state(i) == "waits" { waiting += 1 } }
+    if waiting > 0 { notes.push("дочерних сессий в очереди: ${waiting}") }
+    mut unread = 0
+    for l in @ctl_letters { if l.to == s.id && !l.taken { unread += 1 } }
+    if unread > 0 { notes.push("непрочитанных писем: ${unread} (crew_inbox)") }
+    notes.push("ожиданий хаба: ${@ctl_waits.len()}, сессий: ${@sessions.len()}, роль ${@ctl_role(at)}")
+    ro head = if problems.len() > 0 { "crew_doctor — есть проблемы:\n- ${joined(problems, "\n- ")}" } else { "crew_doctor: всё в порядке (хаб отвечает, сессия известна, каталоги на месте)." }
+    ctl_ok("${head}\nК сведению:\n- ${joined(notes, "\n- ")}")
+}
+
+fn Hub mut @ctl_step_note(at int, a JsonObject) Proc Detach Time -> CtlRes {
+    ro done = jflag(a, "done")
+    ro reason = jtext(a, "reason").trim_ascii()
+    ro minutes = jint(a, "minutes")
+    ro s = @sessions[at]
+    mut text = "▸ шаг${if s.rt.number.byte_len() > 0 { " задачи ${s.rt.number}" } else { "" }}: "
+    if done { text = "${text}готово${if reason.byte_len() > 0 { " — ${reason}" } else { "" }}" } else { text = "${text}${reason}${if minutes > 0 { " (ещё около ${minutes} мин)" } else { "" }}" }
+    @rt_note(at, text)
+    @route_broadcast(at, true)
+    ctl_ok("Записано в журнал сессии.")
+}
+
+fn Hub mut @ctl_branch_note(at int, a JsonObject) Proc Detach Time -> CtlRes {
+    ro s = @sessions[at]
+    ro dir = if jtext(a, "directory").trim_ascii().byte_len() > 0 { jtext(a, "directory").trim_ascii() } else if s.rt.worktree.byte_len() > 0 { s.rt.worktree } else { s.folder }
+    mut text = "▸ смена каталога/ветки: ${jtext(a, "what").trim_ascii()} — ${jtext(a, "why").trim_ascii()} (разрешил: ${jtext(a, "who").trim_ascii()}); каталог ${dir}"
+    if jtext(a, "branch").trim_ascii().byte_len() > 0 { text = "${text}, ожидаемая ветка ${jtext(a, "branch").trim_ascii()}" }
+    if s.rt.branch.byte_len() > 0 { text = "${text}; ветка задачи ${s.rt.branch}" }
+    @rt_note(at, text)
+    @route_broadcast(at, true)
+    ctl_ok("Причина записана в журнал сессии. Хаб команды не блокирует: запись смотрит приёмка.")
+}
+
+// The text of an argument list for the record.
+fn ctl_args_brief(a JsonObject) -> str {
+    ro text = JsonValue.object(a).to_str()
+    cut_text(text, 140).replace("\n", " ")
+}
+
+fn Hub mut @ctl_run(at int, tool str, a JsonObject, msg McpMsg) Proc Detach Time -> CtlRes {
+    if tool == "crew_list" { return @ctl_list(at, a) }
+    if tool == "crew_role" { return @ctl_role_call(at, a) }
+    if tool == "crew_send" { return @ctl_send(at, a) }
+    if tool == "crew_inbox" { return @ctl_inbox(at, a) }
+    if tool == "crew_wait" { return @ctl_wait(at, a, msg) }
+    if tool == "crew_spawn" { return @ctl_spawn(at, a) }
+    if tool == "crew_task" { return @ctl_task(at, a) }
+    if tool == "crew_timer" { return @ctl_timer(at, a) }
+    if tool == "crew_watch" { return @ctl_watch(at, a) }
+    if tool == "crew_doctor" { return @ctl_doctor(at) }
+    if tool == "crew_step_note" { return @ctl_step_note(at, a) }
+    if tool == "crew_branch_note" { return @ctl_branch_note(at, a) }
+    if tool == "crew_help" { return ctl_ok(ctl_help_text()) }
+    ctl_err("unknown tool: ${tool}")
+}
+
+/// A call of a tool `crew_*` (a message of the MCP server of kind `ctl`): done at once, or the wait is kept and answered later by the pump.
+fn Hub mut @ctl_call(msg McpMsg) Proc Detach Time -> () {
+    ro at = @find(msg.session)
+    if at < 0 {
+        ro told = msg.reply.send("err:the session ${msg.session} is not known to the hub")
+        return
+    }
+    ro v = match Json.parse(msg.text) {
+        Ok(x) => x
+        Err(e) => JsonValue.null()
+    }
+    ro tool = mtext_of(v, "tool")
+    ro a = (mget(v, "arguments") ?? JsonValue.null()).object() ?? JsonObject.new()
+    ro res = @ctl_run(at, tool, a, msg)
+    // the record of the call: the journal of the session and the panel "Машины"
+    if tool != "crew_step_note" && tool != "crew_branch_note" {
+        @rt_note(at, "▸ ${tool} ${ctl_args_brief(a)}${if res.kind == "err" { " — отказ" } else { "" }}")
+    }
+    @hint_add(at, tool, "${ctl_args_brief(a)}\n→ ${cut_text(res.text, 600)}")
+    @say_log("${tool} of ${@sessions[at].id}: ${res.kind}")
+    if res.kind == "later" { return }
+    ro told = msg.reply.send("${res.kind}:${res.text}")
+}

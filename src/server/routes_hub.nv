@@ -1411,6 +1411,7 @@ fn Hub mut @route_pump() Proc Detach Time -> () {
         at += 1
     }
     @cs_pump()
+    @ctl_pump()
     if @reviews.len() > 0 { @route_pump_reviews() }
     if now_millis() - @route_obs >= OBSERVE_MS {
         @route_obs = now_millis()

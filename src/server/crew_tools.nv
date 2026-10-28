@@ -1,0 +1,271 @@
+// crew_tools.nv - task 246: the tools `crew_*` of the plugin of OpenCode in the product (the pure part; the hub side is `crew_tools_hub.nv`).
+//
+// The owner, 2026-10-28: «инструменты crew_* должны работать в самом продукте Крю; плагин OpenCode в этом никак не участвует, он только для обкатки идей». The tools keep the NAMES
+// of the plugin and arguments that fit, and mean what they mean in the hub: a session, a child session, an epic, a task folder, the queue of the letters of the hub. Which tools are carried and
+// how - `doc/tasks/246-crew-tools-port/task/inventory.md`. `crew_config` is NOT here: the structure of the configs is being discussed with the owner (2026-10-28).
+//
+// What this file holds: the definitions of the tools for `tools/list` (built by small functions, not by long strings), the check of the arguments that needs no hub, the words of the roles, the text of
+// `crew_help`, and the types of the letters and of the waits that the hub keeps.
+module crew_harness.server
+
+import std.concurrency.nvchan.{ChanTx}
+import std.encoding.json.{Json, JsonValue, JsonObject}
+
+/// The names of the tools of this port (without `crew_task`, which is the old tool of the hub with the actions of the plugin added: `crew_task_unified_json`).
+export fn ctl_names() -> []str => ["crew_list", "crew_role", "crew_send", "crew_inbox", "crew_wait", "crew_spawn", "crew_timer", "crew_watch", "crew_doctor", "crew_step_note", "crew_branch_note", "crew_help"]
+
+/// Is this a tool of the port (`crew_task` included)?
+export fn ctl_is_tool(name str) -> bool {
+    if name == "crew_task" { return true }
+    for n in ctl_names() {
+        if n == name { return true }
+    }
+    false
+}
+
+/// A letter between the sessions of the hub (`crew_send`). `from` is "" for the hub itself (a timer, a watch). `taken`: the recipient has read it (in `crew_inbox`, `crew_wait` or a service turn).
+export type CtlLetter { id int, qid str, reply_to str, from str, from_name str, to str, text str, wake bool, at int, taken bool }
+
+/// A wait of a session: `kind` `letter` (any letter), `reply` (the answer to the question `tgt`), `child` (the child `tgt` is ready or merged), `children` (all of them), `idle` (the session `tgt` is free), `timer`.
+/// `wake`: no call waits (a watch or a timer): when it holds, the session is woken by a letter. `reply` is the way back to the call that waits.
+export type CtlWait { id str, call int, session str, kind str, tgt str, note str, until int, wake bool, created int, reply ChanTx[str] }
+
+/// The result of a tool inside the hub: `ok`, `err`, or `later` (the answer will come when a wait ends).
+export type CtlRes { kind str, text str }
+
+export fn ctl_ok(text str) -> CtlRes => { kind: "ok", text }
+export fn ctl_err(text str) -> CtlRes => { kind: "err", text }
+export fn ctl_later() -> CtlRes => { kind: "later", text: "" }
+
+// ----- the definitions -----
+
+type CtlProp { name str, value JsonValue }
+
+fn cp(kind str, description str) -> JsonValue {
+    mut o = JsonObject.new()
+    mput(o, "type", JsonValue.str(kind))
+    mput(o, "description", JsonValue.str(description))
+    JsonValue.object(o)
+}
+
+fn cp_enum(description str, words []str) -> JsonValue {
+    mut o = JsonObject.new()
+    mput(o, "type", JsonValue.str("string"))
+    mput(o, "description", JsonValue.str(description))
+    mut list = []JsonValue.new()
+    for w in words { list.push(JsonValue.str(w)) }
+    mput(o, "enum", JsonValue.array(list))
+    JsonValue.object(o)
+}
+
+fn cp_strings(description str) -> JsonValue {
+    mut items = JsonObject.new()
+    mput(items, "type", JsonValue.str("string"))
+    mut o = JsonObject.new()
+    mput(o, "type", JsonValue.str("array"))
+    mput(o, "description", JsonValue.str(description))
+    mput(o, "items", JsonValue.object(items))
+    JsonValue.object(o)
+}
+
+fn ctl_def(name str, description str, props []CtlProp, required []str) -> JsonValue {
+    mut properties = JsonObject.new()
+    for p in props { mput(properties, p.name, p.value) }
+    mut schema = JsonObject.new()
+    mput(schema, "type", JsonValue.str("object"))
+    mput(schema, "properties", JsonValue.object(properties))
+    mut req = []JsonValue.new()
+    for r in required { req.push(JsonValue.str(r)) }
+    if req.len() > 0 { mput(schema, "required", JsonValue.array(req)) }
+    mut tool = JsonObject.new()
+    mput(tool, "name", JsonValue.str(name))
+    mput(tool, "description", JsonValue.str(description))
+    mput(tool, "inputSchema", JsonValue.object(schema))
+    JsonValue.object(tool)
+}
+
+fn pr(name str, value JsonValue) -> CtlProp => { name, value }
+
+fn ctl_tool(name str) -> JsonValue {
+    if name == "crew_list" {
+        return ctl_def("crew_list", "List the sessions of the hub in the project of the caller: id, name, role (by the mode and the tree, see crew_role), busy or free, the task and its epic or parent. all=true lists the sessions of every project. Then the open tasks.", [pr("all", cp("boolean", "List the sessions of every project, not only of the caller's"))], [])
+    }
+    if name == "crew_role" {
+        return ctl_def("crew_role", "The role of THIS session in the hub: orchestrator (it has child sessions or is an epic), executor (it works on a task, or is a child session), acceptor (it reviews), worker (no task). The role is derived from the mode and the tree, it is not assigned by a call; a different role in `role` is refused with the reason.", [pr("role", cp("string", "The role you expect (optional): the call only checks it")), pr("force", cp("boolean", "Not used: a role cannot be taken in the product"))], [])
+    }
+    if name == "crew_send" {
+        return ctl_def("crew_send", "Send a service letter to another session of the hub. `to`: a session id, a number of a task (012), `parent` (or `orchestrator`), `children`. wake=true (the default): the letter goes to the recipient as a service turn as soon as its agent is free; wake=false: it waits in the recipient's crew_inbox. expect_reply=true: a question - the result gives a qid, wait for the answer with crew_wait {target: qid}. reply_to: the qid you answer (then `to` may be omitted). The owner reads the letters in the feed of the recipient: write them in the language of the owner.", [pr("to", cp("string", "Recipient: session id, task number, parent, orchestrator or children")), pr("text", cp("string", "The text of the letter")), pr("wake", cp("boolean", "Wake the recipient (default true)")), pr("expect_reply", cp("boolean", "This is a question: the result gives a qid")), pr("reply_to", cp("string", "The qid of the question this letter answers"))], ["text"])
+    }
+    if name == "crew_inbox" {
+        return ctl_def("crew_inbox", "The letters of this session: those that wait are handed over right here (and then count as read), then the recent read ones.", [pr("limit", cp("integer", "How many recent letters (default 10)"))], [])
+    }
+    if name == "crew_wait" {
+        return ctl_def("crew_wait", "Wait in this same turn (up to 300 seconds, default 120). target: a qid of your question (crew_send expect_reply) - waits for the answer; a number of a task, a session id or a title of a child session - waits until that child is ready or merged (a child that is only proposed to the owner is waited for too: it appears after the owner says yes); `children` - until all your children are ready or merged; empty - until any letter comes. The result is the answer, the state and the last words of the child, or the note that the time is out.", [pr("target", cp("string", "A qid, a child (number, session id or title), `children`, or empty for any letter")), pr("qid", cp("string", "The same as target (the name in the plugin)")), pr("seconds", cp("integer", "How long to wait, 1..300, default 120"))], [])
+    }
+    if name == "crew_spawn" {
+        return ctl_def("crew_spawn", "Propose a work for a NEW worker: a child task of your task (when you have an open task, you become its epic) or a task of its own. Like every new task it is shown to the owner as a card and starts only after the owner says yes (and under the limit route_max_active of tasks in work); the answer says so. goal and criteria become the text of message.md of the new task. After the owner's yes wait for the child with crew_wait {target: title}, talk to it with crew_send.", [pr("goal", cp("string", "What is to be done (required)")), pr("criteria", cp("string", "How the owner will accept it: the points of the acceptance")), pr("title", cp("string", "A short title (up to 60 characters); the first line of the goal by default")), pr("touches", cp_strings("The files and folders the work will change")), pr("kind", cp_enum("child (the default when you have a task) or new", ["child", "new"])), pr("agent", cp("string", "The family of the agent of the new session (optional)"))], ["goal"])
+    }
+    if name == "crew_timer" {
+        return ctl_def("crew_timer", "Wake THIS session with a letter after N minutes (or seconds) without holding the turn. Lives while the hub runs (a restart of the hub forgets timers). At most 20 timers and watches per session; up to 719 minutes. After calling it, end your turn.", [pr("minutes", cp("integer", "In how many minutes")), pr("seconds", cp("integer", "In how many seconds (for less than a minute)")), pr("note", cp("string", "A short label for the letter"))], [])
+    }
+    if name == "crew_watch" {
+        return ctl_def("crew_watch", "Subscribe to an event of the hub and be woken by a letter when it happens, without holding the turn: on=child (target: a child), on=children (all children are ready or merged), on=reply (target: your qid), on=idle (target: another session becomes free). Without `on`: the list of your watches; action=cancel with id removes one. A command is NOT run by the hub (agents have their own background tools): `command` is refused. Lives while the hub runs.", [pr("on", cp_enum("What to watch", ["child", "children", "reply", "idle"])), pr("target", cp("string", "A child, a qid or a session")), pr("note", cp("string", "A short label for the letter")), pr("minutes", cp("integer", "The limit, default 120, at most 719")), pr("action", cp_enum("cancel: remove the watch id", ["cancel"])), pr("id", cp("string", "cancel: the id of the watch")), pr("command", cp("string", "Not supported in the product"))], [])
+    }
+    if name == "crew_doctor" {
+        return ctl_def("crew_doctor", "Self-check of the hub and of THIS session: the agent, the folder, the tree and the branch, the limit of the tasks in work, the children that wait, the waits and the letters. Lists what is wrong and what to do.", [], [])
+    }
+    if name == "crew_step_note" {
+        return ctl_def("crew_step_note", "Write a note of the step of the mode in the journal of the session (the owner sees it in the feed and in the panel): what is done and what you wait for (reason), how long it will take (minutes), or that the step is done (done=true).", [pr("reason", cp("string", "What is done, what you wait for")), pr("minutes", cp("integer", "How long it will take, minutes")), pr("done", cp("boolean", "The step is done")), pr("n", cp("integer", "The number of the task (the task of the session by default)"))], [])
+    }
+    if name == "crew_branch_note" {
+        return ctl_def("crew_branch_note", "Record WHY the folder or the branch of this session changes (the rule 6a of AGENTS.md): what changes, why, who allowed it (the owner's word with the date, or the decision of the orchestrator). The record goes to the journal of the session with the folder and the branch the hub knows now. The hub does not block commands: it keeps the record for the acceptance.", [pr("what", cp("string", "What changes: the command or the move")), pr("why", cp("string", "Why: one sentence")), pr("who", cp("string", "Who allowed it: the owner's word with the date and the source")), pr("directory", cp("string", "The folder the reason is for")), pr("branch", cp("string", "The branch the session is to stand on after this"))], ["what", "why", "who"])
+    }
+    ctl_def("crew_help", "Help for the tools crew_*: what each does in the hub and when to call it.", [], [])
+}
+
+/// The tools of the port for `tools/list` (`crew_task` is added by the caller).
+export fn ctl_tools_json() -> []JsonValue {
+    mut out = []JsonValue.new()
+    for name in ctl_names() { out.push(ctl_tool(name)) }
+    out
+}
+
+/// `crew_task` of the hub with the actions of the plugin: without `action` it is the old proposal of a task (as before), with an `action` it is the work with the tasks of the hub.
+export fn crew_task_unified_json() -> JsonValue {
+    ro text = "Tasks of the hub. WITHOUT `action`: call it when the message of the user is REAL WORK on the files of the project (the old call): the hub shows the user a card and the user confirms or refuses; do not touch the files until the hub tells the decision; kind=extend with confidence=high adds to an OPEN task at once. Do NOT call it for a question or a talk. WITH `action`: list (the open tasks of the hub; all=true adds the closed), show (n: the task, its children, its folder and branch), submit (a child reports to its orchestrator: text), push (n, text: nudge the session of the task with a letter), propose (the same as without action). The other actions of the plugin (assign, order, reassign, cancel, backlog, resume, priority, route, deliver, review, check, round, precheck, merge, unlock, rework, accept, cleanup, track, contour, migrate, plan_decide) are buttons of the owner in the product and are refused with the reason. RULES: never create doc/tasks folders or message.md yourself - the hub does it after the owner answers the card."
+    ro base = crew_task_tool_json()
+    mut tool = base.object() ?? JsonObject.new()
+    mput(tool, "description", JsonValue.str(text))
+    mut schema = (mget(base, "inputSchema") ?? JsonValue.null()).object() ?? JsonObject.new()
+    mut props = (mget(JsonValue.object(schema), "properties") ?? JsonValue.null()).object() ?? JsonObject.new()
+    mput(props, "action", cp_enum("list, show, submit, push or propose; empty is propose", ["list", "show", "submit", "push", "propose", "assign", "order", "reassign", "cancel", "backlog", "resume", "priority", "route", "deliver", "review", "check", "round", "precheck", "merge", "unlock", "rework", "accept", "cleanup", "cleaned", "track", "contour", "migrate", "plan_decide"]))
+    mput(props, "n", cp("integer", "show, push: the number of the task"))
+    mput(props, "text", cp("string", "submit: the report; push: the text of the nudge"))
+    mput(props, "all", cp("boolean", "list: include the closed tasks"))
+    mput(schema, "properties", JsonValue.object(props))
+    // `kind` and `title` are required only for a proposal: the check is in `ctl_task_action`
+    mput(schema, "required", JsonValue.array([]JsonValue.new()))
+    mput(tool, "inputSchema", JsonValue.object(schema))
+    JsonValue.object(tool)
+}
+
+/// The action of a call of `crew_task`: "" for the old call without one (a proposal).
+export fn ctl_task_action(arguments JsonValue) -> str {
+    ro a = mtext_of(arguments, "action").trim_ascii()
+    if a == "propose" { return "" }
+    a
+}
+
+// ----- the check without the hub -----
+
+fn ctl_has(arguments JsonValue, key str) -> bool => mtext_of(arguments, key).trim_ascii().byte_len() > 0
+
+fn ctl_has_int(arguments JsonValue, key str) -> bool {
+    match mget(arguments, key) {
+        Some(v) => v.int().is_some()
+        None => false
+    }
+}
+
+/// The reason the arguments of a tool are not good ("" - good). Only what is seen without the hub.
+export fn ctl_validate(name str, arguments JsonValue) -> str {
+    if name == "crew_send" {
+        if !ctl_has(arguments, "text") { return "crew_send: the argument text is missing" }
+        if !ctl_has(arguments, "to") && !ctl_has(arguments, "reply_to") { return "crew_send: give the recipient (to) or the qid you answer (reply_to)" }
+        if mtext_of(arguments, "text").byte_len() > 8000 { return "crew_send: the letter is longer than 8000 bytes; write it shorter and put the details in a file" }
+    }
+    if name == "crew_spawn" && !ctl_has(arguments, "goal") { return "crew_spawn: the argument goal is missing" }
+    if name == "crew_branch_note" {
+        if !ctl_has(arguments, "what") || !ctl_has(arguments, "why") || !ctl_has(arguments, "who") { return "crew_branch_note: what, why and who are all required (who: the owner's word with the date and the source, or the decision of the orchestrator)" }
+    }
+    if name == "crew_step_note" {
+        ro done = match mget(arguments, "done") {
+            Some(v) => v.bool() ?? false
+            None => false
+        }
+        if !ctl_has(arguments, "reason") && !done { return "crew_step_note: give reason (what is done, what you wait for) or done=true" }
+    }
+    if name == "crew_timer" && !ctl_has_int(arguments, "minutes") && !ctl_has_int(arguments, "seconds") { return "crew_timer: give minutes (or seconds): a whole number more than 0" }
+    ""
+}
+
+/// What travels from the MCP server to the hub: `{"tool":..,"arguments":..}`.
+export fn ctl_message_text(name str, arguments JsonValue) -> str {
+    mut o = JsonObject.new()
+    mput(o, "tool", JsonValue.str(name))
+    mput(o, "arguments", if arguments.is_object() { arguments } else { JsonValue.object(JsonObject.new()) })
+    JsonValue.object(o).to_str()
+}
+
+// ----- small pure rules -----
+
+/// The role of a session by the mode and the tree.
+export fn ctl_role_word(is_child bool, has_kids bool, epic bool, reviewing bool, task_open bool) -> str {
+    if reviewing { return "acceptor" }
+    if has_kids || epic { return "orchestrator" }
+    if is_child || task_open { return "executor" }
+    "worker"
+}
+
+/// The numbers "012" and "12" are one number.
+export fn ctl_same_number(a str, b str) -> bool {
+    match a.trim_ascii().to_int() {
+        Ok(x) => match b.trim_ascii().to_int() {
+            Ok(y) => x == y && x > 0
+            Err(e) => false
+        }
+        Err(e) => false
+    }
+}
+
+/// The time of a wait in milliseconds, cut to `max_s` seconds (at least a second).
+export fn ctl_wait_ms(seconds int, default_s int, max_s int) -> int {
+    mut s = if seconds <= 0 { default_s } else { seconds }
+    if s > max_s { s = max_s }
+    if s < 1 { s = 1 }
+    s * 1000
+}
+
+/// The delay of a timer in seconds from `minutes` and `seconds` (0 - not good: nothing given or more than 719 minutes).
+export fn ctl_timer_seconds(minutes int, seconds int) -> int {
+    ro total = (if minutes > 0 { minutes * 60 } else { 0 }) + (if seconds > 0 { seconds } else { 0 })
+    if total <= 0 || total > 719 * 60 { return 0 }
+    total
+}
+
+/// The line of a letter for `crew_inbox` and the service turn.
+export fn ctl_letter_line(l CtlLetter) -> str {
+    mut tags = ""
+    if l.qid.byte_len() > 0 { tags = "${tags} [вопрос ${l.qid}]" }
+    if l.reply_to.byte_len() > 0 { tags = "${tags} [ответ на ${l.reply_to}]" }
+    ro who = if l.from.byte_len() == 0 { "хаб" } else { "${l.from_name} (${l.from})" }
+    "от ${who}${tags}: ${l.text}"
+}
+
+/// The words of a service turn for a letter that wakes the agent.
+export fn ctl_turn_text(l CtlLetter) -> str {
+    mut tail = ""
+    if l.qid.byte_len() > 0 && l.from.byte_len() > 0 { tail = "\n(Это вопрос: ответь инструментом crew_send {to: \"${l.from}\", reply_to: \"${l.qid}\", text: ...}.)" }
+    "[crew] Письмо ${ctl_letter_line(l)}${tail}"
+}
+
+/// The text of `crew_help`.
+export fn ctl_help_text() -> str {
+    joined([
+        "Инструменты crew_* хаба (сервер crew). Имена и смысл — как в плагине OpenCode, но всё идёт через хаб: сессии, дочерние сессии, эпики, папки задач.\n",
+        "  crew_list {all?}               — сессии проекта: роль, занята/свободна, задача; затем открытые задачи.\n",
+        "  crew_role {role?}              — твоя роль (оркестратор/исполнитель/приёмщик/работник) по режиму и дереву; не назначается вызовом.\n",
+        "  crew_send {to, text, wake?, expect_reply?, reply_to?} — служебное письмо сессии (id, номер задачи, parent, children). wake=false — ждёт в crew_inbox.\n",
+        "  crew_inbox {limit?}            — твои письма: ждущие выдаются здесь, затем прочитанные.\n",
+        "  crew_wait {target?, seconds?}  — ждать в этом же ходе (до 300 с): ответ на qid, готовность дочерней (номер, id, название), children, любое письмо.\n",
+        "  crew_spawn {goal, criteria?, title?, touches?, kind?} — предложить работу НОВОМУ исполнителю: карточка владельцу, старт после его «да» и под лимитом route_max_active.\n",
+        "  crew_task {action, ...}        — list, show, submit, push; без action — предложение задачи (как прежде).\n",
+        "  crew_timer {minutes|seconds, note?} — разбудить письмом через время, не держа ход.\n",
+        "  crew_watch {on, target?, note?, minutes?} — подписка на событие (child, children, reply, idle); без on — список; action=cancel, id — снять.\n",
+        "  crew_doctor                    — самопроверка хаба и твоей сессии.\n",
+        "  crew_step_note {reason, minutes?, done?} — заметка шага режима в журнал.\n",
+        "  crew_branch_note {what, why, who, directory?, branch?} — причина смены каталога или ветки (AGENTS.md, п. 6а) в журнал.\n",
+        "  crew_help                      — эта справка.\n",
+        "Новые задачи, дети и эпики появляются только после «да» владельца на карточке; изменяющих настройки инструментов здесь нет (структура конфигов обсуждается с владельцем)."
+    ], "")
+}

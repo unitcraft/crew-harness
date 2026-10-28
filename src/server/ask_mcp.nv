@@ -179,8 +179,12 @@ export fn mcp_handle(body str) -> McpOut => mcp_handle_for(body, "ask")
 fn tools_of(tools str) -> []JsonValue {
     mut out = []JsonValue.new()
     if tools == "ask" || tools == "all" || tools == "asklist" { out.push(tool_json()) }
-    if tools == "task" || tools == "all" { out.push(crew_task_tool_json()) }
-    if tools != "ask" { out.push(crew_task_list_tool_json()) }
+    // task 246: the tools of the plugin `crew_*` and `crew_task` with its actions are in every set but the old "ask"
+    if tools != "ask" {
+        for t in ctl_tools_json() { out.push(t) }
+        out.push(crew_task_unified_json())
+        out.push(crew_task_list_tool_json())
+    }
     out
 }
 
@@ -225,11 +229,21 @@ export fn mcp_handle_for(body str, tools str) -> McpOut {
                 Ok(items) => return { kind: "tasklist", text: "", id: id.to_str(), questions: proposals_list_text(items) }
             }
         }
+        // task 246: a tool of the port `crew_*`, or `crew_task` with an action (the old call without one is below)
+        ro called = mtext_of(params, "name")
+        if tools != "ask" && ctl_is_tool(called) && (called != CREW_TASK_TOOL || ctl_task_action(arguments).byte_len() > 0) {
+            ro reason = if called == CREW_TASK_TOOL { "" } else { ctl_validate(called, arguments) }
+            if reason.byte_len() > 0 { return mout("reply", mcp_text_reply(id, reason, true)) }
+            return { kind: "ctl", text: "", id: id.to_str(), questions: ctl_message_text(called, arguments) }
+        }
         if mtext_of(params, "name") == CREW_TASK_TOOL && (tools == "task" || tools == "all") {
             match proposal_of_arguments(arguments) {
                 Err(reason) => return mout("reply", mcp_text_reply(id, reason, true))
                 Ok(p) => return { kind: "task", text: "", id: id.to_str(), questions: proposal_arguments_text(p) }
             }
+        }
+        if mtext_of(params, "name") == "crew_config" && tools != "ask" {
+            return mout("reply", mcp_text_reply(id, "crew_config is not available yet: the structure of the configs is being discussed with the owner (2026-10-28). Do not read or write the settings files yourself; ask the owner.", true))
         }
         if mtext_of(params, "name") != ASK_TOOL || tools == "task" || tools == "list" {
             return mout("reply", mcp_text_reply(id, "unknown tool: ${mtext_of(params, "name")}", true))

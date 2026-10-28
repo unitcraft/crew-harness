@@ -1,0 +1,139 @@
+// crew_tools_test.nv - task 246: the pure part of the tools `crew_*` of the plugin in the product: the definitions, the check of the arguments, the way a call goes to the hub, the small rules.
+module crew_harness.server
+
+import std.encoding.json.{Json, JsonValue, JsonObject}
+
+fn tj(text str) -> JsonValue {
+    match Json.parse(text) {
+        Ok(v) => v
+        Err(e) => panic("bad json in a test: ${text}")
+    }
+}
+
+fn tget(v JsonValue, key str) -> JsonValue {
+    match v.object() {
+        Some(o) => match o.get(key) {
+            Some(x) => x
+            None => JsonValue.null()
+        }
+        None => JsonValue.null()
+    }
+}
+
+fn tnames(text str) -> []str {
+    mut out = []str.new()
+    match tget(tget(tj(text), "result"), "tools").array() {
+        Some(items) => {
+            for t in items { out.push(tget(t, "name").str() ?? "") }
+        }
+        None => ()
+    }
+    out
+}
+
+fn tcall(tool str, arguments str, tools str) -> McpOut {
+    mcp_handle_for("{\"jsonrpc\":\"2.0\",\"id\":9,\"method\":\"tools/call\",\"params\":{\"name\":\"${tool}\",\"arguments\":${arguments}}}", tools)
+}
+
+fn has_name(names []str, name str) -> bool {
+    for n in names { if n == name { return true } }
+    false
+}
+
+test "crew_tools: every set but the old one lists the twelve tools of the plugin and crew_task, crew_config is not among them" {
+    for set in ["all", "list", "asklist", "task"] {
+        ro names = tnames(mcp_handle_for("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/list\"}", set).text)
+        for want in ["crew_list", "crew_role", "crew_send", "crew_inbox", "crew_wait", "crew_spawn", "crew_timer", "crew_watch", "crew_doctor", "crew_step_note", "crew_branch_note", "crew_help", "crew_task", "crew_task_list"] {
+            assert(has_name(names, want))
+        }
+        assert(!has_name(names, "crew_config"))
+    }
+    ro old = tnames(mcp_handle("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/list\"}").text)
+    assert(old.len() == 1)
+}
+
+test "crew_tools: a call goes to the hub as a message of kind ctl with the tool and its arguments" {
+    ro out = tcall("crew_send", "{\"to\":\"parent\",\"text\":\"готово\",\"expect_reply\":true}", "all")
+    assert(out.kind == "ctl")
+    ro body = tj(out.questions)
+    assert(tget(body, "tool").str() == Some("crew_send"))
+    assert(tget(tget(body, "arguments"), "to").str() == Some("parent"))
+    ro none = tcall("crew_list", "{}", "list")
+    assert(none.kind == "ctl")
+    ro help = tcall("crew_help", "{}", "task")
+    assert(help.kind == "ctl")
+}
+
+test "crew_tools: the arguments that are not good are refused with the reason, at once" {
+    for bad in [["crew_send", "{\"text\":\"x\"}"], ["crew_send", "{\"to\":\"parent\"}"], ["crew_spawn", "{}"], ["crew_branch_note", "{\"what\":\"a\",\"why\":\"b\"}"], ["crew_step_note", "{}"], ["crew_timer", "{}"]] {
+        ro out = tcall(bad[0], bad[1], "all")
+        assert(out.kind == "reply")
+        assert(tget(tget(tj(out.text), "result"), "isError").bool() == Some(true))
+    }
+    ro fine = tcall("crew_step_note", "{\"done\":true}", "all")
+    assert(fine.kind == "ctl")
+    ro answer = tcall("crew_send", "{\"reply_to\":\"q3\",\"text\":\"ответ\"}", "all")
+    assert(answer.kind == "ctl")
+}
+
+test "crew_tools: crew_config is not available: the call is answered with the reason, nothing goes to the hub" {
+    ro out = tcall("crew_config", "{\"action\":\"show\"}", "all")
+    assert(out.kind == "reply")
+    ro text = tget(tget(tj(out.text), "result"), "isError").bool()
+    assert(text == Some(true))
+    assert(out.text.contains("owner"))
+}
+
+test "crew_tools: crew_task with an action is the work with the tasks, without one it is still the old proposal" {
+    ro listed = tcall("crew_task", "{\"action\":\"list\"}", "list")
+    assert(listed.kind == "ctl")
+    ro shown = tcall("crew_task", "{\"action\":\"show\",\"n\":3}", "task")
+    assert(shown.kind == "ctl")
+    ro old = tcall("crew_task", "{\"kind\":\"new\",\"title\":\"Кнопка\",\"summary\":\"сделать\"}", "task")
+    assert(old.kind == "task")
+    ro same = tcall("crew_task", "{\"action\":\"propose\",\"kind\":\"new\",\"title\":\"Кнопка\",\"summary\":\"сделать\"}", "task")
+    assert(same.kind == "task")
+    // the old call is still refused where it was refused (a session with no proposals)
+    ro refused = tcall("crew_task", "{\"kind\":\"new\",\"title\":\"Кнопка\",\"summary\":\"сделать\"}", "list")
+    assert(refused.kind == "reply")
+    // the old tool crew_task_list keeps its name
+    ro tl = tcall("crew_task_list", "{\"tasks\":[]}", "list")
+    assert(tl.kind == "tasklist")
+}
+
+test "crew_tools: the roles, the numbers, the terms" {
+    assert(ctl_role_word(true, false, false, false, true) == "executor")
+    assert(ctl_role_word(false, true, false, false, true) == "orchestrator")
+    assert(ctl_role_word(false, false, true, false, true) == "orchestrator")
+    assert(ctl_role_word(false, false, false, true, true) == "acceptor")
+    assert(ctl_role_word(false, false, false, false, false) == "worker")
+    assert(ctl_same_number("012", "12"))
+    assert(ctl_same_number(" 7", "007"))
+    assert(!ctl_same_number("012", "13"))
+    assert(!ctl_same_number("", ""))
+    assert(ctl_wait_ms(0, 120, 300) == 120000)
+    assert(ctl_wait_ms(5000, 120, 300) == 300000)
+    assert(ctl_wait_ms(7, 120, 300) == 7000)
+    assert(ctl_timer_seconds(2, 0) == 120)
+    assert(ctl_timer_seconds(0, 30) == 30)
+    assert(ctl_timer_seconds(0, 0) == 0)
+    assert(ctl_timer_seconds(720, 0) == 0)
+}
+
+test "crew_tools: the letters read well and a question tells how to answer" {
+    ro q = CtlLetter { id: 1, qid: "q4", reply_to: "", from: "s-a", from_name: "Оркестратор", to: "s-b", text: "сколько тестов?", wake: true, at: 0, taken: false }
+    ro line = ctl_letter_line(q)
+    assert(line.contains("Оркестратор") && line.contains("[вопрос q4]"))
+    ro turn = ctl_turn_text(q)
+    assert(turn.starts_with("[crew] Письмо") && turn.contains("reply_to: \"q4\"") && turn.contains("\"s-a\""))
+    ro a = CtlLetter { id: 2, qid: "", reply_to: "q4", from: "", from_name: "", to: "s-a", text: "двадцать", wake: true, at: 0, taken: false }
+    assert(ctl_letter_line(a).contains("от хаб") && ctl_letter_line(a).contains("[ответ на q4]"))
+    assert(!ctl_turn_text(a).contains("Это вопрос"))
+}
+
+test "crew_tools: the help names every tool and says crew_config is not here" {
+    ro help = ctl_help_text()
+    for name in ctl_names() { assert(help.contains(name)) }
+    assert(help.contains("crew_task"))
+    assert(!help.contains("crew_config {"))
+}
