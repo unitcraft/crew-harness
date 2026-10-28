@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "ChatSession",
   "name": "an event with a key of the source is acknowledged after the commit",
   "start_at": 1000,

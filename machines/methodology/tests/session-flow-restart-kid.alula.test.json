@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "session_start",
   "name": "FLOW: the nested machine restarts in the middle (its process dies) and goes on from its snapshot; the session ends as usual",
   "start_at": 1000,

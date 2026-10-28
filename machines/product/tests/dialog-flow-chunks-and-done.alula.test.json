@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "DialogSession",
   "name": "chunks of the agent accumulate in the state and the answer ends the turn",
   "start_at": 1000,

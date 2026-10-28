@@ -8,7 +8,7 @@ import alula.machine.{spec_text, TypeSpec, FieldDef}
 import alula.machine_table.{MachineDef, MachineParty, PartyDef, NestedProblem, check_nested, load_machine}
 import alula.machine_text.{translate_checked_with}
 import alula.machine_run.{NestedRegistry, check_registry, registry_gaps, load_alula_machine}
-import crew_harness.machines.{methodology_registry, cycle_check_machine_text, cycle_check_table_text, library_files}
+import crew_harness.machines.{methodology_registry, cycle_check_machine_text, cycle_check_table_text, translation_files}
 
 fn field_line(f FieldDef) -> str => "${f.name}:${spec_text(f.spec)}"
 
@@ -27,25 +27,19 @@ fn types_block() -> str {
     text[from..to]
 }
 
-// The record of the input of the call: the 15 fields of the contract of the machine (a caller declares it; the machine takes the fields from its `## Вход`).
-fn review_input() -> str {
-    ro ticks = "```"
-    ro record = `тип ВходПроверки { стадия Стадия, цикл Цикл, вне_задачи []Находка, папка_задачи строка, рабочее_дерево строка, режим_сдачи строка, маршрут строка, чистых_подряд число>=0, потолок_заходов число>=0, проб_в_чистом число>=0, сдача_сжата булево, предложение ?строка, порядок_линз []строка, вопрос_автора ?строка, сужено ?[]строка }`
-    "${ticks}\n${record}\n${ticks}\n"
-}
-
-// A caller of the cycle check as the runner will be: one party of the kind machine with the input and the result of the methodology.
+// A caller of the cycle check as the runner will be: one party of the kind machine; since Alula 0.27 (AL-146) the party names no types, the input and the result come from the
+// called machine (the file `cycle_check.alula.md` among `translation_files`), the request gives exactly the fields of its input.
 fn probe_parent() -> str {
-    ro head = "# Машина: Раннер пробный\n\n- machine: runner_probe\n- machine_version: 1\n- format: 2.26\n\n"
+    ro head = "# Машина: Раннер пробный\n\n- machine: runner_probe\n- revision: 1\n- alula_version: 0.27\n\n"
     ro data = "\n## Данные\n\n| имя | тип | начальное | не убывает |\n|---|---|---|---|\n| итог | ?ИтогПроверки | пусто | — |\n\n"
-    ro parties = "## Стороны\n\n| имя | идентификатор | вид | профиль | сигналы | счётчик |\n|---|---|---|---|---|---|\n| проверка | review | machine cycle_check(вход ВходПроверки, итог ИтогПроверки) | — | — | попытка_проверки |\n\n"
+    ro parties = "## Стороны\n\n| имя | идентификатор | вид | профиль | сигналы | счётчик |\n|---|---|---|---|---|---|\n| проверка | review | machine cycle_check | — | — | попытка_проверки |\n\n"
     ro states = "## Состояния\n\nНачальное состояние: ВЫЗОВ\n\n### ВЫЗОВ — обращение\n- Сторона: проверка\n- Запрос:\n\n| поле запроса | выражение |\n|---|---|\n| стадия | Стадия.Разбор |\n| цикл | Цикл { номер_захода: 1, заход_отсчёта: 1, серия_чистых: 0, без_проб_подряд: 0 } |\n| вне_задачи | [] |\n| папка_задачи | \"t\" |\n| рабочее_дерево | \"w\" |\n| режим_сдачи | \"files\" |\n| маршрут | \"full\" |\n| чистых_подряд | 2 |\n| потолок_заходов | 4 |\n| проб_в_чистом | 3 |\n| сдача_сжата | ложь |\n| предложение | пусто |\n| порядок_линз | [] |\n| вопрос_автора | пусто |\n| сужено | пусто |\n\n| Событие | Условие | Действия | Куда |\n|---|---|---|---|\n| ответ(результат) |  | итог = результат | КОНЕЦ |\n| сбой |  |  | КОНЕЦ |\n\n### КОНЕЦ — конец\n\n"
     ro ends = "## Выход\n\n- Результат: ?ИтогПроверки\n\n| конец | когда | ответ |\n|---|---|---|\n| КОНЕЦ | истина | Ответ(итог) |\n"
-    "${head}${types_block()}${review_input()}${data}${parties}${states}${ends}"
+    "${head}${types_block()}${data}${parties}${states}${ends}"
 }
 
 fn parent_json(text str) -> str {
-    ro report = translate_checked_with(text, methodology_registry(), library_files())
+    ro report = translate_checked_with(text, methodology_registry(), translation_files())
     if report.errors.len() > 0 { panic(notes_of(report).join(" ## ")) }
     report.json
 }
@@ -101,29 +95,46 @@ test "ft parent fits" {
     assert(nested == 1)
 }
 
+// The tree of the parent with a changed field of the input of its party (since 0.27 the parent declares no copy of the input: a disagreement is a tree built against another callee).
+fn party_input_with(json str, old str, new str) -> str {
+    ro at = json.find("\"nested\":\"cycle_check\",\"input\":[") ?? -1
+    if at < 0 { panic("the parent has no input of its party") }
+    ro tail = json[at..]
+    ro hit = tail.find(old) ?? -1
+    if hit < 0 { panic("the input of the party has no ${old}") }
+    "${json[..at]}${tail[..hit]}${new}${tail[hit + old.byte_len()..]}"
+}
+
+fn parent_def_of(json str) -> MachineDef {
+    match load_machine(json, methodology_registry()) {
+        Ok(d) => d
+        Err(issues) => panic("the changed parent does not load: ${issues[0].path}: ${issues[0].message}")
+    }
+}
+
 test "ft parent with a wrong field" {
-    ro wrong = probe_parent().replace("сдача_сжата булево", "сдача_сжата строка").replace("| сдача_сжата | ложь |", "| сдача_сжата | \"no\" |")
-    assert(wrong != probe_parent())
-    ro parent = parent_def(wrong)
-    ro problems = check_nested(parent, "cycle_check", cycle_def())
+    ro json = parent_json(probe_parent())
+    ro wrong = party_input_with(json, "{\"name\":\"delivery_short\",\"type\":\"bool\"}", "{\"name\":\"delivery_short\",\"type\":\"text\"}")
+    ro problems = check_nested(parent_def_of(wrong), "cycle_check", cycle_def())
     assert(problems.len() >= 1)
     assert(problems_text(problems).contains("delivery_short"))
 }
 
 test "ft parent with a missing field" {
-    ro less = probe_parent().replace("порядок_линз []строка, ", "").replace("| порядок_линз | [] |\n", "")
-    assert(less != probe_parent())
-    ro parent = parent_def(less)
-    ro problems = check_nested(parent, "cycle_check", cycle_def())
-    assert(problems.len() >= 1)
-    assert(problems_text(problems).contains("lens_order"))
+    // the request still gives the field: the check of the tree refuses it already at the load
+    ro less = party_input_with(parent_json(probe_parent()), "{\"name\":\"lens_order\",\"type\":\"[]text\"},", "")
+    match load_machine(less, methodology_registry()) {
+        Ok(d) => panic("the parent without the field lens_order loads")
+        Err(issues) => assert(issues[0].message.contains("lens_order"))
+    }
 }
 
 test "ft parent with a wrong result" {
-    ro wrong = probe_parent().replace("тип ИтогПроверки { вердикт Вердикт, источник строка,", "тип ИтогПроверки { вердикт Вердикт, источник ?строка,")
-    assert(wrong != probe_parent())
-    ro parent = parent_def(wrong.replace("Ответ(итог)", "Ответ(итог)"))
-    ro problems = check_nested(parent, "cycle_check", cycle_def())
+    ro json = parent_json(probe_parent())
+    ro old = "{\"name\":\"ReviewResult\",\"fields\":[{\"name\":\"verdict\",\"type\":\"Verdict\"},{\"name\":\"source\",\"type\":\"text\"}"
+    assert(json.contains(old))
+    ro wrong = json.replace(old, "{\"name\":\"ReviewResult\",\"fields\":[{\"name\":\"verdict\",\"type\":\"Verdict\"},{\"name\":\"source\",\"type\":\"?text\"}")
+    ro problems = check_nested(parent_def_of(wrong), "cycle_check", cycle_def())
     assert(problems.len() >= 1)
 }
 

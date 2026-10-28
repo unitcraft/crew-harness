@@ -9,7 +9,7 @@ import std.io.{IoCapture, mock_io}
 import std.os.{MockOs, mock_os}
 import alula.machine.{NamedText, text_of_file}
 import alula.alula_cli.{execute}
-import crew_harness.machines.{machine_files, test_files, table_files, methodology_registry_text, all_journal_text, library_files_in}
+import crew_harness.machines.{machine_files, test_files, table_files, methodology_registry_text, all_journal_text, library_files_in, callee_files_in}
 
 /// Ran: what a run of the program left.
 type Ran { code int, out str, err str }
@@ -34,6 +34,10 @@ fn run_with(argv []str, files []NamedText) -> Ran {
             for lib in library_files_in(dir) {
                 make_parents(lib.name)
                 ro written_lib = write_text(Path.posix(lib.name), lib.text)
+            }
+            // the called machines beside a table with a party `machine <имя>` (Alula 0.27, AL-146): the types of the party come from them
+            for callee in callee_files_in(dir, files) {
+                ro written_callee = write_text(Path.posix(callee.name), callee.text)
             }
         }
         code = execute()

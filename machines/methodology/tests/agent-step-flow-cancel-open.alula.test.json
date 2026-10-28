@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "agent_step",
   "name": "the cancel of the request of the call, then the late answer is dropped",
   "start_at": 1000,

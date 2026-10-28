@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "session_start",
   "name": "FLOW: the process restarts in the middle of the session: the request to the agent step is sent again with the same identifier, the nested machine is not started twice",
   "start_at": 1000,

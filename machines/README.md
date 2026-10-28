@@ -1,6 +1,6 @@
 # machines: machines written as data
 
-The machines of the product CrewHarness and the algorithms of the methodology as tables of the language Alula (`*.alula.md`; the one extension, task 169; the format 2.26, the package `alula` 0.9.0, task 240), their compiled trees (`*.alula.json`, `machine/2`) and their scenarios
+The machines of the product CrewHarness and the algorithms of the methodology as tables of the language Alula (`*.alula.md`; the one extension, task 169; the format 0.27, the package `alula` 0.27.0, task 246), their compiled trees (`*.alula.json`, `machine/2`) and their scenarios
 (`tests/*.alula.test.json`, `test/0`). They were samples inside the package `alula` until its version 0.3.2; since task 158 they belong to their owners and the package holds only the language and its own examples
 (`examples/` of [nv-lang/nova-alula](https://github.com/nv-lang/nova-alula)).
 
@@ -25,7 +25,7 @@ target/alula.exe test machines/product                    # 81 of 81 tests passe
 target/alula.exe test machines/methodology                # 514 of 514 tests passed
 ```
 
-The tables were moved from 2.25 to 2.26 by the script of the package, `python <alula>/tools/migrate-alula-226.py --alula target/alula.exe machines` (task 240); `--dry-run` on the folder now says «итог: файлов 0, мест 0».
+The tables were moved from 2.25 to 2.26 by the script of the package, `python <alula>/tools/migrate-alula-226.py --alula target/alula.exe machines` (task 240); `--dry-run` on the folder then said «итог: файлов 0, мест 0». Then to 0.27 (Alula 0.27, the release 2.27 renamed by the owner, 2026-10-28) by the script of the package 0.27.0, `python <alula>/tools/migrate-alula-227.py --alula target/alula.exe machines` (task 246): the header `revision` and `alula_version: 0.27`, the three sections `## Требует данные` / `## Требует стороны` / `## Требует концы` of a library, the party `machine имя` without the types (they come from the called machine beside, AL-146), the trees and the tests with `kind` and `revision`. `--dry-run` says «итог: файлов 0, мест 0»; the place of the owner: `cycle_check` calls `meeting`, whose file is not beside, so its table does not compile and its tree is moved by the keys.
 
 The same scenarios and the tests of the machines (the tables equal the JSON, every row has a scenario, the journal codes are the table of the owner, the equality with the machine on Nova) run in the units of `src/`
 (`machine_runner`, `machine_session`, `machine_cycle`, `machine_agent`, `machine_dialog`, `machine_registry`, `machine_chat`, `machine_dialog_eq` and the `*_machines` units, see [src/README.md](../src/README.md));
@@ -39,7 +39,7 @@ the module `crew_harness.machines` (`src/machines/`) embeds these files for the 
 ## The libraries
 
 Since 2.26 a connection is a library beside the machine (spec 9, AL-140): `### Пауза` or `### арифметика_цикла` with `- Файл: libs/…` and `- Хеш: …` (twelve letters of the SHA-256 of the normalized file).
-`cycle_check.alula.md` connects `libs/cycle_arithmetic.alula.md` (the hash `9d9bbb379b8d`) and «Пауза»; the other machines of the methodology connect «Пауза» (`ebdf05fb7637`). They go to the methodology with task 159.
+`cycle_check.alula.md` connects `libs/cycle_arithmetic.alula.md` (the hash `34ef3ee7c00b`) and «Пауза»; the other machines of the methodology connect «Пауза» (`87162f9feb8c`). They go to the methodology with task 159.
 
 The cancel of the user in the chat machines (`chat`, `dialog`) is the signal of the protocol of a call `отмена_запроса` (`cancel_request`), taken by the common events of the machine in `ПОКОЙ` and `ОЖИДАНИЕ`
 (task 240). In 2.26 a signal of the machine is declared only by a connected library: the check refuses a signal of the free input of the user in a row of the appeal to the agent, and a signal of the machine of

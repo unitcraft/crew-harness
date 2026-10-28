@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "session_start",
   "name": "B2 1: the keeper confirms the profile and the price (the word `confirm`); the volume fits, so the session is asked of the agent step",
   "start_at": 1000,

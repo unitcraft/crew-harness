@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "session_start",
   "name": "PAUSE 2: the human says halt in the pause -> HALTED with the reason pause_halt; the halt is passed to the agent step, which ends with StoppedByHuman, the launch refuses the same",
   "start_at": 1000,

@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "DialogSession",
   "name": "the idle term ends the turn with Timeout and the session takes the next message",
   "start_at": 1000,

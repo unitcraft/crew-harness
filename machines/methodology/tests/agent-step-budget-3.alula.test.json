@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "agent_step",
   "name": "BUDGET 3: the limit of the turns is reached: the step stops",
   "start_at": 1000,

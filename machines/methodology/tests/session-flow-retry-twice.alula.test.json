@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "session_start",
   "name": "FLOW: the session is repeated twice (agent_step-2, agent_step-3) and the third nested machine answers; the attempts are counted by the machine",
   "start_at": 1000,

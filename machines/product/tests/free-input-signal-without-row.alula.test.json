@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "ChatSession",
   "name": "free input: a signal that the current state has no row for is thrown away and the state stays",
   "start_at": 1000,

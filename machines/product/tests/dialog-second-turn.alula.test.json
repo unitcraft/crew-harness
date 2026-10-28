@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "DialogSession",
   "name": "the next message after an answer opens the request agent-2 and nothing of the first turn is carried over",
   "start_at": 1000,

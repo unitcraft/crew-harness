@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "agent_step",
   "name": "POLICY 2: a call without a human (a lens) asks nothing: the answer is deny",
   "start_at": 1000,

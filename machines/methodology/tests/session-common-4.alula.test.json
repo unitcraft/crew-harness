@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "session_start",
   "name": "COMMON 4: a cancel of the request of the launch after its answer was given is dropped with a line of the journal",
   "start_at": 1000,

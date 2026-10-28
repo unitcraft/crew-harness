@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "session_start",
   "name": "LAUNCH 7: the process restarts in the middle of the session: the preparation is not written again (the poisoned answers of prepare_launch and finish_launch are not touched), the end of the launch is written once on the answer",
   "start_at": 1000,

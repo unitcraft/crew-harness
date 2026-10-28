@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "agent_step",
   "name": "COMMON 4: a cancel of the request of the call after the answer is dropped",
   "start_at": 1000,

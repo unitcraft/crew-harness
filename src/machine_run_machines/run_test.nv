@@ -15,7 +15,7 @@ test "loads" {
     }
     match load_alula_machine("{}", all_registry()) {
         Ok(m) => assert(false)
-        Err(e) => assert(e.contains("format"))
+        Err(e) => assert(e.contains("kind"))
     }
 }
 

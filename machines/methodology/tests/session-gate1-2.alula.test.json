@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "session_start",
   "name": "B1 2: the keeper says halt -> HALTED with the reason gate1_halt; the group of the agent is stopped, the refusal is StoppedByHuman",
   "start_at": 1000,

@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "agent_step",
   "name": "HALTED 11: cancel_request is a refusal Cancelled",
   "start_at": 1000,

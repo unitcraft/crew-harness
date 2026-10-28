@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "session_start",
   "name": "COMMON 2: the stop of the parent in a gate: the launch is paused, the journal says that the parent did it",
   "start_at": 1000,

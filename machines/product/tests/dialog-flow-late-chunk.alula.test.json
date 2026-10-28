@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "DialogSession",
   "name": "a late chunk of a closed request is discarded by the engine and reopens nothing",
   "start_at": 1000,

@@ -7,7 +7,7 @@ import alula.machine.{text_of_file}
 import alula.machine_agent.{methodology_text, methodology_en_text}
 import alula.machine_text_eq.{case_text}
 import alula.machine_text.{render_machine, render_machine_with, render, translate_report_with, render_type_in, render_expression_in, render_actions_in}
-import crew_harness.machines.{agent_step_table_text, chat_table_text, table_files, library_files, connects_library, part_mended}
+import crew_harness.machines.{agent_step_table_text, chat_table_text, table_files, translation_files, connects_library, part_mended}
 
 fn chat_json() -> str => machine_json("chat.alula.json")
 
@@ -116,7 +116,7 @@ test "rn circle pilot and examples" {
     assert(circle(pilot, "ru") == "")
     assert(circle(pilot, "en") == "")
     // the examples of the format are pieces of a machine, not a machine: they are translated without the checks of the table
-    ro examples = translate_report_with(case_text("format-examples.alula.md"), library_files()).json
+    ro examples = translate_report_with(case_text("format-examples.alula.md"), translation_files()).json
     assert(examples.byte_len() > 1000)
     assert(circle_loose(examples, "ru") == "")
     assert(circle_loose(examples, "en") == "")

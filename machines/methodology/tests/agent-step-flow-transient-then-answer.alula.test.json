@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "agent_step",
   "name": "a transient error is repeated and the repeat answers",
   "start_at": 1000,

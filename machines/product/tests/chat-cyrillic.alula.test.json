@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "ChatSession",
   "name": "Cyrillic in a message goes into the request, the state and the answer unchanged",
   "start_at": 1000,

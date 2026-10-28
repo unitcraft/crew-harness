@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "session_start",
   "name": "FLOW: a session of the runner (no number of the pass, no phase): start, confirm, the agent answers, the result is Done and the summary and the findings are empty",
   "start_at": 1000,

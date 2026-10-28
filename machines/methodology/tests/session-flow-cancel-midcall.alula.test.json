@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "session_start",
   "name": "FLOW: the cancel comes while the agent works: the nested request is cancelled, the nested machine ends with Cancelled, its reply is dropped",
   "start_at": 1000,

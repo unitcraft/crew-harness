@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "dialog_steps",
   "name": "a chat turn: the agent step is the nested machine; its answer is the answer of the turn and the session waits for the next word",
   "start_at": 1000,

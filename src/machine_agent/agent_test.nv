@@ -6,9 +6,9 @@ import std.text
 import alula.machine_table.{load_machine}
 import alula.machine_run.{load_alula_machine}
 import alula.machine_text.{translate_checked_with, translate_report_with, TranslateReport, error_text, render_summary}
-import crew_harness.machines.{methodology_registry, agent_step_machine_text, agent_step_table_text, library_files}
+import crew_harness.machines.{methodology_registry, agent_step_machine_text, agent_step_table_text, translation_files}
 
-fn agent_report() -> TranslateReport => translate_checked_with(agent_step_table_text(), methodology_registry(), library_files())
+fn agent_report() -> TranslateReport => translate_checked_with(agent_step_table_text(), methodology_registry(), translation_files())
 
 fn errors_text(report TranslateReport) -> str {
     mut parts = []str.new()
@@ -29,14 +29,14 @@ test "ag file is translation" {
     assert(agent_report().json == agent_step_machine_text())
     // Alula 2.26 (AL-138): the tree carries the reads of the states that the check derives, with the hidden reads of the external functions of the registry of the host; the translation
     // without the registry does not know them, so only the checked translation is the committed file
-    assert(translate_report_with(agent_step_table_text(), library_files()).errors.len() == 0)
+    assert(translate_report_with(agent_step_table_text(), translation_files()).errors.len() == 0)
 }
 
 test "ag loads" {
     match load_machine(agent_step_machine_text(), methodology_registry()) {
         Ok(def) => {
             assert(def.name == "agent_step")
-            assert(def.version == "alula-2.24")
+            assert(def.version == "1")
             assert(def.states.len() == 14)
             assert(def.common.len() == 6)
             assert(def.parties.len() == 3)
@@ -65,7 +65,7 @@ test "ag builds" {
 
 test "ag summary" {
     ro text = render_summary(agent_step_machine_text())
-    assert(text.starts_with("machine agent_step (version alula-2.24): 14 states, 47 rows, "))
+    assert(text.starts_with("machine agent_step (version 1): 14 states, 47 rows, "))
     assert(text.contains("  AgentTurn (appeal): 9 rows, 18 actions"))
     assert(text.contains("common events: 6 rows"))
     assert(text.contains("ends: 13 rows"))
@@ -90,7 +90,7 @@ fn without_markers(text str) -> str {
 test "ag markers required" {
     ro plain = without_markers(agent_step_table_text())
     assert(plain != agent_step_table_text())
-    ro report = translate_checked_with(plain, methodology_registry(), library_files())
+    ro report = translate_checked_with(plain, methodology_registry(), translation_files())
     assert(report.errors.len() > 0)
     assert(errors_text(report).contains("AL-137"))
 }

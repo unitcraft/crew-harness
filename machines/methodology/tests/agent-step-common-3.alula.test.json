@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "agent_step",
   "name": "COMMON 3: a cancel of a foreign request is dropped, the state is the same",
   "start_at": 1000,

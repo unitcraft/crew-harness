@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "session_start",
   "name": "FLOW: every optional field of the input is given: the data keep them; the launch starts",
   "start_at": 1000,

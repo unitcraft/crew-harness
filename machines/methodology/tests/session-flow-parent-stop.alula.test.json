@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "session_start",
   "name": "FLOW: the parent of the launch stops it and lets it go on while the agent works: the stop and the continue go to the agent step, which asks its agent again and answers",
   "start_at": 1000,

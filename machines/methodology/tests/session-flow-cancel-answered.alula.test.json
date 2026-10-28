@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "session_start",
   "name": "FLOW: the nested machine has answered and the parent has not taken the answer yet when the cancel comes: the answer is dropped, the launch is Cancelled",
   "start_at": 1000,

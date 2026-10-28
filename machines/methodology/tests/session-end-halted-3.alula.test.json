@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "session_start",
   "name": "HALTED 3: the cancel of the request of the launch in the middle of the session: the reason cancel_request, the refusal Cancelled, the nested request is cancelled",
   "start_at": 1000,

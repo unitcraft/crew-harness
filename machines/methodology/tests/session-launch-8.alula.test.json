@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "session_start",
   "name": "LAUNCH 8: after the repeat at B13 the process restarts: the group is not stopped and the launch is not prepared again (the poisoned answers of stop_agent_group and prepare_launch are not touched)",
   "start_at": 1000,

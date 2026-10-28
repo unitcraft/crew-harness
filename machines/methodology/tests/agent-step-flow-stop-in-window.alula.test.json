@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "agent_step",
   "name": "the stop arrives in the window between the commit and the send: the request is cancelled before it is sent, the continue sends a new one",
   "start_at": 1000,

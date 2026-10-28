@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "DialogSession",
   "name": "death after the commit of the second turn, before the send: sent once as agent-2",
   "start_at": 1000,

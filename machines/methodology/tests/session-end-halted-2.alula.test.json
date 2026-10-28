@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "session_start",
   "name": "HALTED 2: the halt in the pause: the reason pause_halt, the refusal StoppedByHuman",
   "start_at": 1000,

@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "agent_step",
   "name": "BUDGET 4: no limit is reached: the number of turns grows and the agent gets the next request",
   "start_at": 1000,

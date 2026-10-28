@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "agent_step",
   "name": "AGENT TURN 3: the limit of the requests of a turn stops the step",
   "start_at": 1000,

@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "session_start",
   "name": "FLOW: a human stops the launch while the agent works and halts it: both machines end with StoppedByHuman, the group of the agent is stopped",
   "start_at": 1000,

@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "agent_step",
   "name": "ACCOUNTING 1: one usage line is written and the machine goes to the outcome fork",
   "start_at": 1000,

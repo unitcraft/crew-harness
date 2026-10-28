@@ -41,7 +41,7 @@ test "hm idle term of the settings" {
 }
 
 test "hm a broken text is refused with the name of the machine" {
-    match hub_machine_from("{\"format\":\"machine/2\"", 1000) {
+    match hub_machine_from("{\"kind\":\"machine\"", 1000) {
         Ok(m) => assert(false)
         Err(e) => {
             assert(e.starts_with("the dialog machine cannot be made: "))

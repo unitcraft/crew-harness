@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "DialogSession",
   "name": "the agent answers while the process is dead: the answer is taken once after the restart and the session goes on",
   "start_at": 1000,

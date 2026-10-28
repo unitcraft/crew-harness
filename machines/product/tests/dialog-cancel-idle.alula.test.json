@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "DialogSession",
   "name": "a cancel in Idle is a note, nothing ends and nothing is cancelled",
   "start_at": 1000,

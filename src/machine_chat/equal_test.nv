@@ -1,4 +1,4 @@
-// equal_test.nv - the proof of equality: the machine of the chat written as data (`machine/2`) and the machine on Nova (`src/chat`) give the
+// equal_test.nv - the proof of equality: the machine of the chat written as data (`kind: machine`) and the machine on Nova (`src/chat`) give the
 // same sequence on the same scenarios - the state, the events of the journal, the data, the queue - at the level of the machine (one step) and of
 // the engine (journal lines with the envelope, sent and cancelled requests, the outcome, the acknowledgements).
 module crew_harness.machine_chat

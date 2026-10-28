@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "DialogSession",
   "name": "restart after the answer: the session is open, nothing sent again",
   "start_at": 1000,

@@ -8,9 +8,9 @@ import alula.machine.{NamedText}
 import alula.machine_table.{MachineDef, StateDef, TableRow, Target, ToState, ToNothing, ToPrevious, ToSame, ToPrepareReturn, load_machine}
 import alula.machine_run.{AlulaMachine, TestRun, load_alula_machine, parse_test, run_test, run_nested_test, run_ok, report_text}
 import alula.machine_text.{translate_checked_with, TranslateReport, TranslateError, error_text, render_machine}
-import crew_harness.machines.{methodology_nested, methodology_registry, test_files, task_runner_machine_text, task_runner_table_text, library_files, connects_library}
+import crew_harness.machines.{methodology_nested, methodology_registry, test_files, task_runner_machine_text, task_runner_table_text, translation_files, connects_library}
 
-fn table_report() -> TranslateReport => translate_checked_with(task_runner_table_text(), methodology_registry(), library_files())
+fn table_report() -> TranslateReport => translate_checked_with(task_runner_table_text(), methodology_registry(), translation_files())
 
 fn errors_text(report TranslateReport) -> str {
     mut parts = []str.new()
@@ -203,7 +203,7 @@ fn circle(json str, lang str) -> str {
     if lang == "en" && connects_library(json) { return "" }
     ro made = render_machine(json, lang)
     if made.notes.len() > 0 { return "render: ${made.notes.join(" ## ")}" }
-    ro again = translate_checked_with(made.text, methodology_registry(), library_files())
+    ro again = translate_checked_with(made.text, methodology_registry(), translation_files())
     if again.errors.len() > 0 { return "translate: ${notes_of(again).join(" ## ")}" }
     tree_diff(json, again.json)
 }

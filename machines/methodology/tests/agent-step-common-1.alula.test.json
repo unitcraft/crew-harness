@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "agent_step",
   "name": "COMMON 1: the stop of a human cancels the open requests and the machine waits in the pause",
   "start_at": 1000,

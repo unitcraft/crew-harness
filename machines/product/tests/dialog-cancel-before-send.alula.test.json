@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "DialogSession",
   "name": "death after the cancel was committed, before it was sent: the cancel goes out once and the session goes on",
   "start_at": 1000,

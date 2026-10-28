@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "agent_step",
   "name": "RETRY 2: the second retry keeps the turn before the first one",
   "start_at": 1000,

@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "DialogSession",
   "name": "the cancel arrives in the window between the commit and the send",
   "start_at": 1000,

@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "agent_step",
   "name": "HALTED 6: the stop reason max_tokens is a refusal MaxTokens",
   "start_at": 1000,

@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "session_start",
   "name": "FLOW: a session of the delivery (s7) asks the agent step for the delivery dialog; the request carries the prompt of the host",
   "start_at": 1000,

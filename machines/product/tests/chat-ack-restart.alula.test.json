@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "ChatSession",
   "name": "a restart acknowledges the committed key once more",
   "start_at": 1000,

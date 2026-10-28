@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "ChatSession",
   "name": "pump takes the incoming events of the agent in the order of arrival",
   "start_at": 1000,

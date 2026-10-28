@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "agent_step",
   "name": "the stop in the gate PERMISSION: the continue enters the gate again, no request is sent",
   "start_at": 1000,

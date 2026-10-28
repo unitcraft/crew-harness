@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "session_start",
   "name": "FLOW: a check session of the review of the cycle with the pass 3: the summary line and the findings are kept by the pass and go out with the answer",
   "start_at": 1000,

@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "agent_step",
   "name": "REPLY VALIDATION 3: a reply that breaks the form is returned once: the turn is \"fix\"",
   "start_at": 1000,

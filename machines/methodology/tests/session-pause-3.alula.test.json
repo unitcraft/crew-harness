@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "session_start",
   "name": "PAUSE 3: the parent of the launch stops it (the signal with the id of the request) and then says continue: the launch is paused and goes on",
   "start_at": 1000,

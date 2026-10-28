@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "ChatSession",
   "name": "a second answer to a closed request is discarded and the journal remembers it",
   "start_at": 1000,

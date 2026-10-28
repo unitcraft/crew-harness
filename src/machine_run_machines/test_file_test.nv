@@ -45,7 +45,7 @@ fn parse_err(text str) -> str {
     }
 }
 
-fn one_step(step str) -> str => `{"format":"test/0","machine":"ChatSession","name":"t","start_at":1000,"steps":[${step}]}`
+fn one_step(step str) -> str => `{"kind":"test","machine":"ChatSession","name":"t","start_at":1000,"steps":[${step}]}`
 
 test "every scenario" {
     ro files = test_files()
@@ -173,7 +173,7 @@ test "drive is generic" {
 test "standalone key default" {
     ro sc = scenario_of("chat-message-opens-request.alula.test.json")
     assert(!sc.standalone)
-    match parse_test(`{"format":"test/0","machine":"M","steps":[]}`) {
+    match parse_test(`{"kind":"test","machine":"M","steps":[]}`) {
         Ok(x) => assert(!x.standalone)
         Err(e) => assert(false)
     }

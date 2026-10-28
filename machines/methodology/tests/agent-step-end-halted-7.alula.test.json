@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "agent_step",
   "name": "HALTED 7: cost_limit is a refusal MaxTokens",
   "start_at": 1000,

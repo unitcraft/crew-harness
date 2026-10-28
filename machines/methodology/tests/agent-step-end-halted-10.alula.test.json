@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "agent_step",
   "name": "HALTED 10: pause_halt is a refusal StoppedByHuman",
   "start_at": 1000,

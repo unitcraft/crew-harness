@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "session_start",
   "name": "FLOW: the volume does not fit twice, the keeper repeats twice (B1 -> B2), then it fits and the session runs",
   "start_at": 1000,

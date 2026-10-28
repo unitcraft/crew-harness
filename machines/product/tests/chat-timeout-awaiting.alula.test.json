@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "ChatSession",
   "name": "the idle term in Awaiting ends the session with Timeout",
   "start_at": 1000,

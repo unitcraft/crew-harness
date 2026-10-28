@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "session_start",
   "name": "SCOPE 2: the volume does not fit -> B1: the keeper is told so and asked to repeat the launch or to stop it",
   "start_at": 1000,

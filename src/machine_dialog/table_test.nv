@@ -9,9 +9,9 @@ import alula.machine_table.{MachineDef, load_machine}
 import alula.machine_run.{AlulaMachine, AlulaState, ProjectValue, Test, TestRun, load_alula_machine, load_alula_machine_with, parse_test, run_test, run_ok, report_text}
 import alula.machine_text.{translate_checked_with, translate_report_with, TranslateReport, error_text, render_summary}
 import alula.engine.{Incoming, EventKind, StepEnvironment, Order}
-import crew_harness.machines.{product_registry, dialog_machine_text, dialog_table_text, test_files, library_files}
+import crew_harness.machines.{product_registry, dialog_machine_text, dialog_table_text, test_files, translation_files}
 
-fn dialog_report() -> TranslateReport => translate_checked_with(dialog_table_text(), product_registry(), library_files())
+fn dialog_report() -> TranslateReport => translate_checked_with(dialog_table_text(), product_registry(), translation_files())
 
 fn errors_text(report TranslateReport) -> str {
     mut parts = []str.new()
@@ -51,13 +51,13 @@ test "dl clean" {
 test "dl file is translation" {
     assert(dialog_report().json == dialog_machine_text())
     // Alula 2.26 (AL-138): the tree carries the reads of the states that the check derives; the translation without the check does not write them
-    assert(translate_report_with(dialog_table_text(), library_files()).errors.len() == 0)
+    assert(translate_report_with(dialog_table_text(), translation_files()).errors.len() == 0)
 }
 
 test "dl header" {
-    assert(dialog_table_text().contains("- format: 2.26"))
+    assert(dialog_table_text().contains("- alula_version: 0.27"))
     assert(dialog_table_text().contains("- machine: DialogSession"))
-    assert(dialog_machine_text().contains("\"alula_version\": \"2.26\"") || dialog_machine_text().contains("\"alula_version\":\"2.26\""))
+    assert(dialog_machine_text().contains("\"alula_version\": \"0.27\"") || dialog_machine_text().contains("\"alula_version\":\"0.27\""))
 }
 
 test "dl loads" {

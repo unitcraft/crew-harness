@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "ChatSession",
   "name": "a discarded event with a key is acknowledged too",
   "start_at": 1000,

@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "agent_step",
   "name": "START 1: the start writes the time and the number of turns, the agent gets the first request (attempt 1, open request, call request)",
   "start_at": 1000,

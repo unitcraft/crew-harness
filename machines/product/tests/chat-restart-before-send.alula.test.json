@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "ChatSession",
   "name": "restart after the commit but before the send: the request is sent now, exactly once",
   "start_at": 1000,

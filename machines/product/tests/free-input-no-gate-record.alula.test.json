@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "ChatSession",
   "name": "free input: the only request that is open is the one to the agent, nothing is sent to the user",
   "start_at": 1000,

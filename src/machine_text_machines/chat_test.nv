@@ -3,13 +3,13 @@ module crew_harness.machine_text_machines
 
 import std.text
 import std.encoding.json.{Json, JsonValue, JsonObject}
-import crew_harness.machines.{chat_machine_text, chat_table_text, library_files, product_registry}
+import crew_harness.machines.{chat_machine_text, chat_table_text, translation_files, product_registry}
 import alula.machine_text.{TranslateError, error_text, translate_checked_with}
 
 // The translation of the table of the chat with the libraries beside it (Alula 2.26, task 240: the chat connects the library of the cancel `libs/call_cancel.alula.md`), with the check:
 // the tree carries the reads of the states that the check derives (AL-138).
 fn chat_translation() -> Result[str, []TranslateError] {
-    ro report = translate_checked_with(chat_table_text(), product_registry(), library_files())
+    ro report = translate_checked_with(chat_table_text(), product_registry(), translation_files())
     if report.errors.len() > 0 { return Err(report.errors) }
     Ok(report.json)
 }

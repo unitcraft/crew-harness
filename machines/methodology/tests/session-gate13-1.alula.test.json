@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "session_start",
   "name": "B13 1: the keeper says repeat -> SESSION again with a new request and a new nested machine; B2 is not shown again (the profile is not asked twice)",
   "start_at": 1000,

@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "agent_step",
   "name": "POLICY 1: the project allows reading: the answer is allow, the turn is \"permission\"",
   "params": {"проект.политика_разрешений":{"$dict":[[{"$variant":"ActionKind","fields":{},"name":"Read"},"allow"],[{"$variant":"ActionKind","fields":{},"name":"Write"},"ask"],[{"$variant":"ActionKind","fields":{},"name":"Delete"},"ask"],[{"$variant":"ActionKind","fields":{},"name":"Move"},"ask"],[{"$variant":"ActionKind","fields":{},"name":"Search"},"ask"],[{"$variant":"ActionKind","fields":{},"name":"Execute"},"ask"],[{"$variant":"ActionKind","fields":{},"name":"Network"},"ask"],[{"$variant":"ActionKind","fields":{},"name":"Think"},"ask"],[{"$variant":"ActionKind","fields":{},"name":"SwitchMode"},"ask"],[{"$variant":"ActionKind","fields":{},"name":"Other"},"ask"]]}},

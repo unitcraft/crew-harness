@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "session_start",
   "name": "FLOW: the model refused: the failure code reaches B13 as a word of the code",
   "start_at": 1000,

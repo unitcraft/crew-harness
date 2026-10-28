@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "session_start",
   "name": "END 1: the launch of a session from the runner (no number of a pass): the answer is the result of the session, the summary and the findings are empty",
   "start_at": 1000,

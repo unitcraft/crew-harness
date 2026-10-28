@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "session_start",
   "name": "FLOW: the nested machine has answered and the parent restarts before it takes the answer: the request is sent again, the ready answer comes again, one is taken, the other is dropped",
   "start_at": 1000,

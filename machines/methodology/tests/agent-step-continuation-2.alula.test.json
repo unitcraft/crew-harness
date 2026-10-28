@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "agent_step",
   "name": "CONTINUATION 2: the second truncation stops the step with the limit of tokens",
   "start_at": 1000,

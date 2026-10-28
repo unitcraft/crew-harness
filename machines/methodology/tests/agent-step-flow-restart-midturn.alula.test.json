@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "agent_step",
   "name": "a restart in the middle of a turn resumes from the journal: nothing is sent again, the answer is accepted",
   "start_at": 1000,

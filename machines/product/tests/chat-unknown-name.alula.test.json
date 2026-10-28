@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "ChatSession",
   "name": "an event of a name the machine does not know is a journal event, not a crash",
   "start_at": 1000,

@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "ChatSession",
   "name": "the cancel of the user while waiting stops the session as human",
   "start_at": 1000,

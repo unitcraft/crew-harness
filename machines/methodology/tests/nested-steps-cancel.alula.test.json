@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "dialog_steps",
   "name": "a chat turn: the session is cancelled by its parent; the cancel goes down to the agent step and its reply is dropped",
   "start_at": 1000,

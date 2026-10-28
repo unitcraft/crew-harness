@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "session_start",
   "name": "PAUSE 4: the parent of the launch stops it and then says halt: HALTED with the reason pause_halt",
   "start_at": 1000,

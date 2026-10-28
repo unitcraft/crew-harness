@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "DialogSession",
   "name": "restart in the middle, then answers, a repeated answer and a foreign one",
   "start_at": 1000,

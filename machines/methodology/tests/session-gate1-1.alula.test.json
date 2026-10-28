@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "session_start",
   "name": "B1 1: the keeper says repeat (the volume was changed by hand) -> B2 asks the profile again; the volume is measured again after the new confirm",
   "start_at": 1000,

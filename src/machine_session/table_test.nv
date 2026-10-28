@@ -6,7 +6,7 @@ module crew_harness.machine_session
 import std.text
 import alula.machine_text.{translate_report_with, translate_checked_with}
 import alula.machine_table.{MachineDef, StateDef, TableRow, StateKind, AppealKind, OperationKind, ForkKind, EndKind, ToState, ToPrevious, ToSame, ToNothing, ToPrepareReturn, MachineParty, GatekeeperParty, EnhancedParty, AssignAct, JournalAct, MachineErrorAct, IfAct, CallAct, PassAct, CancelOpenAct, SignalEv, AnswerEv, FailureEv, NowEv, SignalEv, find_party, find_data, find_state}
-import crew_harness.machines.{methodology_registry, session_start_machine_text, session_start_table_text, library_files}
+import crew_harness.machines.{methodology_registry, session_start_machine_text, session_start_table_text, translation_files}
 
 fn target_name(r TableRow) -> str {
     match r.next.target {
@@ -239,7 +239,8 @@ test "st the three parties" {
     assert(step.id == "agent_step")
     assert(step.nested == "agent_step")
     assert(step.counter == "step_attempt")
-    assert(step.input_spec.len() == 1 && step.result_spec.len() == 1)
+    // Alula 0.27 (AL-146): the input of the call is the fields of the input of the called machine, not a record type
+    assert(step.input_spec.len() == 0 && step.input_fields.len() == 8 && step.result_spec.len() == 1)
     assert(step.signals.len() == 0)
     ro keeper = def.parties[find_party(def, "вратарь")]
     assert(keeper.kind == GatekeeperParty)
@@ -442,18 +443,18 @@ test "st the table text is a table of 2.26" {
     ro text = session_start_table_text()
     assert(text.starts_with("# Машина: Запуск сессии\n"))
     assert(text.contains("- machine: session_start\n"))
-    assert(text.contains("- format: 2.26\n"))
+    assert(text.contains("- alula_version: 0.27\n"))
     assert(text.contains("Начальное состояние: В2"))
     assert(text.contains("### Пауза\n- Файл: libs/pause.alula.md\n"))
     assert(text.contains("| сигнал_остановки | \"остановить\" |"))
-    assert(session_start_machine_text().contains("\"format\": \"machine/2\"") || session_start_machine_text().contains("\"format\":\"machine/2\""))
+    assert(session_start_machine_text().contains("\"kind\": \"machine\"") || session_start_machine_text().contains("\"kind\":\"machine\""))
 }
 
 test "st the json is the translation of the table" {
     // the file of the product is what the program `alula compile` makes of the table, byte for byte: the checked translation (Alula 2.26, AL-138: the derived reads need the registry of the host)
-    ro report = translate_report_with(session_start_table_text(), library_files())
+    ro report = translate_report_with(session_start_table_text(), translation_files())
     assert(report.errors.len() == 0)
-    ro checked = translate_checked_with(session_start_table_text(), methodology_registry(), library_files())
+    ro checked = translate_checked_with(session_start_table_text(), methodology_registry(), translation_files())
     assert(checked.errors.len() == 0)
     assert(checked.json == session_start_machine_text())
     assert(report.rows_total >= 21)
@@ -462,7 +463,7 @@ test "st the json is the translation of the table" {
 
 test "st the table has no unsupported note" {
     // every construction of the table runs: the translator leaves no note `unsupported` and no warning
-    ro report = translate_checked_with(session_start_table_text(), methodology_registry(), library_files())
+    ro report = translate_checked_with(session_start_table_text(), methodology_registry(), translation_files())
     assert(report.warnings.len() == 0)
     assert(report.rows_noted == 0)
     assert(!session_start_machine_text().contains("unsupported"))

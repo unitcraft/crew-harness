@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "agent_step",
   "name": "PERMISSION 2: the human denies",
   "start_at": 1000,

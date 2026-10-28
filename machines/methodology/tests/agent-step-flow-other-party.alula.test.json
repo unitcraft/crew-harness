@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "agent_step",
   "name": "in the pause the late answer of the agent and the word of the gate are dropped; the pause waits for its own words",
   "start_at": 1000,

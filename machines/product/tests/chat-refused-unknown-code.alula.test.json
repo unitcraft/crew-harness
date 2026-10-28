@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "ChatSession",
   "name": "a refusal with a code outside the closed list is NoResult",
   "start_at": 1000,

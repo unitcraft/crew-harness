@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "DialogSession",
   "name": "free input: two turns of the dialog grow the counter of the agent to 2, and the user has no counter (Alula 2.26: no datum of a counter for a free input)",
   "start_at": 1000,

@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "dialog_steps",
   "name": "a chat turn: stop and continue of a human go down to the agent step; after continue it asks the agent again and the turn ends",
   "start_at": 1000,

@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "agent_step",
   "name": "BUDGET 2: the budget of cost is used up: the step stops",
   "start_at": 1000,

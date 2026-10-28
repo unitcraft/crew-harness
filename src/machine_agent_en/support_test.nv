@@ -1,18 +1,18 @@
-// support_test.nv - helpers of the tests of the English sample of the agent step: the two samples of the methodology, the comparison of two trees `machine/2` that does not count the names of the
+// support_test.nv - helpers of the tests of the English sample of the agent step: the two samples of the methodology, the comparison of two trees `kind: machine` that does not count the names of the
 // local variables of the author (the parameters of a definition, `let`, the variables of a lambda and of a loop, the bindings of an event) and the strings of the author.
 module crew_harness.machine_agent_en
 
 import std.text
 import std.encoding.json.{Json, JsonValue, JsonObject}
 import alula.machine_text.{translate_checked_with, TranslateReport}
-import crew_harness.machines.{methodology_registry, library_files, agent_step_sample_en_text}
+import crew_harness.machines.{methodology_registry, translation_files, agent_step_sample_en_text}
 
 fn lf(text str) -> str => text.replace("\r\n", "\n")
 
 // the English twin of the sample of the specification at 2.26 (`machines/methodology/agent-step-sample.en.txt`): the package 0.9.0 keeps its own copy at 2.25 (`methodology_en_text`)
 fn en_sample() -> str => lf(agent_step_sample_en_text())
 
-fn report_of(text str) -> TranslateReport => translate_checked_with(text, methodology_registry(), library_files())
+fn report_of(text str) -> TranslateReport => translate_checked_with(text, methodology_registry(), translation_files())
 
 fn en_report() -> TranslateReport => report_of(en_sample())
 

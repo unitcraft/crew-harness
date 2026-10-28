@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "DialogSession",
   "name": "a user message in Idle opens a request to the agent and waits",
   "start_at": 1000,

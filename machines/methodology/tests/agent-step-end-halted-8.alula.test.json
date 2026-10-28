@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "agent_step",
   "name": "HALTED 8: max_turn_requests is a refusal MaxTurnRequests",
   "start_at": 1000,

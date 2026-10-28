@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "session_start",
   "name": "FLOW: a human stops the launch at B13 and then says continue: B13 again; the session is repeated after it",
   "start_at": 1000,

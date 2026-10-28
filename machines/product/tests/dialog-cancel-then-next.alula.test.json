@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "DialogSession",
   "name": "a cancel closes the turn, the late answer and the late refusal are discarded, the next turn works",
   "start_at": 1000,

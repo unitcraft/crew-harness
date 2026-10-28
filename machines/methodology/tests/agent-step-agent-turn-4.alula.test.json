@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "agent_step",
   "name": "AGENT TURN 4: a refusal of the model stops the step",
   "start_at": 1000,

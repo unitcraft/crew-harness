@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "session_start",
   "name": "FLOW: the nested machine refuses, B13 repeats the session with a new request (agent_step-2), the second nested machine answers",
   "start_at": 1000,

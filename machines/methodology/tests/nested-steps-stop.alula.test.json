@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "dialog_steps",
   "name": "a chat turn: a human stops the session, the stop goes to the agent step (it cancels its agent request); the halt ends both with StoppedByHuman",
   "start_at": 1000,

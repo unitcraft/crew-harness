@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "ChatSession",
   "name": "the cancel in Idle ends the session without a request to cancel",
   "start_at": 1000,

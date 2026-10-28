@@ -91,7 +91,7 @@ test "chat ends" {
 }
 
 test "unknown key" {
-    assert(says(chat_with("\"version\": \"1\",", "\"version\": \"1\", \"bogus\": 1,"), "bogus"))
+    assert(says(chat_with("\"revision\": 1,", "\"revision\": 1, \"bogus\": 1,"), "bogus"))
     assert(says(chat_with("\"kind\": \"appeal\", \"party\": \"user\"", "\"kind\": \"appeal\", \"party\": \"user\", \"zzz\": 1"), "zzz"))
     assert(says(chat_with("\"reads\": \"party\"", "\"reads\": \"party\", \"extra\": true"), "extra"))
     assert(says(chat_with("{ \"do\": \"journal\", \"code\": \"agent_done\" }", "{ \"do\": \"journal\", \"code\": \"agent_done\", \"x\": 1 }"), "the key x"))

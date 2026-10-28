@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "ChatSession",
   "name": "restart after the answer: stays finished, nothing sent",
   "start_at": 1000,

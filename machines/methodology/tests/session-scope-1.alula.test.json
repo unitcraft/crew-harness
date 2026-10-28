@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "session_start",
   "name": "SCOPE 1: the volume fits -> SESSION: the request goes to the agent step with the session, and the nested machine asks its agent",
   "start_at": 1000,

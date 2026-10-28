@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "agent_step",
   "name": "stop, continue, then the answer of the new request ends the step",
   "start_at": 1000,

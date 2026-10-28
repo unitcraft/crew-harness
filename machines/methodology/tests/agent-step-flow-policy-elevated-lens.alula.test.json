@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "agent_step",
   "name": "an action of the elevated attention without a human is denied",
   "start_at": 1000,

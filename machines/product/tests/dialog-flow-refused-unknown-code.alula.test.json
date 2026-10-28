@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "DialogSession",
   "name": "a refusal with a code outside the closed list is the code NoResult, the turn ends",
   "start_at": 1000,

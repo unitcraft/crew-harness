@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "session_start",
   "name": "FLOW: the request of the agent step: the kind of the caller (a cycle session), the profile and the context of the host, the session, the main dialog, no limits",
   "start_at": 1000,

@@ -1,4 +1,4 @@
-// eq_test.nv - the proof of the translator on the chat machine: the table `chat.alula.md` in Russian, translated to the JSON `machine/2`, runs the 39 scenarios
+// eq_test.nv - the proof of the translator on the chat machine: the table `chat.alula.md` in Russian, translated to the JSON `kind: machine`, runs the 39 scenarios
 // of the chat like the hand-written `chat.alula.json` - the state, the data, the events of the journal, the lines of the journal with the envelope, the
 // open, sent and cancelled requests, the queue, the acknowledgements, the outcome, the number of the step - at the level of the engine, and the orders, the
 // transition and the state at the level of one step of the machine.
@@ -8,11 +8,11 @@ import std.text
 import alula.engine.{Incoming, Order, StepEnvironment, journal_line}
 import alula.machine_run.{AlulaState, AlulaMachine, Test, StepTrace, load_alula_machine, alula_step, ScriptedHost, drive_test, parse_test, test_incoming, run_test, run_ok, report_text}
 import alula.machine_text.{translate_report_with, error_text, TranslateError}
-import crew_harness.machines.{product_registry, chat_machine_text, chat_table_text, test_files, library_files}
+import crew_harness.machines.{product_registry, chat_machine_text, chat_table_text, test_files, translation_files}
 
 // The translation of the table of the chat with the libraries beside it (Alula 2.26, task 240: the chat connects the library of the cancel `libs/call_cancel.alula.md`).
 fn chat_translation() -> Result[str, []TranslateError] {
-    ro report = translate_report_with(chat_table_text(), library_files())
+    ro report = translate_report_with(chat_table_text(), translation_files())
     if report.errors.len() > 0 { return Err(report.errors) }
     Ok(report.json)
 }

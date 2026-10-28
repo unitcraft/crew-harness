@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "session_start",
   "name": "HALTED 1: the keeper stops the launch at B1 (the volume does not fit): the reason gate1_halt, the refusal StoppedByHuman",
   "start_at": 1000,

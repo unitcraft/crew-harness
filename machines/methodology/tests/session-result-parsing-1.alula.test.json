@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "session_start",
   "name": "RESULT PARSING 1: a check session with the number of the pass reads the summary line and the findings of the file and keeps them by the pass; the result is a question to the human",
   "start_at": 1000,

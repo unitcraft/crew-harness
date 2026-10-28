@@ -6,7 +6,7 @@ module crew_harness.machine_dialog
 
 import std.text
 import alula.machine_text.{translate_checked_with, error_text}
-import crew_harness.machines.{product_registry, chat_table_text, dialog_machine_text, dialog_table_text, library_files}
+import crew_harness.machines.{product_registry, chat_table_text, dialog_machine_text, dialog_table_text, translation_files}
 
 test "bd dialog: the message and the chunk have the field содержание" {
     ro t = dialog_table_text()
@@ -44,12 +44,12 @@ test "bd dialog: the cancel is the signal of the protocol and a common event of 
 }
 
 test "bd dialog: the table translates without errors" {
-    ro report = translate_checked_with(dialog_table_text(), product_registry(), library_files())
+    ro report = translate_checked_with(dialog_table_text(), product_registry(), translation_files())
     assert(report.errors.len() == 0)
 }
 
 test "bd dialog: the translation is the committed file" {
-    ro report = translate_checked_with(dialog_table_text(), product_registry(), library_files())
+    ro report = translate_checked_with(dialog_table_text(), product_registry(), translation_files())
     assert(report.json == dialog_machine_text())
 }
 

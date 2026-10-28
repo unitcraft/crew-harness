@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "agent_step",
   "name": "a failure whose code no row names (ModelRefused) is read as NoResult",
   "start_at": 1000,

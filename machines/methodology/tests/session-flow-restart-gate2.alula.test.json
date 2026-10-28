@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "session_start",
   "name": "FLOW: the process restarts while the keeper decides at B2: the machine goes on from its snapshot and the keeper confirms",
   "start_at": 1000,

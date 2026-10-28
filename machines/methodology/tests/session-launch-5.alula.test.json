@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "session_start",
   "name": "LAUNCH 5: the nested step answers: the end of the launch is a writing call on the row 1 of SESSION (the answer of the host of a wrong type stops the step: the machine stays at SESSION)",
   "start_at": 1000,

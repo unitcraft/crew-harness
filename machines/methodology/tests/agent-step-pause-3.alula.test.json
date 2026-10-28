@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "agent_step",
   "name": "PAUSE 3: the parent continues (the request of the call)",
   "start_at": 1000,

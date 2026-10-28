@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "agent_step",
   "name": "HALTED 5: timeout is a refusal Timeout",
   "start_at": 1000,

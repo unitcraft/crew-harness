@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "DialogSession",
   "name": "(table only) the signal close_session in Idle ends the session: the end Closed answers closed",
   "start_at": 1000,

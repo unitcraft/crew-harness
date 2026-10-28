@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "agent_step",
   "name": "AGENT TURN 5: a turn stopped by the agent stops the step",
   "start_at": 1000,

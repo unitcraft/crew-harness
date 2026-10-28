@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "DialogSession",
   "name": "an answer to a request nobody opened is discarded as unknown",
   "start_at": 1000,

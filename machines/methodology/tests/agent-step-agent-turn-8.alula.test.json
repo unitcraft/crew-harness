@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "agent_step",
   "name": "AGENT TURN 8: the agent asks for a permission: the policy is asked",
   "start_at": 1000,

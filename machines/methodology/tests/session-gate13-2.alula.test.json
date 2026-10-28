@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "session_start",
   "name": "B13 2: the keeper says halt -> HALTED with the reason gate13_halt; the refusal is StoppedByHuman",
   "start_at": 1000,

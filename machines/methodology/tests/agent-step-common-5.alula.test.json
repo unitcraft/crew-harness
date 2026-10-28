@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "agent_step",
   "name": "COMMON 5: the cancel of the request of the call stops the machine, the open requests are cancelled",
   "start_at": 1000,

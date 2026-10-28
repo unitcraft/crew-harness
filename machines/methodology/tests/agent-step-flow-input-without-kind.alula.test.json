@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "agent_step",
   "name": "the start without the field kind of the request is refused: input_rejected names it, a refusal NoResult",
   "start_at": 1000,

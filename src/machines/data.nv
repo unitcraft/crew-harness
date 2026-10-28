@@ -1,5 +1,5 @@
 // data.nv - the machines of the product and the machines of the methodology (kept here until task 159) as data, compiled into the program and the tests with `embed_str` (a path is read relative to this file):
-// the JSON `machine/2`, the tables, the scenarios, the registry of the primitives and the table of the journal codes of each owner (`machines/product/`, `machines/methodology/`). The package `alula` knows
+// the JSON `kind: machine`, the tables, the scenarios, the registry of the primitives and the table of the journal codes of each owner (`machines/product/`, `machines/methodology/`). The package `alula` knows
 // only the language (one primitive, 35 codes, spec 7a); the rest is registered here: `product_registry()` and `methodology_registry()` are the language and the data of the owner.
 module crew_harness.machines
 
@@ -675,7 +675,7 @@ fn only_ending(names []str, suffixes []str) -> []str {
 /// The libraries that the tables connect (Alula 2.26, section 9; task 240), by the path beside a machine (`libs/pause.alula.md`, as the line `- Файл:` of a connection names it): of the
 /// methodology «Пауза» and the arithmetic of the cycle with their English twins (the files of `libs/` of the package 0.9.0: the script of the migration put the Russian ones beside the machines,
 /// the English ones are for the English sample of the agent step), of the product «Отмена запроса» (`machines/product/libs/`: the signal of the protocol of the cancel). A test that translates
-/// a table passes them to the translator.
+/// a table passes them to the translator (with the called machines: `translation_files`).
 export fn library_files() -> []NamedText => [
     NamedText { name: "libs/cycle_arithmetic.alula.md", text: embed_str("../../machines/methodology/libs/cycle_arithmetic.alula.md") },
     NamedText { name: "libs/cycle_arithmetic.en.alula.md", text: embed_str("../../machines/methodology/libs/cycle_arithmetic.en.alula.md") },
@@ -684,10 +684,50 @@ export fn library_files() -> []NamedText => [
     NamedText { name: "libs/call_cancel.alula.md", text: embed_str("../../machines/product/libs/call_cancel.alula.md") }
 ]
 
+/// The called machines of the methodology (Alula 0.27, AL-146): a party `machine <имя>` names no types, the translator takes the input and the result from the file of the called machine
+/// beside the caller (`machine: <имя>` in its header). `agent_step` is called by `session_start`, `session_start` by `cycle_check` and `task_runner`, `cycle_check` by `task_runner`.
+/// `meeting`, called by `cycle_check`, is not a file of the product: `cycle_check` does not translate without it, the place of the owner (task 246).
+export fn callee_files() -> []NamedText => [
+    NamedText { name: "agent_step.alula.md", text: embed_str("../../machines/methodology/agent_step.alula.md") },
+    NamedText { name: "session_start.alula.md", text: embed_str("../../machines/methodology/session_start.alula.md") },
+    NamedText { name: "cycle_check.alula.md", text: embed_str("../../machines/methodology/cycle_check.alula.md") }
+]
+
+/// The files that a translation of a table is given: the libraries and the called machines.
+export fn translation_files() -> []NamedText {
+    mut out = library_files()
+    for f in callee_files() { out.push(f) }
+    out
+}
+
 /// The libraries put into the folder `dir` (`/m` -> `/m/libs/pause.alula.md`): for the program `alula` that a test runs on a folder of files.
 export fn library_files_in(dir str) -> []NamedText {
     mut out = []NamedText.new()
     for f in library_files() { out.push(NamedText { name: "${dir}/${f.name}", text: f.text }) }
+    out
+}
+
+/// Does a table call the machine of the file `callee` (`agent_step.alula.md`)? `session_start` calls the agent step by its Russian name `шаг_агента`.
+fn calls_machine(text str, callee str) -> bool {
+    ro name = callee.replace(".alula.md", "")
+    if name == "agent_step" && text.contains("| machine шаг_агента") { return true }
+    text.contains("| machine ${name}")
+}
+
+/// The called machines put into the folder `dir`: those that a table of the folder among `files` calls by a party `machine <имя>` (as the program `alula` reads the machine files beside
+/// it), but for the files already there: a test that writes its own (changed) table keeps it. A machine that no table there calls is not put (the program would read it too).
+export fn callee_files_in(dir str, files []NamedText) -> []NamedText {
+    mut out = []NamedText.new()
+    for c in callee_files() {
+        ro name = "${dir}/${c.name}"
+        mut there = false
+        mut called = false
+        for f in files {
+            if f.name == name { there = true }
+            if f.name.starts_with("${dir}/") && f.name.ends_with(".alula.md") && calls_machine(f.text, c.name) { called = true }
+        }
+        if called && !there { out.push(NamedText { name, text: c.text }) }
+    }
     out
 }
 

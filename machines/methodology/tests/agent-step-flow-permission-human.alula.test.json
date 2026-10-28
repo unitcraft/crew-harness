@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "agent_step",
   "name": "the agent asks to delete: a human is asked, allows, the turn goes on and ends",
   "start_at": 1000,

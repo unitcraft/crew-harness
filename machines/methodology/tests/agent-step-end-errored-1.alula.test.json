@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "agent_step",
   "name": "ERRORED 1: a machine error (overflow of the term) goes to the end ERRORED, the answer is a refusal NoResult",
   "start_at": 1000,

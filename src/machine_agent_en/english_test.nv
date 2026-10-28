@@ -16,7 +16,7 @@ fn first_error(report TranslateReport) -> str {
 
 test "ae header" {
     ro json = en_report().json
-    assert(json.starts_with("{\"format\":\"machine/2\",\"alula_version\":\"2.26\",\"machine\":\"agent_step\",\"version\":\"alula-2.24\",\"title\":\"Agent step\""))
+    assert(json.starts_with("{\"kind\":\"machine\",\"alula_version\":\"0.27\",\"machine\":\"agent_step\",\"revision\":1,\"title\":\"Agent step\""))
 }
 
 test "ae loads" {

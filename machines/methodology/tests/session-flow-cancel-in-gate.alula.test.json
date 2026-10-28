@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "session_start",
   "name": "FLOW: the cancel comes while the keeper decides at B2: no request to cancel, the launch is Cancelled",
   "start_at": 1000,

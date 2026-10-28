@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "session_start",
   "name": "FLOW: the artifact of the session ends with the stop word revision: the result of the launch says so, the machine does not branch on it",
   "start_at": 1000,

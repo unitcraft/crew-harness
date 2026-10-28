@@ -4,9 +4,8 @@ module crew_harness.machine_runner
 
 import std.text
 import alula.machine_table.{MachineDef, NestedProblem, check_nested, load_machine}
-import alula.machine_text.{translate_checked_with}
 import alula.machine_run.{NestedRegistry, check_registry, registry_gaps, load_alula_machine}
-import crew_harness.machines.{methodology_nested, methodology_registry, task_runner_machine_text, task_runner_table_text, library_files}
+import crew_harness.machines.{methodology_nested, methodology_registry, task_runner_machine_text}
 
 fn problems_text(list []NestedProblem) -> str {
     mut out = []str.new()
@@ -22,11 +21,12 @@ fn callee_def(name str) -> MachineDef {
     }
 }
 
-fn runner_with(old str, new str) -> MachineDef {
-    ro text = task_runner_table_text().replace(old, new)
-    ro report = translate_checked_with(text, methodology_registry(), library_files())
-    if report.errors.len() > 0 { panic(notes_of(report).join(" ## ")) }
-    match load_machine(report.json, methodology_registry()) {
+// Since Alula 0.27 (AL-146) the runner declares no copies of the types of the called machines: the tree keeps the fields of the input and the types that came from them, so a wrong type
+// is a tree of the runner that disagrees with the called machine (a callee changed after the runner was built).
+fn runner_tree_with(old str, new str) -> MachineDef {
+    ro text = task_runner_machine_text()
+    assert(text.contains(old))
+    match load_machine(text.replace(old, new), methodology_registry()) {
         Ok(d) => d
         Err(issues) => panic("the changed runner does not load: ${issues[0].path}: ${issues[0].message}")
     }
@@ -80,13 +80,13 @@ test "ft the machine of the first level must be in the registry" {
 }
 
 test "ft a wrong type of the launch is found" {
-    ro def = runner_with("тип ВходЗапускаСессии { сессия строка,", "тип ВходЗапускаСессии { сессия число,")
+    ro def = runner_tree_with("\"nested\":\"session_start\",\"input\":[{\"name\":\"session\",\"type\":\"text\"}", "\"nested\":\"session_start\",\"input\":[{\"name\":\"session\",\"type\":\"int\"}")
     ro found = problems_text(check_nested(def, "session_start", callee_def("session_start")))
     assert(found.contains("session"))
 }
 
 test "ft a wrong type of the review is found" {
-    ro def = runner_with("тип ИтогПроверки { вердикт Вердикт,", "тип ИтогПроверки { вердикт строка,")
+    ro def = runner_tree_with("{\"name\":\"ReviewResult\",\"fields\":[{\"name\":\"verdict\",\"type\":\"Verdict\"}", "{\"name\":\"ReviewResult\",\"fields\":[{\"name\":\"verdict\",\"type\":\"text\"}")
     ro found = problems_text(check_nested(def, "cycle_check", callee_def("cycle_check")))
     assert(found.contains("verdict") || found.contains("result"))
 }

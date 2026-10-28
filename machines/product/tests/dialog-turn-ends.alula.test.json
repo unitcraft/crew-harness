@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "DialogSession",
   "name": "a refusal, a timeout, a cancel and an answer end four turns, the session goes on and numbers the requests",
   "start_at": 1000,

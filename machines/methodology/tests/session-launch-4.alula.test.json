@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "session_start",
   "name": "LAUNCH 4: the repeat at B13 prepares the launch again (the answer of the host of a wrong type stops the step: the machine stays at B13)",
   "start_at": 1000,

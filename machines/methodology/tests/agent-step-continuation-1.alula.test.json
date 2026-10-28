@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "agent_step",
   "name": "CONTINUATION 1: the first truncation is continued: the counter grows, the turn is \"continue\"",
   "start_at": 1000,

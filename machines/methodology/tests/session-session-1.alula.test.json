@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "session_start",
   "name": "SESSION 1: the nested machine answers (the answer of its agent, validated) -> RESULT PARSING reads the artifact and the launch ends with the result",
   "start_at": 1000,

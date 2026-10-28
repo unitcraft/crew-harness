@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "agent_step",
   "name": "no answer in the term: the pump makes the failure Timeout, the step is refused, the request is cancelled",
   "start_at": 1000,

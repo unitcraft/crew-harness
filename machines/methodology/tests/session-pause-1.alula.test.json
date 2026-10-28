@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "session_start",
   "name": "PAUSE 1: a human stopped the launch in the middle of the session (the nested request stays open, the stop is passed to the agent step) and says continue: the session goes on with the same request",
   "start_at": 1000,

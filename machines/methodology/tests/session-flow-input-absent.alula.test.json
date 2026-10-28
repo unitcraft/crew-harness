@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "session_start",
   "name": "FLOW: the optional fields of the input are absent: they are none (the source is the empty text), the launch starts",
   "start_at": 1000,

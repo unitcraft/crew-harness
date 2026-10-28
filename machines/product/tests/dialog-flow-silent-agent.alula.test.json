@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "DialogSession",
   "name": "a silent agent ends the turn with Timeout and is cancelled",
   "start_at": 1000,

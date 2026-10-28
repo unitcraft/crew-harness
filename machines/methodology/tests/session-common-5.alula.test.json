@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "session_start",
   "name": "COMMON 5: the cancel of the request of the launch in a gate: HALTED with the reason cancel_request, the refusal is Cancelled",
   "start_at": 1000,

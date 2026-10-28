@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "agent_step",
   "name": "STEP OUTCOME 1: an empty stop reason leads to the end",
   "start_at": 1000,

@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "agent_step",
   "name": "the retries are exhausted after four transient errors",
   "start_at": 1000,

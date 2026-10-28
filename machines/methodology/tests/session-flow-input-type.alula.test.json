@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "session_start",
   "name": "FLOW: the number of the pass is a text: the type of the field is violated, the call is refused with NoResult",
   "start_at": 1000,

@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "session_start",
   "name": "FLOW: the same reply of the nested machine comes twice: the first is taken, the second is dropped (one request - one answer)",
   "start_at": 1000,

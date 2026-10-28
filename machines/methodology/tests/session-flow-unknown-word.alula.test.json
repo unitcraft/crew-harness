@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "session_start",
   "name": "FLOW: the keeper says a word that B2 does not wait for (halt): the word is discarded with a line of the journal, the state is the same",
   "start_at": 1000,

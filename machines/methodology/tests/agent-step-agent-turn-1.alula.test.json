@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "agent_step",
   "name": "AGENT TURN 1: a finished turn goes through the check of the reply to the accounting and the end",
   "start_at": 1000,

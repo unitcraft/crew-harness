@@ -1,4 +1,4 @@
-// support_test.nv - helpers of the tests of the reverse generator (task 113): JSON `machine/2` -> a file of Alula in Russian or English (section 1b of the specification, the canonical form).
+// support_test.nv - helpers of the tests of the reverse generator (task 113): JSON `kind: machine` -> a file of Alula in Russian or English (section 1b of the specification, the canonical form).
 // The trees are compared as trees (the order of the keys, the spaces and the `title` do not count).
 module crew_harness.machine_text_render_machines
 
@@ -6,11 +6,11 @@ import std.text
 import std.encoding.json.{Json, JsonValue, JsonObject}
 import alula.machine.{text_of_file}
 import alula.machine_text.{translate_checked_with, translate_report_with, TranslateReport, render_machine, RenderReport, error_text}
-import crew_harness.machines.{machine_files, all_registry, library_files, connects_library, part_mended}
+import crew_harness.machines.{machine_files, all_registry, translation_files, connects_library, part_mended}
 
 fn machine_json(name str) -> str => text_of_file(machine_files(), name)
 
-fn checked(text str) -> TranslateReport => translate_checked_with(text, all_registry(), library_files())
+fn checked(text str) -> TranslateReport => translate_checked_with(text, all_registry(), translation_files())
 
 // The keys that a circle does not keep: the title (the header of the canonical file holds the Latin name of the machine, 1b (а)) and the version of the language of the tree.
 fn dropped_keys() -> []str => ["title", "alula_version"]
@@ -143,7 +143,7 @@ fn circle_loose(json str, lang str) -> str {
     // a machine that connects a library goes through the English file not (the package 0.9.0, task 239: `connects_library`)
     if lang == "en" && connects_library(json) { return "" }
     ro made = render_machine(json, lang)
-    ro report = translate_report_with(part_mended(made.text), library_files())
+    ro report = translate_report_with(part_mended(made.text), translation_files())
     if report.errors.len() > 0 { return "ERROR ${error_text(report.errors[0], "generated")}" }
     same_tree(json, report.json)
 }

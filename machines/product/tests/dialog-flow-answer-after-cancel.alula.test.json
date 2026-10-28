@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "DialogSession",
   "name": "an answer that comes after the cancel is discarded as a reply to a closed request",
   "start_at": 1000,

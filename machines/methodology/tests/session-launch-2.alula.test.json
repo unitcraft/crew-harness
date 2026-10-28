@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "session_start",
   "name": "LAUNCH 2: the volume does not fit: the row 2 of SCOPE does not prepare the launch (B1 is shown, the poisoned answer of prepare_launch is not touched)",
   "start_at": 1000,

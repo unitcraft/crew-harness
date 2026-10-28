@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "agent_step",
   "name": "the check of the form with a return: violated, fixed, the usage is summed over the two turns",
   "start_at": 1000,

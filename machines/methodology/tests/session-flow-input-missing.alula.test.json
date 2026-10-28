@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "session_start",
   "name": "FLOW: the input has no session: the call is refused with NoResult and the journal says what is missing; nothing is asked of anybody",
   "start_at": 1000,

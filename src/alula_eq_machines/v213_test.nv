@@ -70,9 +70,9 @@ test "v213 tables have no empty keys" {
     }
 }
 
-test "v213 tables say 2.26" {
+test "v213 tables say 0.27" {
     for name in all_tables() {
-        assert(text_of_file(table_files(), name).contains("format: 2.26\n"))
+        assert(text_of_file(table_files(), name).contains("alula_version: 0.27\n"))
     }
 }
 
@@ -81,6 +81,11 @@ test "v213 compile makes the json of the product" {
         // the tree of the chat is kept by hand with Latin names; its table is compared with a tolerance for the names in `chat_test` of `machine_text`
         if name == "chat.alula.md" { continue }
         ro made = run_with(["compile", "/m/${name}"], one("/m/${name}", text_of_file(table_files(), name)))
+        // Alula 0.27 (AL-146): `meeting`, called by the cycle check, is not beside; the place of the owner (task 246), its tree is moved by the script of the package by the keys
+        if name == "cycle_check.alula.md" {
+            assert(made.code != 0 && made.err.contains("вызываемой машины `meeting` нет в реестре хозяина"))
+            continue
+        }
         if made.code != 0 { panic("compile ${name}: ${made.err}") }
         assert(same_tree(text_of_file(machine_files(), tree_name(name)), made.out) == "")
     }
@@ -89,6 +94,11 @@ test "v213 compile makes the json of the product" {
 test "v213 check takes every table" {
     for name in all_tables() {
         ro made = run_with(["check", "/m/${name}"], one("/m/${name}", text_of_file(table_files(), name)))
+        // the place of the owner (task 246): `meeting` is not beside the cycle check, see "v213 compile makes the json of the product"
+        if name == "cycle_check.alula.md" {
+            assert(made.code != 0 && made.err.contains("вызываемой машины `meeting` нет в реестре хозяина"))
+            continue
+        }
         if made.code != 0 { panic("check ${name}: ${made.err}") }
         assert(made.code == 0)
     }

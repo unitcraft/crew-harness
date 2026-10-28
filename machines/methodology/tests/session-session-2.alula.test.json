@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "session_start",
   "name": "SESSION 2: the nested machine refuses (the connection of its agent broke, the retries are its own) -> B13 asks the keeper; the journal says the session did not finish",
   "start_at": 1000,

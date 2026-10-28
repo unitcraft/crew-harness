@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "session_start",
   "name": "COMMON 3: a cancel of another request is dropped with a line of the journal, the launch goes on",
   "start_at": 1000,

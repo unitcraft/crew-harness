@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "agent_step",
   "name": "a good turn: the text in Cyrillic reaches the answer",
   "start_at": 1000,

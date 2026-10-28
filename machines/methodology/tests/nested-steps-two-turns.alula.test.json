@@ -1,5 +1,5 @@
 {
-  "format": "test/0",
+  "kind": "test",
   "machine": "dialog_steps",
   "name": "a chat of two turns: each message is a new request call-N and a new nested machine; the closing word ends the session",
   "start_at": 1000,

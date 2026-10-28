@@ -27,7 +27,8 @@ test "v212 agent step builds the record" {
 test "v212 callers send the flat record" {
     for name in ["dialog_steps.alula.json", "session_start.alula.json"] {
         ro text = machine_text(name)
-        assert(text.contains("\"input_type\":\"AgentRequest\""))
+        // Alula 0.27 (AL-146): the party names no types, the tree keeps the fields of the input of the called machine
+        assert(text.contains("\"nested\":\"agent_step\",\"input\":[{\"name\":\"kind\",\"type\":\"CallerKind\"}"))
         assert(!text.contains("StepInput"))
     }
 }
