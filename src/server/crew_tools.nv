@@ -1,8 +1,8 @@
-// crew_tools.nv - task 246: the tools `crew_*` of the plugin of OpenCode in the product (the pure part; the hub side is `crew_tools_hub.nv`).
+// crew_tools.nv - task 250: the tools `crew_*` of the plugin of OpenCode in the product (the pure part; the hub side is `crew_tools_hub.nv`).
 //
 // The owner, 2026-10-28: «инструменты crew_* должны работать в самом продукте Крю; плагин OpenCode в этом никак не участвует, он только для обкатки идей». The tools keep the NAMES
 // of the plugin and arguments that fit, and mean what they mean in the hub: a session, a child session, an epic, a task folder, the queue of the letters of the hub. Which tools are carried and
-// how - `doc/tasks/246-crew-tools-port/task/inventory.md`. `crew_config` is NOT here: the structure of the configs is being discussed with the owner (2026-10-28).
+// how - `doc/tasks/250-crew-tools-port/task/inventory.md`. `crew_config` is NOT here: the structure of the configs is being discussed with the owner (2026-10-28).
 //
 // What this file holds: the definitions of the tools for `tools/list` (built by small functions, not by long strings), the check of the arguments that needs no hub, the words of the roles, the text of
 // `crew_help`, and the types of the letters and of the waits that the hub keeps.

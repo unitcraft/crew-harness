@@ -230,7 +230,7 @@ async function prompt(id, params) {
       return respond(id, { stopReason: "end_turn" });
     }
     case "ctl": {
-      // task 246: calls one tool crew_* of the MCP server of the hub: `ctl <tool> <json>`; the chunk is "ctl <tool>: <names> | <text>"
+      // task 250: calls one tool crew_* of the MCP server of the hub: `ctl <tool> <json>`; the chunk is "ctl <tool>: <names> | <text>"
       if (mcpServers.length === 0) {
         chunk("ctl: no-server");
         return respond(id, { stopReason: "end_turn" });

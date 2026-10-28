@@ -98,7 +98,7 @@ and no error (`describe()` leaves it out).
 | `route_children` | - | `true` | a work taken "в работу" is a session of its own (child sessions, task 192.3); off - the old way, a subtask inside the session |
 | `route_wip` | - | `true` | a session with the switch "Worktree" on gets a tree on a detached head (no branch) at its first message (task 192.4); `false` - the sessions work as before: in the folder of the project until "В работу" |
 | `route_max_active` | - | 3 | the limit of the tasks in work at once in the whole hub (0 - none); over it the card asks for the over-limit word or puts the work in the queue; the queue starts by itself |
-| `route_tool` | - | `true` | the hub gives every agent that takes an HTTP MCP server the tools of the recognition of the tasks (`crew_task_list`; `crew_task` too with `route_auto_propose`) |
+| `route_tool` | - | `true` | the hub gives every agent that takes an HTTP MCP server the tools of the recognition of the tasks (`crew_task_list`; `crew_task` too with `route_auto_propose`) and the tools `crew_*` of the plugin (task 250, "The tools `crew_*` of the plugin in the product") |
 | `route_auto_propose` | - | `false` | `true` - the agent proposes a task by itself, one `crew_task` and a card with the code word; `false` - in the mode interactive tasks appear only by the button "Распознать задачи" |
 | `stt` {`url`,`language`,`managed`,`dir`,`model`} | `CREW_SERVER_STT_URL`, `CREW_SERVER_STT_LANGUAGE`, `CREW_SERVER_STT_MANAGED`, `CREW_SERVER_STT_DIR`, `CREW_SERVER_STT_MODEL` | `http://127.0.0.1:8178/inference`, `auto`, `true`, `CREW_STT_DIR` or `%LOCALAPPDATA%/crew-harness/stt`, `small` | the local speech recognizer (whisper.cpp `whisper-server`) that the front sends the voice to and, with `managed`, starts and ends itself (below); the address must be a plain `http://127.0.0.1:<port>/...` or `http://localhost:<port>/...` (the audio never leaves the machine); `language` is the default of `POST /api/stt`; `dir` holds `bin/whisper-server.exe` and `models/ggml-<model>.bin` |
 | `max_image_bytes` | `CREW_SERVER_MAX_IMAGE_BYTES` | 10485760 (10 MB) | the largest picture of a message (1024 to 104857600); the front and the hub both refuse a larger one |
@@ -243,6 +243,35 @@ of the `plugins` that name `crew-harness/opencode-plugin` and without the proper
 the text is cut, not parsed, so the comments stay. The agent is started with `XDG_CONFIG_HOME=<data_dir>/agent-config/xdg` (over the variables of the project); the data of OpenCode (`XDG_DATA_HOME`, the sign-in) are shared as before.
 `CREW_OPENCODE_KEEP_PLUGIN=1` in the environment of the hub keeps the configuration of the owner as it is. The names of the tools of the hub do not clash with the plugin's ones in the agent any more (the plugin has its own `crew_task`, the tool of
 the integrator for the tasks of a project: `show`, `assign`, `submit`...; the `crew_task` of the hub proposes one task to the owner).
+
+### The tools `crew_*` of the plugin in the product (task 250, ADR-0015)
+
+The tools that the plugin of OpenCode gives its agents (`opencode-plugin/core.ts`) work in the product itself, over the same MCP server (`crew`), by the same names (the owner, 2026-10-28: «инструменты crew_* должны работать
+в самом продукте Крю; плагин OpenCode в этом никак не участвует»). The plugin is read only for the ideas; the hub does not call it. The inventory with the decision for every tool is
+`doc/tasks/250-crew-tools-port/task/inventory.md`. A call is a message of the MCP server of kind `ctl` (`ask_mcp.nv` checks the arguments that need no hub, `crew_tools_hub.nv` does the work); the result is a text for the agent.
+Every call is written to the journal of the session (a line `▸ crew_…` in the feed) and to the panel «Машины» («Служебные подсказки»: the arguments and the result).
+
+| Tool | What it does in the hub | Differs from the plugin |
+|---|---|---|
+| `crew_list {all?}` | the sessions of the project (role, busy or free, task, epic, parent), the open tasks, «в работе N из route_max_active» | sessions, not tabs |
+| `crew_role {role?}` | the role by the mode and the tree: orchestrator (children or an epic), executor (a task or a child), acceptor, worker | not assigned by a call; a different `role` is refused |
+| `crew_send {to, text, wake?, expect_reply?, reply_to?}` | a service letter; `to`: session id, number of a task, `parent`, `children`; wake=true is a service turn of the recipient when its agent is free (the feed shows «[crew] Письмо от …»), wake=false waits in `crew_inbox` | no `tier`, no `project.role`, no `all` |
+| `crew_inbox {limit?}` | the letters of the session: new ones are handed over (and read), then the read ones | the same |
+| `crew_wait {target?, seconds?}` | up to 300 s in the same turn: the answer to a qid; a child by number, id or title until it is «готово» or «слита» (a child that waits for the owner's yes is waited for too); `children`; any letter | the same, wider targets |
+| `crew_spawn {goal, criteria?, title?, touches?, kind?, agent?}` | a work for a NEW worker: a card for the owner; the child (or a task of its own) is made only after his «да», under `route_max_active` | a proposal, not an order of the integrator |
+| `crew_task {action?, …}` | without `action` the old proposal of a task (as before); `list`, `show {n}`, `submit {text}` (a child reports to its orchestrator), `push {n, text}`; the other actions of the plugin are buttons of the owner and are refused with the reason | one tool for both meanings |
+| `crew_timer {minutes\|seconds, note?}` | a letter wakes the session later; up to 719 min, 20 per session | lives while the hub runs |
+| `crew_watch {on, target?, note?, minutes?}` | a subscription: `child`, `children`, `reply`, `idle`; without `on` the list; `action: cancel` | the hub does not run a `command` (refused with the reason) |
+| `crew_doctor` | the hub and the session: folder, tree, branch, limit, children that wait, unread letters | no settings |
+| `crew_step_note {reason, minutes?, done?}` | a note of the step in the journal of the session | no terms and no owner's decisions of the plugin |
+| `crew_branch_note {what, why, who, directory?, branch?}` | the reason of a change of the folder or the branch (AGENTS.md, 6a) in the journal, with the folder and the branch the hub knows | the hub does not block commands |
+| `crew_help` | this table, shortened | |
+| `crew_config` | **not here**: the structure of the configs is being discussed with the owner; the call answers «not available yet», no settings file is read or written | postponed |
+
+The letters, the waits, the timers and the watches live in the memory of the hub (a restart forgets them); the records of the calls stay in the journal. Dangerous things go the existing way: a new worker only
+by the card of the owner and under the limit; nothing changes the settings. The tools come with every set of the MCP tools but the old «question only» one (`ask_user_question`); which agent family sees them is task 192.9.
+Tests: `src/server/crew_tools_test.nv` (the definitions, the checks, the roles, the letters), `src/server/crew_task_test.nv` (the sets), the scenario `scenario_crew_tools` (`crew_tools_kit.nv`, run by `src/server_crew_live/crew_tools_live_test.nv`;
+the fake agent calls any tool with the word `ctl <tool> <json>`).
 
 ### The projects of the control panel (task 192m)
 
@@ -493,6 +522,8 @@ The events a live session shows come from the engine itself (`Engine.take_events
 | `taskwt.nv`, `taskwt_adapter.nv` | task and subtask trees (git worktrees), the merge of a subtask with a conflict left in progress, the state of a tree; the adapter that gives the hub these operations (publishing only by `route_publish`) |
 | `catalog.nv`, `front/agent_catalog.nv` | the catalog of the families (task 192o): the last lists and values of every agent kept in `agents.json`, told to the page; the route `/api/agents` of the front |
 | `ask_mcp.nv`, `ask_mcp_server.nv` | the MCP tool `ask_user_question` for agents with no tool of their own (task 192i) |
+| `crew_tools.nv`, `crew_tools_hub.nv` | the tools `crew_*` of the plugin in the product (task 250): the definitions and checks (pure), the part of the hub (letters, waits, timers, watches, spawn, doctor, notes) |
+| `crew_tools_kit.nv`, `crew_tools_test.nv`, `../server_crew_live/crew_tools_live_test.nv` | tests of the above |
 | `transfer.nv` | the protocol of a conversation handed to another agent (task 192) |
 | `front/projects_api.nv`, `front/images.nv` | `/api/projects`, `/api/fs/*` (task 192m) and `/api/session-image` (task 192) |
 | `routes_kit.nv`, `testkit_project.nv` | settings and repositories of the tests of the modes and of the projects |

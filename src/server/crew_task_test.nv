@@ -90,7 +90,7 @@ test "crew_task: the tools are listed by the path of the session" {
     assert(names_all.len() == 15)
     ro only = mcp_handle_for("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/list\"}", "list")
     ro names_list = ct_items(ct_get(ct_get(ctj(only.text), "result"), "tools"))
-    // task 246: the tools crew_* (12) and crew_task with its actions come with every set but the old one
+    // task 250: the tools crew_* (12) and crew_task with its actions come with every set but the old one
     assert(names_list.len() == 14)
     assert(ct_get(names_list[names_list.len() - 1], "name").str() == Some("crew_task_list"))
     ro asked = mcp_handle_for("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/list\"}", "asklist")

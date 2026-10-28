@@ -1,4 +1,4 @@
-// crew_tools_hub.nv - task 246: the hub side of the tools `crew_*` of the plugin (the pure part and the definitions are `crew_tools.nv`).
+// crew_tools_hub.nv - task 250: the hub side of the tools `crew_*` of the plugin (the pure part and the definitions are `crew_tools.nv`).
 //
 // A call of a tool is a message of the MCP server of kind `ctl` (`{"tool":..,"arguments":..}`). The hub answers at once ("ok:" / "err:" for the agent), or, for a wait, later from the pump. What the tools stand on: the
 // sessions of the hub (`Dialog`), their journal (`route_note` is the record of a call), the children (`child_hub.nv`), the proposals of tasks (`crew_task_hub.nv`: a new worker is shown to the owner as a card

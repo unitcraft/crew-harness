@@ -1,4 +1,4 @@
-// crew_tools_kit.nv - task 246: the scenario of the tools `crew_*` over a hub with the fake ACP agent in a repository. The fake agent calls a tool of the MCP server of the hub (the word `ctl <tool> <json>`),
+// crew_tools_kit.nv - task 250: the scenario of the tools `crew_*` over a hub with the fake ACP agent in a repository. The fake agent calls a tool of the MCP server of the hub (the word `ctl <tool> <json>`),
 // the chunk of its answer is the text the tool gave. The helpers are in `child_kit.nv` and `routes_kit.nv`.
 module crew_harness.server
 
