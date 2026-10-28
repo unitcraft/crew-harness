@@ -57,7 +57,7 @@
   },
   "merge_precheck": "required",
   "spawn_limits": { "worker": 5, "reviewer": 4 },
-  "inflight_limit": 7,
+  "inflight_limit": 8,
   "owner_system_notify": true,
   "accepted_slot": "free",
   "cleanup_limit": 10,
