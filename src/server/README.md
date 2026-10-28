@@ -281,6 +281,21 @@ The texts - the instruction for the agent and the steps with their prompts - are
 - **Signals of the page:** `session_route`, `route_run`, `route_skip {step}`, `route_stop`, `route_new_task`, `route_subtask_new`, `route_subtask_same`, `route_subtask_worktree {n}`, `route_subtask_done {n}`, `route_subtask_parallel {n,on}`, `route_subtask_choose {n,tree}`, `route_merge`, `route_tests_run`, `route_tree_drop {force}`, `route_diff`, `session_worktree {on}`. Signals of the journal: `route_set`, `route_task`, `route_step`, `route_note`, `route_review`.
 - Tests: `nova test src/server/routes_test.nv` (the parser, the numbers, the progress files, the rules, the state), `src/server/taskwt_test.nv` (the git module), `src/server_route_live/routes_live_test.nv` (the scenarios `scenario_route_*` of `routes_kit.nv` on the fake agent, on a temporary repository and on a temporary repository with a remote: tasks, trees, the run, the review, the merge with a conflict, publishing only by `route_publish`).
 
+## The request to the agent (task 192.11)
+
+The tab "Запрос" of the right column shows what the hub sent to the agent for each turn (`request_view.nv`, the page `src/web/request.js`, `request-ui.js`).
+
+**The honest border: the hub sees only what it sends to the agent by ACP.** It sees: `session/new` (the folder, the MCP server `crew`, the mode, model and effort the owner chose); the blocks of `session/prompt` that it makes itself (the reminder of the mode, the instruction of the mode, the list of the tasks, the note of the files of a task, the decision on a task, the request "Распознать задачи", a step of the mode, the message of the owner, the pictures); the tools that it gives itself (the MCP server `crew`: `ask_user_question`, `crew_task`, `crew_task_list` - names, descriptions, schemas, taken from the answer of the server itself to `tools/list`); what the agent said about itself (`tool_call` with `kind` and `title`, `available_commands_update`); the usage. It does **not** see the own system prompt of the agent (Claude Code, Codex, OpenCode, Kimi) and the full list of its built-in tools: the agent puts them together itself and they never reach the hub. The page says so in one line over the parts, and marks what the agent said as "со слов агента".
+
+The event `turn_request` (to every page for each turn, to a page that attaches - the last 20 turns of each session, again on `request_get {turn}`): `{ session, turn, at, agent, cwd, mode, route, model, effort, label, parts, tools, mcp, raw_ref }`.
+- `parts`: `[{ kind, title, text, chars, approx_tokens, truncated }]`; `kind` is `hub_note`, `mode_instruction`, `reminder`, `task_list`, `owner_message`, `images`, `tool_result_hint` or `other`; `approx_tokens` is `chars / 4`; a text over 64 KiB is cut with a note (`truncated` true). The parts come in the order of the prompt; the bytes of a picture are never there, only its name and type.
+- `tools`: `hub` - `[{ name, description, schema }]` (`schema` is the text of JSON); `agent` - `[{ name, kind, title }]` (from the `tool_call` the agent made, one for a name and a kind, at most 40); `commands` - the lines `name - description` of `available_commands_update`.
+- `mcp`: `[{ name, url_kind }]` - only the kind, never the address or the token.
+- `raw_ref`: `{ file: "acp.jsonl", from_line, to_line }` - the lines of the raw exchange that this turn wrote (from 1, both ends included). `to_line` is 0 until the next turn begins; then the hub tells the finished turn again with `to_line` = the line before the next turn. `from_line` 0 - the trace is off (`acp_trace`).
+- **It is state to look at, not history.** The events are kept in the process (`RouteSession.reqs`, the last 20) like the service hints; they are not written to the journal of the session, not to the feed, and gone after a restart. Every text, schema and folder passes `secret_redact` (`src/storage/redact.nv`: the token after `Bearer`, the value of a field named token/password/secret/api_key/authorization, `NAME_TOKEN=...`, keys of known kinds, the user and the password of an address, the name of the user in a path); the values of the environment variables are never put there.
+
+`GET /api/session-trace/<session>?from=&to=` (the front, `front/trace_api.nv`) gives the lines of `<data_dir>/<session>/acp.jsonl`: `{ lines:[{ n, t, dir, line }], from, to, total, truncated }`; at most 200 lines and 256 KiB per answer, a line over 16 KiB is cut, every line passes `secret_redact`. A bad session name or a missing file is `{ "error": ... }`.
+
 ## The chat runs on Alula
 
 Since task 114 the hub runs every session on the machine of the many-turn chat written as a table of Alula (2.11 at the start, 2.22 since task 152: blocks, `=>`, `тип Имя перечисление`, a free input of the user),
@@ -373,6 +388,7 @@ The page says what the owner did. It does not apply its own words: they appear o
 | `cancel` | `{ turn? }` | cancels the open turn (`session/cancel`); **the session stays open** |
 | `session_agent` (task 192) | `{ agent }` | the owner changed the family in the window: `Hub.switch_agent` starts the new agent (a failure keeps the old one), closes the old one, writes `agent_switched` `{ from, to, shown, total, cut }` into the journal of the SAME session (a restart reads it back) and hands the new agent the whole protocol of the conversation (`transfer.nv`: messages word for word, tools as one line; over 400000 bytes whole messages from the end, the earlier ones as headers) as a turn that is not a turn of the engine, so the feed does not show it and the answer to it is discarded |
 | `session_setting` (task 192) | `{ setting, value }`; `setting` is `mode`, `model` or `effort` | the owner chose; the hub asks the agent (`Hub.choose`, `AcpClient.select_option`), the engine does not see it; the answer is a new `session_model` |
+| `request_get` (task 192.11) | `{ turn }` (0 - the last) | the page asks for the request of a turn; the event `turn_request` of that turn goes to every page again |
 | `permission_decision` | `{ request, decision }`; `decision` is `allow` or `deny` | answers the request for permission of the agent; a decision nobody asked for changes nothing |
 | `question_answer` (task 192i) | `{ request, skipped, answers:[{ index, selected:[label], other }] }` | answers a question of the agent (see "Questions of the agent"); an answer nobody asked for changes nothing |
 
@@ -387,6 +403,7 @@ The page says what the owner did. It does not apply its own words: they appear o
 | `agent_done` | `{ turn }` | the turn ended well |
 | `agent_refused` | `{ turn, reason }` | the turn ended badly: `reason` is a code of the closed list (`Timeout`, `ConnectionLost`, `ModelRefused`, `MaxTokens`...) |
 | `permission_request` | `{ turn, request, action, detail }` | the agent asks; the answer is `permission_decision` |
+| `turn_request` (task 192.11) | see [The request to the agent](#the-request-to-the-agent-task-19211) | what the hub sends to the agent for a turn; kept in memory, never in the journal |
 | `permission_decision`, `cancel` | as above | the page's decision, accepted |
 | `question_request` (task 192i) | `{ turn, request, tool_call, questions }` | the agent asks the owner a question with a choice; the answer is `question_answer` |
 | `question_resolved` (task 192i) | `{ request }` | the question is settled; the page takes the form away |

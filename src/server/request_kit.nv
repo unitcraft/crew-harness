@@ -1,0 +1,61 @@
+// request_kit.nv - task 192.11: the scenario of the view of the request to the agent over a hub with the fake ACP agent.
+// The helpers are in `testkit.nv`.
+module crew_harness.server
+
+/// What the page "Запрос" is told for each turn: the event `turn_request` with the parts (the message, the picture), the tools of the hub (the MCP server `crew`), the end of the lines of the
+/// raw exchange of the previous turn; it is kept in memory (a page that attaches later gets it again, `request_get` repeats a turn) and is never written to the journal of the session.
+export fn scenario_request_view(settings ServerSettings) Proc Detach Time Net Fs Os -> str {
+    mut c = kit_check()
+    mut rig = rig_open(settings)
+    rig.attach(1)
+    rig.page(1, "session_created", "s-rq", "{\"name\":\"Запрос\",\"agent\":\"opencode\"}")
+    c.expect(rig.until("\"kind\":\"session_created\"", 5000), "the session is shown")
+    rig.page(1, "user_message", "s-rq", kit_picture_input("t1", "первый вопрос", "[]"))
+    c.expect(rig.until("\"kind\":\"turn_request\"", 15000), "the request of the first turn is told")
+    c.expect(rig.until(KIT_DONE, 15000), "the first turn ends")
+    rig.page(1, "user_message", "s-rq", kit_picture_input("t2", "второй вопрос", "[]"))
+    c.expect(rig.until(KIT_DONE, 15000), "the second turn ends")
+    ro asked = rig.request_lines_for(1)
+    c.expect(asked.len() >= 2, "a request for each turn: ${asked.len()}")
+    ro first = asked[0]
+    c.expect(line_field(first, "trace") == "s-rq" && line_input(first, "turn") == "1", "the first request is the turn 1")
+    c.expect(first.contains("owner_message") && first.contains("первый вопрос"), "the message of the owner is a part")
+    c.expect(first.contains("\"approx_tokens\"") && first.contains("\"chars\""), "a part has its size")
+    c.expect(first.contains("ask_user_question") && first.contains("crew_task_list"), "the tools of the hub are named with their schemas")
+    c.expect(first.contains("\"inputSchema\"") || first.contains("\\\"properties\\\""), "a schema of a tool is there")
+    c.expect(!first.contains(rig.hub.mcp_token()), "the token of the MCP server is nowhere")
+    c.expect(!first.contains("127.0.0.1:"), "the address of the MCP server is not shown")
+    c.expect(first.contains("\"raw_ref\"") && first.contains("acp.jsonl"), "the lines of the raw exchange are named")
+    // the first request is told again with the end of its lines once the second begins
+    mut ended = false
+    for line in asked {
+        if line_input(line, "turn") == "1" && !line.contains("\"to_line\":0") { ended = true }
+    }
+    c.expect(ended, "the end of the lines of the first turn is told when the second begins")
+
+    // never in the journal of the session
+    ro journal = kit_file_text(kit_session_file(settings, "s-rq", "journal"))
+    c.expect(!journal.contains("turn_request") && !journal.contains("approx_tokens"), "the request is not in the journal")
+
+    // a page that attaches later is given the kept turns; request_get repeats one
+    rig.attach(2)
+    ro late = rig.request_lines_for(2)
+    c.expect(late.len() >= 2, "a late page gets the kept requests: ${late.len()}")
+    rig.forget()
+    rig.page(1, "request_get", "s-rq", "{\"turn\":1}")
+    c.expect(rig.until("\"turn\":1", 3000), "request_get repeats the turn")
+
+    // a picture is a part of its own
+    rig.page(1, "session_created", "s-rqp", "{\"name\":\"Картинка\",\"agent\":\"pictures\"}")
+    rig.page(1, "user_message", "s-rqp", kit_picture_input("t1", "look", "[{\"name\":\"shot.png\",\"mime\":\"image/png\",\"data\":\"${KIT_PNG_B64}\"}]"))
+    c.expect(rig.until(KIT_DONE, 15000), "the turn with a picture ends")
+    ro pic = rig.request_lines_for(1)
+    mut seen = false
+    for line in pic {
+        if line_field(line, "trace") == "s-rqp" && line.contains("\"kind\":\"images\"") && line.contains("shot.png") { seen = true }
+    }
+    c.expect(seen, "the picture is a part with its name")
+    c.expect(kit_with(pic, KIT_PNG_B64) == 0, "the bytes of the picture are in no request")
+    rig.shut()
+    c.report()
+}

@@ -1,0 +1,22 @@
+// trace_api_test.nv - the lines of the raw exchange for the page "Запрос" (task 192.11).
+// ORACLE-WORKAROUND(25): the module is declared `module server.front` (without the package prefix): a module two folders under the source root cannot be declared with the full path; declare it with the prefix when item 25 is fixed
+module server.front
+
+fn tr_file() -> str {
+    ro word = "tok123"
+    "{\"t\":1,\"dir\":\"out\",\"line\":\"{\\\"method\\\":\\\"session/new\\\",\\\"headers\\\":\\\"Bearer ${word}\\\"}\"}\n{\"t\":2,\"dir\":\"in\",\"line\":\"second\"}\n{\"t\":3,\"dir\":\"in\",\"line\":\"third\"}\n"
+}
+
+test "trace api: a range of lines, the numbers from 1, the secrets taken out" {
+    ro all = trace_slice_of(tr_file(), 1, 0)
+    assert(all.contains("\"total\":3") && all.contains("\"n\":1") && all.contains("\"n\":3"))
+    assert(!all.contains("tok123") && all.contains("<token>"))
+    ro mid = trace_slice_of(tr_file(), 2, 2)
+    assert(mid.contains("second") && !mid.contains("third") && !mid.contains("session/new"))
+    assert(mid.contains("\"from\":2") && mid.contains("\"to\":2"))
+}
+
+test "trace api: a bad name and a missing file are an error, not a crash" {
+    assert(trace_slice("no_such_root", "../x", 1, 0).contains("error"))
+    assert(trace_slice("no_such_root", "s-1", 1, 0).contains("error"))
+}

@@ -149,12 +149,15 @@ fn req_values(texts []str) -> JsonValue {
 
 /// The event `turn_request` (the JSON text of the line for the page). `hub_tools` - the value of `req_hub_tools`, `agent_tools` - the entries of `req_agent_tools_scan`,
 /// `mcp_kind` - the kind of the MCP server of the hub ("" - none), `from_line` - the number of the first line of `acp.jsonl` that this turn writes (0 - the trace is off).
-export fn req_event_text(id str, session str, step int, turn int, at int, agent str, cwd str, mode str, route str, model str, effort str, label str, parts []ReqPart, hub_tools JsonValue, agent_tools []str, mcp_kind str, from_line int) -> str {
+export fn req_event_text(id str, session str, step int, turn int, at int, agent str, cwd str, mode str, route str, model str, effort str, label str, parts []ReqPart, hub_tools JsonValue, agent_tools []str, mcp_kind str, from_line int, commands []str) -> str {
     mut views = []JsonValue.new()
     for p in parts { views.push(req_part_view(p)) }
     mut tools = JsonObject.new()
     jput(tools, "hub", hub_tools)
     jput(tools, "agent", req_values(agent_tools))
+    mut cmds = []JsonValue.new()
+    for c in commands { cmds.push(JsonValue.str(secret_redact(cut_text(c, 300)))) }
+    jput(tools, "commands", JsonValue.array(cmds))
     mut mcp = []JsonValue.new()
     if mcp_kind.byte_len() > 0 {
         mut m = JsonObject.new()
@@ -183,6 +186,9 @@ export fn req_event_text(id str, session str, step int, turn int, at int, agent 
     jput(o, "raw_ref", JsonValue.object(raw))
     event_line(id, session, step, "turn_request", o, at)
 }
+
+/// The event with the end of its lines in `acp.jsonl` told (`raw_ref.to_line`): the turn ended where the next one began.
+export fn req_with_end(text str, to_line int) -> str => text.replace("\"to_line\":0", "\"to_line\":${to_line}")
 
 /// The list of the kept events with one more at the end, at most `REQ_KEEP` of them.
 export fn req_kept(list []str, text str) -> []str {
@@ -248,7 +254,14 @@ fn Hub mut @req_commit(at int, label str, extra []ReqPart) -> () {
     ro hub_tools = if tools.byte_len() > 0 { req_hub_tools(tools) } else { JsonValue.array([]JsonValue.new()) }
     ro kind = if tools.byte_len() > 0 { "http, 127.0.0.1 (локально), адрес и токен не показываются" } else { "" }
     @serial += 1
-    ro text = req_event_text("srv-${@serial}", s.id, s.engine.step_number(), s.rt.req_turn, now_millis(), s.agent, s.rt.agent_dir(@cwd_of(s.folder)), @req_setting(s, "mode"), s.rt.route, model, @req_setting(s, "effort"), label, parts, hub_tools, s.rt.req_tools, kind, from_line)
+    ro text = req_event_text("srv-${@serial}", s.id, s.engine.step_number(), s.rt.req_turn, now_millis(), s.agent, s.rt.agent_dir(@cwd_of(s.folder)), @req_setting(s, "mode"), s.rt.route, model, @req_setting(s, "effort"), label, parts, hub_tools, s.rt.req_tools, kind, from_line, if s.clients.len() > 0 { s.clients[0].commands_seen() } else { []str.new() })
+    // the previous turn ended where this one begins: its end is told to the pages
+    if from_line > 1 && s.rt.reqs.len() > 0 {
+        ro last = s.rt.reqs.len() - 1
+        ro closed = req_with_end(s.rt.reqs[last], from_line - 1)
+        s.rt.reqs[last] = closed
+        @send(0, closed)
+    }
     s.rt.reqs = req_kept(s.rt.reqs, text)
     @sessions[at] = s
     @send(0, text)

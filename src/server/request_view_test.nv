@@ -1,0 +1,106 @@
+// request_view_test.nv - the view of the request to the agent (task 192.11): the parts, the secrets, the cut, the tools of the hub, the kept turns.
+module crew_harness.server
+
+import crew_harness.acp.{AcpImage}
+import std.encoding.json.{Json, JsonValue, JsonObject}
+
+fn rv_fixed_text(n int) -> str {
+    consume sb = StringBuilder.new()
+    mut i = 0
+    while i < n {
+        sb.append("a")
+        i += 1
+    }
+    sb.into_str()
+}
+
+fn rv_event(parts []ReqPart, mcp str, from_line int) -> str {
+    req_event_text("srv-1", "s-1", 3, 1, 1000, "opencode", "work/app", "default", "interactive", "model-x", "high", "", parts, req_hub_tools(mcp), []str.new(), if mcp.byte_len() > 0 { "http" } else { "" }, from_line, ["init - make a file"])
+}
+
+test "request view: a turn with the instruction of the mode, the message and a picture" {
+    mut parts = []ReqPart.new()
+    parts.push(ReqPart { kind: "reminder", title: "Напоминание режима", text: "режим: беседа" })
+    parts.push(ReqPart { kind: "mode_instruction", title: "Инструкция режима", text: "Ты работаешь в режиме..." })
+    ro pic = AcpImage { path: "x.png", mime: "image/png", name: "shot.png" }
+    for p in req_owner_parts("сделай файл", [pic]) { parts.push(p) }
+    ro line = rv_event(parts, "all", 10)
+    ro o = jobject(line) ?? JsonObject.new()
+    assert(jtext(o, "kind") == "turn_request")
+    ro input = (o.get("input") ?? JsonValue.null()).object() ?? JsonObject.new()
+    assert(jtext(input, "agent") == "opencode" && jtext(input, "model") == "model-x" && jtext(input, "effort") == "high")
+    ro views = jlist(input, "parts")
+    assert(views.len() == 4)
+    ro kinds = [jtext(views[0].object() ?? JsonObject.new(), "kind"), jtext(views[1].object() ?? JsonObject.new(), "kind"), jtext(views[2].object() ?? JsonObject.new(), "kind"), jtext(views[3].object() ?? JsonObject.new(), "kind")]
+    assert(kinds[0] == "reminder" && kinds[1] == "mode_instruction" && kinds[2] == "owner_message" && kinds[3] == "images")
+    assert(line.contains("shot.png") && line.contains("сделай файл"))
+    ro raw = (input.get("raw_ref") ?? JsonValue.null()).object() ?? JsonObject.new()
+    assert(jtext(raw, "file") == "acp.jsonl" && jint(raw, "from_line") == 10 && jint(raw, "to_line") == 0)
+    // the tools of the hub: names, descriptions, schemas
+    ro tools = (input.get("tools") ?? JsonValue.null()).object() ?? JsonObject.new()
+    ro hub = jlist(tools, "hub")
+    assert(hub.len() >= 2)
+    assert(line.contains("ask_user_question") && line.contains("crew_task_list"))
+    assert(jlist(tools, "commands").len() == 1)
+}
+
+test "request view: the size of a part and the cut at 64 KiB" {
+    ro big = rv_fixed_text(70000)
+    ro view = req_part_view(ReqPart { kind: "other", title: "t", text: big }).object() ?? JsonObject.new()
+    assert(jint(view, "chars") == 70000 && jint(view, "approx_tokens") == 17500)
+    assert((view.get("truncated") ?? JsonValue.null()).bool() ?? false)
+    assert(jtext(view, "text").byte_len() < 65536 + 200 && jtext(view, "text").contains("обрезано"))
+    ro small = req_part_view(ReqPart { kind: "other", title: "t", text: "abcd" }).object() ?? JsonObject.new()
+    assert(jint(small, "approx_tokens") == 1 && !((small.get("truncated") ?? JsonValue.null()).bool() ?? true))
+}
+
+test "request view: the secrets are taken out of the text, the schema and the folder" {
+    ro leaked = "abcLEAK123"
+    ro header = "Bearer ${leaked}"
+    ro eq = "="
+    ro word = "hunter2"
+    ro line = rv_event([ReqPart { kind: "hub_note", title: "n", text: "header ${header} and PASSWORD${eq}${word}" }], "all", 0)
+    assert(!line.contains(leaked) && !line.contains(word))
+    assert(line.contains("<token>"))
+    ro piece = "Us"
+    ro cwd = req_event_text("i", "s", 1, 1, 1, "a", "C:/${piece}ers/Ivan/proj", "", "", "", "", "", []ReqPart.new(), JsonValue.array([]JsonValue.new()), []str.new(), "", 0, []str.new())
+    assert(!cwd.contains("Ivan") && cwd.contains("<user>"))
+}
+
+test "request view: the tools of the hub by the address of its MCP server" {
+    assert(req_tools_of_url("") == "")
+    assert(req_tools_of_url("http://x/mcp/s-1") == "all")
+    assert(req_tools_of_url("http://x/mcp/s-1/list") == "list")
+    assert(req_tools_of_url("http://x/mcp/s-1/asklist") == "asklist")
+    assert((req_hub_tools("ask").array() ?? []JsonValue.new()).len() == 1)
+    assert((req_hub_tools("all").array() ?? []JsonValue.new()).len() >= 3)
+}
+
+test "request view: the tools the agent has shown, one for a name and a kind" {
+    ro a = "{\"id\":\"1\",\"kind\":\"tool_call\",\"input\":{\"id\":\"c1\",\"title\":\"Read file a.txt\",\"kind\":\"read\"}}"
+    ro b = "{\"id\":\"2\",\"kind\":\"tool_call\",\"input\":{\"id\":\"c2\",\"title\":\"Read file b.txt\",\"kind\":\"read\"}}"
+    ro c = "{\"id\":\"3\",\"kind\":\"tool_call\",\"input\":{\"id\":\"c3\",\"title\":\"Bash\",\"kind\":\"execute\"}}"
+    ro d = "{\"id\":\"4\",\"kind\":\"tool_call_update\",\"input\":{\"id\":\"c3\"}}"
+    ro found = req_agent_tools_scan([a, b, c, d], 0, []str.new())
+    assert(found.len() == 2)
+    assert(found[0].contains("\"name\":\"Read\"") && found[1].contains("\"name\":\"Bash\""))
+    // the lines before `from` are not looked at, the known ones are kept
+    ro more = req_agent_tools_scan([a, b, c, d], 3, found)
+    assert(more.len() == 2)
+}
+
+test "request view: the last 20 turns are kept, a turn is found, the end of its lines is told" {
+    mut kept = []str.new()
+    mut n = 1
+    while n <= 25 {
+        kept = req_kept(kept, rv_event([ReqPart { kind: "owner_message", title: "m", text: "x" }], "", n * 10).replace("\"turn\":1,", "\"turn\":${n},"))
+        n += 1
+    }
+    assert(kept.len() == REQ_KEEP)
+    assert(req_find(kept, 25).contains("\"turn\":25,"))
+    assert(req_find(kept, 0).contains("\"turn\":25,"))
+    assert(req_find(kept, 3) == "")
+    assert(req_find(kept, 6).contains("\"turn\":6,"))
+    ro closed = req_with_end(req_find(kept, 6), 59)
+    assert(closed.contains("\"to_line\":59") && closed.contains("\"from_line\":60") && closed.contains("owner_message"))
+}

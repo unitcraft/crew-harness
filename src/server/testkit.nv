@@ -321,7 +321,7 @@ export fn Rig @lines_for(conn int) -> []str {
     mut out = []str.new()
     for line in @lines_in_mode(conn, 0) {
         ro kind = line_field(line, "kind")
-        if kind != "route_state" && kind != "machine_state" { out.push(line) }
+        if kind != "route_state" && kind != "machine_state" && kind != "turn_request" { out.push(line) }
     }
     out
 }
@@ -331,6 +331,15 @@ export fn Rig @machine_lines_for(conn int) -> []str {
     mut out = []str.new()
     for line in @lines_in_mode(conn, 0) {
         if line_field(line, "kind") == "machine_state" { out.push(line) }
+    }
+    out
+}
+
+/// The lines `turn_request` one page has been told (the request to the agent, task 192.11): not a part of the story of the session either.
+export fn Rig @request_lines_for(conn int) -> []str {
+    mut out = []str.new()
+    for line in @lines_in_mode(conn, 0) {
+        if line_field(line, "kind") == "turn_request" { out.push(line) }
     }
     out
 }

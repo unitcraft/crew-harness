@@ -2,9 +2,15 @@
 // The samples are put together from pieces so that the guards of the repository do not take the test itself for a leak.
 module crew_harness.storage
 
-fn drive_users() -> str => "C:/" + "Us" + "ers/"
+fn drive_users() -> str {
+    ro piece = "Us"
+    "C:/${piece}ers/"
+}
 
-fn gh_prefix() -> str => "gh" + "p_"
+fn gh_prefix() -> str {
+    ro piece = "gh"
+    "${piece}p_"
+}
 
 test "redact: a Bearer token and a field of JSON with a secret name" {
     ro a = secret_redact("{\"name\":\"Authorization\",\"value\":\"Bearer abc123DEF\"}")
@@ -21,12 +27,14 @@ test "redact: an assignment, a known key, an address with a password" {
     assert(!a.contains("abcdef") && !a.contains("zzz") && a.contains("here"))
     ro b = secret_redact("key ${gh_prefix()}abcdefghijklmnopqrstuvwxyz0123 end, sk-short and skip")
     assert(!b.contains("abcdefghijklmnopqrstuvwxyz0123") && b.contains("sk-short") && b.contains("skip"))
-    ro c = secret_redact("clone https://" + "user:pw" + "@example.org/x/y.git now")
+    ro cred = "user:pw"
+    ro c = secret_redact("clone https://${cred}@example.org/x/y.git now")
     assert(!c.contains("user:pw") && c.contains("https://example.org/x/y.git"))
 }
 
 test "redact: the name of the user in a path" {
-    ro a = secret_redact("cwd ${drive_users()}Ivan/work/app and /ho" + "me/petr/x")
+    ro home = "me"
+    ro a = secret_redact("cwd ${drive_users()}Ivan/work/app and /ho${home}/petr/x")
     assert(!a.contains("Ivan") && !a.contains("petr") && a.contains("work/app") && a.contains("<user>/work/app") && a.contains("/<user>/x"))
     ro b = secret_redact("{\"p\":\"C:\\Users\\Ivan\\work\"}")
     assert(!b.contains("Ivan"))

@@ -316,6 +316,24 @@ fn agents_route(agents []AgentChoice) -> fn(ServerRequest) -> ServerResponse {
     }
 }
 
+// ----- the raw exchange of a turn: GET /api/session-trace/<session>?from=&to= (task 192.11, trace_api.nv) -----
+
+fn trace_route(data_dir str, port int) -> fn(ServerRequest) -> ServerResponse {
+    fn(req ServerRequest) -> ServerResponse {
+        if !origin_allowed(req, port) { return json_reply(403, "{\"error\":\"origin not allowed\"}") }
+        ro session = req.param("id") ?? ""
+        ro from = match (req.query_param("from") ?? "1").to_int() {
+            Ok(n) => n
+            Err(e) => 1
+        }
+        ro to = match (req.query_param("to") ?? "0").to_int() {
+            Ok(n) => n
+            Err(e) => 0
+        }
+        json_reply(200, trace_slice(data_dir, session, from, to))
+    }
+}
+
 // ----- the catalog of the families: GET /api/agent-catalog (task 192o) -----
 
 // The file the hub keeps (`<data_dir>/agents.json`, written whole by a rename), as it is; the front reads it each time, so it never holds a stale copy.
@@ -518,6 +536,7 @@ fn build_router(web_dir str, port int, hub_tx ChanTx[str], reg_tx ChanTx[Reg], a
     ro r4h = router.get("/api/fs/list", fs_list_route(data_dir, port))?
     ro r4i = router.get("/api/fs/git", fs_git_route(port))?
     ro r4o = router.get("/api/agent-catalog", catalog_route(data_dir, port))?
+    ro r4t = router.get("/api/session-trace/{id}", trace_route(data_dir, port))?
     ro r5 = router.get("/{*path}", files_route(web_dir))?
     Ok(router)
 }

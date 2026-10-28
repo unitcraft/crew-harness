@@ -1,0 +1,9 @@
+// request_test.nv - the view of the request to the agent over the fake ACP agent (task 192.11): the scenario of crew_harness.server/request_kit.nv.
+module crew_harness.server_live
+
+import crew_harness.server.{kit_files_mcp, scenario_request_view}
+
+test "files: the request of each turn is told to the pages, kept in memory, never in the journal" {
+    ro report = scenario_request_view(kit_files_mcp("reqview", 30000, 1800000))
+    if report.byte_len() > 0 { panic("NOT AS IT MUST BE: ${report}") }
+}
