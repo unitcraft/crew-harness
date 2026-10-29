@@ -46,7 +46,11 @@ tls = { git = "https://github.com/nv-lang/nova-tls", version = "0.2" }
 # Version 0.27.0 (tasks 244 and 245 of the package; the release 2.27 renamed to 0.27 by the owner, 2026-10-28; the version of the package is the version of the language from now on) is Alula 0.27: the header `revision` (an integer) and `alula_version` instead of `machine_version`
 # and `format`, the three sections of the requirements of a library (`## Требует данные`, `## Требует стороны`, `## Требует концы`), the party `machine имя` without the types (the input and the result are
 # those of the called machine beside), the tree and the test with `kind` and `revision`; the package reads only the format 0.27, the tables of `machines/` are moved to it by its script `tools/migrate-alula-227.py` (task 246).
-alula = { git = "https://github.com/nv-lang/nova-alula", version = "0.27.0" }
+# Version 0.28.0 (task 253 of the package, the tag v0.28.0, commit c040a9b) is Alula 0.28: the table of the parties holds the columns `настройка` and `разбор` (`setting`, `parse`), a human without gates and
+# without a counter is the kind `свободный_ввод` (`free_input`), the keys `Набор`/`Проверка` one per item, the rerun is the column `заново`, the target `то_же` and the word `полный_словарь` are one word each, `<br>` is the only
+# separator of the actions of a cell, the connection is `- Экземпляр:` (`- As:`), the tree holds no type of a parse (the type is the declaration of the function); the package reads only the format 0.28, the tables of
+# `machines/` are moved to it by its script `tools/migrate-alula-228.py` (task 255).
+alula = { git = "https://github.com/nv-lang/nova-alula", version = "0.28.0" }
 
 [package]
 name = "crew_harness"

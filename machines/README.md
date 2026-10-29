@@ -1,6 +1,6 @@
 # machines: machines written as data
 
-The machines of the product CrewHarness as tables of the language Alula (`*.alula.md`; the one extension, task 169; the format 0.27, the package `alula` 0.27.0, task 246), their compiled trees (`*.alula.json`, `machine/2`) and their scenarios
+The machines of the product CrewHarness as tables of the language Alula (`*.alula.md`; the one extension, task 169; the format 0.28, the package `alula` 0.28.0, task 255), their compiled trees (`*.alula.json`, `machine/2`) and their scenarios
 (`tests/*.alula.test.json`, `test/0`). They were samples inside the package `alula` until its version 0.3.2; since task 158 they belong to their owners and the package holds only the language and its own examples
 (`examples/` of [nv-lang/nova-alula](https://github.com/nv-lang/nova-alula)).
 
@@ -26,7 +26,7 @@ nova build <alula>/src/alula.nv -o target/alula.exe       # <alula> is the worki
 target/alula.exe test machines/product                    # 81 of 81 tests passed
 ```
 
-The tables were moved from 2.25 to 2.26 by the script of the package, `python <alula>/tools/migrate-alula-226.py --alula target/alula.exe machines` (task 240); `--dry-run` on the folder then said «итог: файлов 0, мест 0». Then to 0.27 (Alula 0.27, the release 2.27 renamed by the owner, 2026-10-28) by the script of the package 0.27.0, `python <alula>/tools/migrate-alula-227.py --alula target/alula.exe machines` (task 246): the header `revision` and `alula_version: 0.27`, the trees and the tests with `kind` and `revision`. `--dry-run` says «итог: файлов 0, мест 0».
+The tables were moved from 2.25 to 2.26 by the script of the package, `python <alula>/tools/migrate-alula-226.py --alula target/alula.exe machines` (task 240); `--dry-run` on the folder then said «итог: файлов 0, мест 0». Then to 0.27 (Alula 0.27, the release 2.27 renamed by the owner, 2026-10-28) by the script of the package 0.27.0, `python <alula>/tools/migrate-alula-227.py --alula target/alula.exe machines` (task 246): the header `revision` and `alula_version: 0.27`, the trees and the tests with `kind` and `revision`. Then to 0.28 (Alula 0.28, the tag v0.28.0) by the script of the package 0.28.0, `python <alula>/tools/migrate-alula-228.py --alula target/alula.exe <the tables, the tree of the dialog and the library>` (task 255): the columns `настройка` and `разбор` of the parties, the kind `свободный_ввод` (`free_input`) of a human without gates and without a counter, `то_же` as one word, `<br>` between the actions of a cell, `- Начальное состояние:` as an item of the list, the hash of the connection of the library; the handwritten tree of the chat was moved by hand over the same keys (`alula_version`, `free_input`, the hash). `--dry-run` says «итог: файлов 0, мест 0».
 
 The same scenarios and the tests of the machines (the tables equal the JSON, every row has a scenario, the journal codes are the table of the owner, the equality with the machine on Nova) run in the units of `src/`
 (`machine_chat`, `machine_dialog`, `machine_registry` and the `*_machines` units, see [src/README.md](../src/README.md));

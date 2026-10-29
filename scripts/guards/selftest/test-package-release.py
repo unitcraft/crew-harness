@@ -23,8 +23,8 @@ import os
 import stlib
 
 SCRIPT = os.path.join(stlib.SCRIPTS, "package-release.sh")
-LOCK = '[[package]]\nname = "alula"\nsource = "git"\nversion = "0.27.0"\n'
-LIB = "# Библиотека: Отмена\n\n- library: call_cancel\n- alula_version: 0.27\n\n## Общие события\n"
+LOCK = '[[package]]\nname = "alula"\nsource = "git"\nversion = "0.28.0"\n'
+LIB = "# Библиотека: Отмена\n\n- library: call_cancel\n- alula_version: 0.28\n\n## Общие события\n"
 
 
 def dhash(text):
@@ -35,13 +35,13 @@ def dhash(text):
 
 
 def tree_files(lib_hash=None, hub=True):
-    tree = {"kind": "machine", "alula_version": "0.27",
+    tree = {"kind": "machine", "alula_version": "0.28",
             "includes": [{"hash": lib_hash or dhash(LIB), "file": "libs/call_cancel.alula.md"}]}
     files = {"nova.lock.toml": LOCK,
              "machines/product/dialog.alula.json": json.dumps(tree),
-             "machines/product/dialog.alula.md": "# Машина: Диалог\n\n- alula_version: 0.27\n",
-             "machines/product/chat.alula.json": json.dumps({"alula_version": "0.27"}),
-             "machines/product/chat.alula.md": "# Машина: Чат\n\n- alula_version: 0.27\n",
+             "machines/product/dialog.alula.md": "# Машина: Диалог\n\n- alula_version: 0.28\n",
+             "machines/product/chat.alula.json": json.dumps({"alula_version": "0.28"}),
+             "machines/product/chat.alula.md": "# Машина: Чат\n\n- alula_version: 0.28\n",
              "machines/product/journal.md": "# Журнал\n",
              "machines/product/libs/call_cancel.alula.md": LIB,
              "machines/product/tests/dialog-x.alula.test.json": "{}\n",

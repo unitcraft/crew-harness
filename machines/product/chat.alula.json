@@ -1,6 +1,6 @@
 {
   "kind": "machine",
-  "alula_version": "0.27",
+  "alula_version": "0.28",
   "machine": "ChatSession",
   "revision": 1,
   "title": "A chat session with an agent: the machine of src/chat written as data",
@@ -19,7 +19,7 @@
   ],
   "parties": [
     {
-      "name": "user", "id": "user", "kind": "human",
+      "name": "user", "id": "user", "kind": "free_input",
       "signals": [
         { "name": "user_message", "fields": [ { "name": "content", "type": "text" } ] }
       ]
@@ -34,7 +34,7 @@
   ],
   "includes": [
     {
-      "name": "call_cancel", "hash": "e193a5abd356", "file": "libs/call_cancel.alula.md", "heading": "Отмена запроса",
+      "name": "call_cancel", "hash": "2afbf89d9d64", "file": "libs/call_cancel.alula.md", "heading": "Отмена запроса",
       "brings": { "common_events": 1, "signals": [ "cancel_request" ] }
     }
   ],

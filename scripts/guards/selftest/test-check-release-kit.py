@@ -24,8 +24,8 @@ import os
 
 import stlib
 
-LOCK = '[[package]]\nname = "alula"\nsource = "git"\nversion = "0.27.0"\n'
-LIB = "# Библиотека: Отмена\n\n- library: call_cancel\n- alula_version: 0.27\n\n## Общие события\n\n| Событие | Куда |\n|---|---|\n"
+LOCK = '[[package]]\nname = "alula"\nsource = "git"\nversion = "0.28.0"\n'
+LIB = "# Библиотека: Отмена\n\n- library: call_cancel\n- alula_version: 0.28\n\n## Общие события\n\n| Событие | Куда |\n|---|---|\n"
 
 
 def dhash(text):
@@ -35,7 +35,7 @@ def dhash(text):
     return hashlib.sha256(("\n".join(lines) + "\n").encode("utf-8")).hexdigest()[:12]
 
 
-def machines(lib=LIB, tree_version="0.27", table_version="0.27", tree_hash=None, table_hash=None, with_lib=True):
+def machines(lib=LIB, tree_version="0.28", table_version="0.28", tree_hash=None, table_hash=None, with_lib=True):
     tree = {"kind": "machine", "alula_version": tree_version, "machine": "DialogSession",
             "includes": [{"name": "call_cancel", "hash": tree_hash or dhash(LIB), "file": "libs/call_cancel.alula.md"}]}
     table = ("# Машина: Диалог\n\n- machine: DialogSession\n- revision: 1\n- alula_version: %s\n\n## Подключения\n\n"
@@ -101,8 +101,8 @@ def main():
     pr.probe("красная", "дерево чужой версии языка", red_tree(machines(tree_version="0.26"), "alula-version"))
     pr.probe("красная", "таблица чужой версии языка", red_tree(machines(table_version="0.26"), "alula-version"))
     pr.probe("красная", "библиотека чужой версии языка",
-             red_tree(machines(lib=LIB.replace("0.27", "0.26"), tree_hash=dhash(LIB.replace("0.27", "0.26")),
-                               table_hash=dhash(LIB.replace("0.27", "0.26"))), "alula-version"))
+             red_tree(machines(lib=LIB.replace("0.28", "0.26"), tree_hash=dhash(LIB.replace("0.28", "0.26")),
+                               table_hash=dhash(LIB.replace("0.28", "0.26"))), "alula-version"))
     pr.probe("красная", "хеш подключения в дереве — не хеш библиотеки", red_tree(machines(tree_hash="000000000000"), "library-hash"))
     pr.probe("красная", "хеш подключения в таблице — не хеш библиотеки", red_tree(machines(table_hash="000000000000"), "library-hash"))
     pr.probe("красная", "библиотека изменена после сборки машины",
