@@ -281,6 +281,13 @@ export fn task_too_big(subtasks int, messages int, limit_subtasks int, limit_mes
 
 // ----- the independent reviewer -----
 
+/// The family of the independent check by the preset (task 192.12): `wanted` - the family of the role `dev_accept` of the preset of the session - when it is an agent of the settings and is not the author (`current`);
+/// else the reserve order as `pick_reviewer` has it.
+export fn pick_reviewer_for(wanted str, order []str, available []str, current str) -> str {
+    if wanted.byte_len() > 0 && wanted != current && available.contains(wanted) { return wanted }
+    pick_reviewer(order, available, current)
+}
+
 /// The family of the reviewer: the first of `order` that is available and is not `current`; else any available agent that is not `current`; "" - none.
 export fn pick_reviewer(order []str, available []str, current str) -> str {
     for family in order {

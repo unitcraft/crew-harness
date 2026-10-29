@@ -1,27 +1,180 @@
 // crew_harness.nv - the entry point of the crew-harness binary (task 099): the session server, its front. It serves the page
-// of src/web/ and the WebSocket /ws on 127.0.0.1 and starts the hub (src/crew_hub.nv) as a child process.
-//   crew-harness serve [settings.json]      (the file may also be named by CREW_SERVER_CONFIG; see src/server/README.md)
+// of src/web/ and the WebSocket /ws on 127.0.0.1 and starts the hub (src/crew_hub.nv) as a child process. Task 192.12 adds the commands of the configuration.
+//   crew-harness serve [settings.json] [--home <folder>] [--set key=value ...]
+//   crew-harness config list [--show-origin] | get <key> [--show-origin] | set <key> <value> [--project|--local]
+//   crew-harness doctor
+//   crew-harness migrate [--from <data_dir>] [--dry-run]
 //   crew-harness                            prints the version and the usage and ends (a test of the entry point runs it)
+// The root of the instance (`CREW_HOME`) is the argument `--home`, else the variable CREW_HOME, else `~/.crew-harness`; see src/server/README.md, "Where things lie".
 // Build both programs: nova build src/crew_hub.nv -o target/crew-hub.exe; nova build src/crew_harness.nv -o target/crew-harness.exe
 module crew_harness.crew_harness
 
-import crew_harness.server.front.{run_front, front_settings}
-import std.os.{args, exit_process}
+import crew_harness.server.front.{run_front_with, front_settings_in}
+import crew_harness.config.{split_cli_args, crew_home, layout_in, find_project_dir, work_dir_now, config_list, config_get, config_set, doctor, command_layers, effective_entries, plan_migration, plan_text, run_migration, ConfigLayout, CliArgs}
+import std.os.{args, exit_process, env}
 import std.io.{stderr}
+import std.time.{Time}
 
-fn main() Os Fs Proc Net Time Detach Io -> () {
-    ro argv = args()
-    if argv.len() < 2 || argv[1] != "serve" {
-        println("crew-harness 0.1.0 - usage: crew-harness serve [settings.json]")
+const USAGE = "crew-harness 0.1.0 - usage:\n  crew-harness serve [settings.json] [--home <folder>] [--set key=value]\n  crew-harness config list [--show-origin]\n  crew-harness config get <key> [--show-origin]\n  crew-harness config set <key> <value> [--project|--local]\n  crew-harness doctor\n  crew-harness migrate [--from <data_dir>] [--dry-run]\n(the root of the instance: --home <folder>, else CREW_HOME, else ~/.crew-harness; --file <settings.json> names the server file for config, doctor and migrate)"
+
+fn fail(text str) Os Io -> () {
+    mut err = stderr()
+    ro written = err.write("crew-harness: ${text}\n".bytes())
+    exit_process(2)
+}
+
+// Where the root came from, for `doctor`.
+fn home_source(arg_home str) Os -> str {
+    if arg_home.byte_len() > 0 { return "--home" }
+    match env("CREW_HOME") {
+        Some(v) => if v.byte_len() > 0 { "CREW_HOME" } else { "the folder of the user" }
+        None => "the folder of the user"
+    }
+}
+
+/// OptionTaken: the value of `--name value` ("" - none) and the words without it.
+type OptionTaken { value str, rest []str }
+
+fn take_option(words []str, name str) -> OptionTaken {
+    mut value = ""
+    mut rest = []str.new()
+    mut i = 0
+    while i < words.len() {
+        if words[i] == name && i + 1 < words.len() {
+            value = words[i + 1]
+            i += 1
+        } else {
+            rest.push(words[i])
+        }
+        i += 1
+    }
+    OptionTaken { value, rest }
+}
+
+type FlagTaken { found bool, rest []str }
+
+fn take_flag(words []str, name str) -> FlagTaken {
+    mut found = false
+    mut rest = []str.new()
+    for w in words {
+        if w == name { found = true } else { rest.push(w) }
+    }
+    FlagTaken { found, rest }
+}
+
+fn cmd_serve(cli CliArgs) Proc Net Time Detach Io Os Fs -> () {
+    ro file = if cli.rest.len() > 2 { cli.rest[2] } else { "" }
+    ro home = crew_home(cli.home)
+    mut pass = []str.new()
+    if cli.home.byte_len() > 0 {
+        pass.push("--home")
+        pass.push(cli.home)
+    }
+    for s in cli.sets {
+        pass.push("--set")
+        pass.push(s)
+    }
+    match front_settings_in(file, home, cli.sets) {
+        Err(reason) => fail(reason)
+        Ok(settings) => run_front_with(settings, file, pass)
+    }
+}
+
+fn layout_now(cli CliArgs) Os Fs -> ConfigLayout {
+    ro home = crew_home(cli.home)
+    layout_in(home, find_project_dir(work_dir_now(), home))
+}
+
+fn cmd_config(cli CliArgs) Os Fs Io -> () {
+    ro layout = layout_now(cli)
+    mut words = []str.new()
+    mut i = 2
+    while i < cli.rest.len() {
+        words.push(cli.rest[i])
+        i += 1
+    }
+    ro file = take_option(words, "--file")
+    ro origin = take_flag(file.rest, "--show-origin")
+    ro project = take_flag(origin.rest, "--project")
+    ro local = take_flag(project.rest, "--local")
+    ro scope = if local.found { "local" } else if project.found { "project" } else { "user" }
+    ro w = local.rest
+    if w.len() == 0 { return fail("config needs list, get or set\n${USAGE}") }
+    if w[0] == "list" {
+        match config_list(layout, file.value, cli.sets, origin.found) {
+            Ok(text) => println(text)
+            Err(reason) => fail(reason)
+        }
+    } else if w[0] == "get" && w.len() == 2 {
+        match config_get(layout, file.value, cli.sets, w[1], origin.found) {
+            Ok(text) => println(text)
+            Err(reason) => fail(reason)
+        }
+    } else if w[0] == "set" && w.len() == 3 {
+        match config_set(layout, scope, work_dir_now(), w[1], w[2]) {
+            Ok(text) => println(text)
+            Err(reason) => fail(reason)
+        }
+    } else {
+        fail("config: wrong arguments\n${USAGE}")
+    }
+}
+
+fn cmd_doctor(cli CliArgs) Os Fs Io -> () {
+    ro layout = layout_now(cli)
+    ro file = take_option(cli.rest, "--file")
+    ro report = doctor(layout, file.value, home_source(cli.home), work_dir_now())
+    println(report.text)
+    if report.errors > 0 { exit_process(1) }
+}
+
+fn cmd_migrate(cli CliArgs) Os Fs Time Io -> () {
+    ro layout = layout_now(cli)
+    ro from = take_option(cli.rest, "--from")
+    ro dry = take_flag(from.rest, "--dry-run")
+    ro file = take_option(dry.rest, "--file")
+    // the old folder: --from, else the data_dir of the settings (a file, CREW_SERVER_DATA_DIR), else ./crew-data
+    mut old = from.value
+    if old.byte_len() == 0 {
+        match command_layers(layout, file.value, cli.sets) {
+            Ok(layers) => {
+                for e in effective_entries(layers) {
+                    if e.key == "data_dir" && e.origin != "default" { old = e.value.str() ?? "" }
+                }
+            }
+            Err(reason) => return fail(reason)
+        }
+    }
+    if old.byte_len() == 0 { old = "${work_dir_now()}/crew-data" }
+    ro plan = plan_migration(old, layout)
+    if plan.error.byte_len() > 0 { return fail(plan.error) }
+    if dry.found {
+        println(plan_text(plan, true))
         return
     }
-    ro file = if argv.len() > 2 { argv[2] } else { "" }
-    match front_settings(file) {
-        Err(reason) => {
-            mut err = stderr()
-            ro written = err.write("crew-harness: ${reason}\n".bytes())
-            exit_process(2)
-        }
-        Ok(settings) => run_front(settings, file)
+    ro stamp = "${Time.now().unix_millis()}"
+    ro result = run_migration(plan, layout, stamp)
+    println(result.text)
+    if result.failed > 0 { exit_process(1) }
+}
+
+fn main() Os Fs Proc Net Time Detach Io -> () {
+    ro cli = split_cli_args(args())
+    if cli.error.byte_len() > 0 { return fail(cli.error) }
+    if cli.rest.len() < 2 {
+        println(USAGE)
+        return
+    }
+    ro verb = cli.rest[1]
+    if verb == "serve" {
+        cmd_serve(cli)
+    } else if verb == "config" {
+        cmd_config(cli)
+    } else if verb == "doctor" {
+        cmd_doctor(cli)
+    } else if verb == "migrate" {
+        cmd_migrate(cli)
+    } else {
+        println(USAGE)
     }
 }

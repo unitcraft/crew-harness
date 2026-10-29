@@ -16,6 +16,7 @@
 module server.front
 
 import crew_harness.acp.{AgentLink, connect}
+import crew_harness.config.{ConfigLayout, presets_reply}
 import polaris.{Router, MethodRouter, ServerRequest, ServerResponse, WebSocketUpgrade, StatusCode, HttpError}
 import polaris.static.{Static, serve_path}
 import polaris.ws.{Frame, OpCode, frame_len_hint}
@@ -334,14 +335,24 @@ fn trace_route(data_dir str, port int) -> fn(ServerRequest) -> ServerResponse {
     }
 }
 
+// ----- the presets: GET /api/presets (task 192.12) -----
+
+// The presets (the table role -> family, model, effort) and the roles of the process, from the files of the layers; read each time. `active` is the preset of the settings; a broken file gives `error`.
+fn presets_route(layout ConfigLayout, active str, order []str, port int) -> fn(ServerRequest) -> ServerResponse {
+    fn(req ServerRequest) -> ServerResponse {
+        if !origin_allowed(req, port) { return json_reply(403, "{\"error\":\"origin not allowed\"}") }
+        json_reply(200, with Fs = real_fs() { presets_reply(layout, order, active) })
+    }
+}
+
 // ----- the catalog of the families: GET /api/agent-catalog (task 192o) -----
 
-// The file the hub keeps (`<data_dir>/agents.json`, written whole by a rename), as it is; the front reads it each time, so it never holds a stale copy.
-fn catalog_route(data_dir str, port int) -> fn(ServerRequest) -> ServerResponse {
+// The file the hub keeps (`<cache>/agents.json`, written whole by a rename), as it is; the front reads it each time, so it never holds a stale copy.
+fn catalog_route(cache_dir str, port int) -> fn(ServerRequest) -> ServerResponse {
     fn(req ServerRequest) -> ServerResponse {
         if !origin_allowed(req, port) { return json_reply(403, "{\"error\":\"origin not allowed\"}") }
         ro file = with Fs = real_fs() {
-            match read_text(Path.from_bytes("${data_dir}/agents.json".bytes())) {
+            match read_text(Path.from_bytes("${cache_dir}/agents.json".bytes())) {
                 Ok(text) => Some(text)
                 Err(e) => None
             }
@@ -512,7 +523,7 @@ fn image_get_route(data_dir str) -> fn(ServerRequest) -> ServerResponse {
     }
 }
 
-fn build_router(web_dir str, port int, hub_tx ChanTx[str], reg_tx ChanTx[Reg], agents []AgentChoice, stt_url str, stt_language str, stt_model str, stt_asks ChanTx[SttAsk], stt_mgr ChanTx[SttMgrAsk], data_dir str, image_limit int) -> Result[Router, HttpError] {
+fn build_router(web_dir str, port int, hub_tx ChanTx[str], reg_tx ChanTx[Reg], agents []AgentChoice, stt_url str, stt_language str, stt_model str, stt_asks ChanTx[SttAsk], stt_mgr ChanTx[SttMgrAsk], data_dir str, image_limit int, layout ConfigLayout, preset str, reviewer_order []str) -> Result[Router, HttpError] {
     mut router = Router.new()
     ro r1 = router.get("/", files_route(web_dir))?
     ro r2 = router.get("/health", fn(req ServerRequest) -> ServerResponse => ServerResponse.text(StatusCode.OK, "ok"))?
@@ -524,18 +535,19 @@ fn build_router(web_dir str, port int, hub_tx ChanTx[str], reg_tx ChanTx[Reg], a
     ro r4d = router.get("/api/session-image/{id}/{n}", image_get_route(data_dir))?
     // the projects of the control panel and the choice of a folder (task 192m)
     mut all_projects = MethodRouter.new()
-    all_projects.get(projects_list_route(data_dir, port))
-    all_projects.post(projects_post_route(data_dir, port))
+    all_projects.get(projects_list_route(layout.data, port))
+    all_projects.post(projects_post_route(layout.data, layout.state, port))
     ro r4m = router.route("/api/projects", all_projects)?
     mut one_project = MethodRouter.new()
-    one_project.get(projects_get_route(data_dir, port))
-    one_project.put(projects_put_route(data_dir, port))
-    one_project.delete(projects_delete_route(data_dir, port))
+    one_project.get(projects_get_route(layout.data, port))
+    one_project.put(projects_put_route(layout.data, layout.state, port))
+    one_project.delete(projects_delete_route(layout.data, port))
     ro r4n = router.route("/api/projects/{id}", one_project)?
-    ro r4p = router.post("/api/project-order", projects_order_route(data_dir, port))?
-    ro r4h = router.get("/api/fs/list", fs_list_route(data_dir, port))?
+    ro r4p = router.post("/api/project-order", projects_order_route(layout.data, port))?
+    ro r4h = router.get("/api/fs/list", fs_list_route(layout.data, layout.state, port))?
     ro r4i = router.get("/api/fs/git", fs_git_route(port))?
-    ro r4o = router.get("/api/agent-catalog", catalog_route(data_dir, port))?
+    ro r4o = router.get("/api/agent-catalog", catalog_route(layout.cache, port))?
+    ro r4r = router.get("/api/presets", presets_route(layout, preset, reviewer_order, port))?
     ro r4t = router.get("/api/session-trace/{id}", trace_route(data_dir, port))?
     ro r5 = router.get("/{*path}", files_route(web_dir))?
     Ok(router)
@@ -543,10 +555,14 @@ fn build_router(web_dir str, port int, hub_tx ChanTx[str], reg_tx ChanTx[Reg], a
 
 /// Start the hub, then serve the page and `/ws` on 127.0.0.1 at the port of the settings; returns only if the server ends.
 /// `config_file` is passed to the hub as its settings file ("" - it reads the environment alone).
-export fn run_front(settings FrontSettings, config_file str) Proc Net Time Detach Io Os Fs -> () {
+export fn run_front(settings FrontSettings, config_file str) Proc Net Time Detach Io Os Fs -> () => run_front_with(settings, config_file, []str.new())
+
+/// The same; `passthrough` are the words (`--home <folder>`, `--set key=value`) that the hub gets after the settings file, so that it works in the same root with the same arguments.
+export fn run_front_with(settings FrontSettings, config_file str, passthrough []str) Proc Net Time Detach Io Os Fs -> () {
     mut hub_args = []str.new()
     for a in settings.hub_args { hub_args.push(a) }
     if config_file.byte_len() > 0 { hub_args.push(config_file) }
+    for a in passthrough { hub_args.push(a) }
     match connect(settings.hub_program, hub_args, "") {
         Err(reason) => {
             log_line("the hub cannot be started: ${reason}")
@@ -559,9 +575,9 @@ export fn run_front(settings FrontSettings, config_file str) Proc Net Time Detac
             detach { with Net = real_net() { stt_prober(settings.stt_url, stt_asks.rx) } }
             // the recognizer is a part of the panel (task 192l): started here, ended with the front (sttproc.nv)
             ro stt_mgr = Chan[SttMgrAsk].new(16)
-            ro stt_cfg = SttConfig { managed: settings.stt_managed, dir: settings.stt_dir, model: settings.stt_model, language: settings.stt_language, url: settings.stt_url, pid_file: "${settings.data_dir}/stt.pid" }
+            ro stt_cfg = SttConfig { managed: settings.stt_managed, dir: settings.stt_dir, model: settings.stt_model, language: settings.stt_language, url: settings.stt_url, pid_file: "${settings.layout.state}/stt.pid" }
             detach { with Net = real_net(), Fs = real_fs() { stt_manage(stt_cfg, stt_mgr.rx) } }
-            match build_router(settings.web_dir, settings.port, link.out, registrations.tx, settings.agents, settings.stt_url, settings.stt_language, settings.stt_model, stt_asks.tx, stt_mgr.tx, settings.data_dir, settings.max_image_bytes) {
+            match build_router(settings.web_dir, settings.port, link.out, registrations.tx, settings.agents, settings.stt_url, settings.stt_language, settings.stt_model, stt_asks.tx, stt_mgr.tx, settings.data_dir, settings.max_image_bytes, settings.layout, settings.preset, settings.reviewer_order) {
                 Err(e) => {
                     log_line("the routes cannot be set: ${e}")
                     exit_process(2)

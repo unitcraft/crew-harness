@@ -630,6 +630,10 @@ fn page_input_of(e Incoming, turn str) -> Option[PageInput] {
                 ro value = object_input(e)?
                 return page_input("session_renamed", value)
             }
+            if e.name == "session_preset" {
+                ro value = object_input(e)?
+                return page_input("session_preset", value)
+            }
             if e.name == "session_placed" {
                 ro value = object_input(e)?
                 return page_input("session_placed", value)

@@ -1,17 +1,18 @@
 // crew_hub.nv - the entry point of the hub of the session server (task 099): the engines, the agents and the store, over stdin and
 // stdout. The front (HTTP and WebSocket) starts it; it can also be started by hand to look at the lines it speaks.
-//   crew-hub [settings.json]        (the file may also be named by CREW_SERVER_CONFIG; see src/server/README.md)
+//   crew-hub [settings.json] [--home <folder>] [--set key=value ...]   (the file may also be named by CREW_SERVER_CONFIG; see src/server/README.md)
 // Build: nova build src/crew_hub.nv -o target/crew-hub.exe
 module crew_harness.crew_hub
 
-import crew_harness.server.{server_settings, run_hub_stdio}
+import crew_harness.server.{server_settings_in, run_hub_stdio}
+import crew_harness.config.{split_cli_args, crew_home}
 import std.os.{args, exit_process}
 import std.io.{stderr}
 
 fn main() Os Fs Proc Detach Time Net Io -> () {
-    ro argv = args()
-    ro file = if argv.len() > 1 { argv[1] } else { "" }
-    match server_settings(file) {
+    ro cli = split_cli_args(args())
+    ro file = if cli.rest.len() > 1 { cli.rest[1] } else { "" }
+    match server_settings_in(file, crew_home(cli.home), cli.sets) {
         Err(reason) => {
             mut err = stderr()
             ro written = err.write("crew-hub: ${reason}\n".bytes())

@@ -42,9 +42,9 @@ fn api_put(mut o JsonObject, key str, value JsonValue) -> () {
 }
 
 // The parent of the folder chosen last is where the picker opens next time (one value for every page).
-fn remember_dir(data_dir str, body JsonObject) -> () {
+fn remember_dir(state_dir str, body JsonObject) -> () {
     ro dir = last_dir_of_body(body)
-    if dir.byte_len() > 0 { last_dir_save(data_dir, dir) }
+    if dir.byte_len() > 0 { last_dir_save(state_dir, dir) }
 }
 
 fn projects_list_route(data_dir str, port int) -> fn(ServerRequest) -> ServerResponse {
@@ -67,14 +67,14 @@ fn projects_get_route(data_dir str, port int) -> fn(ServerRequest) -> ServerResp
     }
 }
 
-fn projects_post_route(data_dir str, port int) -> fn(ServerRequest) -> ServerResponse {
+fn projects_post_route(data_dir str, state_dir str, port int) -> fn(ServerRequest) -> ServerResponse {
     fn(req ServerRequest) -> ServerResponse {
         if !origin_allowed(req, port) { return api_error(403, "origin not allowed") }
         match api_body(req) {
             Err(reason) => api_error(400, reason)
             Ok(body) => match projects_create(data_dir, body) {
                 Ok(id) => {
-                    remember_dir(data_dir, body)
+                    remember_dir(state_dir, body)
                     mut o = JsonObject.new()
                     api_put(o, "id", JsonValue.str(id))
                     json_reply(201, JsonValue.object(o).to_str())
@@ -85,14 +85,14 @@ fn projects_post_route(data_dir str, port int) -> fn(ServerRequest) -> ServerRes
     }
 }
 
-fn projects_put_route(data_dir str, port int) -> fn(ServerRequest) -> ServerResponse {
+fn projects_put_route(data_dir str, state_dir str, port int) -> fn(ServerRequest) -> ServerResponse {
     fn(req ServerRequest) -> ServerResponse {
         if !origin_allowed(req, port) { return api_error(403, "origin not allowed") }
         match api_body(req) {
             Err(reason) => api_error(400, reason)
             Ok(body) => match projects_replace(data_dir, req.param("id") ?? "", body) {
                 Ok(done) => {
-                    remember_dir(data_dir, body)
+                    remember_dir(state_dir, body)
                     json_reply(200, "{\"ok\":true}")
                 }
                 Err(f) => api_fail(f)
@@ -182,13 +182,13 @@ fn fs_roots_json(recent []str) -> str {
     JsonValue.object(o).to_str()
 }
 
-fn fs_list_route(data_dir str, port int) -> fn(ServerRequest) -> ServerResponse {
+fn fs_list_route(data_dir str, state_dir str, port int) -> fn(ServerRequest) -> ServerResponse {
     fn(req ServerRequest) -> ServerResponse {
         if !origin_allowed(req, port) { return api_error(403, "origin not allowed") }
         ro asked = (req.query_param("path") ?? "").trim_ascii()
         if asked.byte_len() == 0 {
             // no path: the remembered folder (or its nearest existing parent), else the roots
-            ro last = existing_ancestor(last_dir_load(data_dir))
+            ro last = existing_ancestor(last_dir_load(state_dir))
             if last.byte_len() > 0 {
                 match list_folders(last) {
                     Ok(listing) => return json_reply(200, fs_list_json(listing, recent_of(data_dir), last))

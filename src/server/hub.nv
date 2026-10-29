@@ -21,7 +21,7 @@ import alula.engine.{Engine, Incoming, EventKind, Journal, Store, Link, PartyReq
 import crew_harness.product_machines.{find_machines_dir, load_product_machines}
 import alula.machine_run.{AlulaMachine, AlulaState}
 import crew_harness.acp.{AcpConfig, AcpClient, AcpImage, AcpPreset, AskSetup, no_ask, open_client_full, acp_link, page_event, TRACE_LIMIT}
-import crew_harness.config.{pick_prompt, ConfigLayout}
+import crew_harness.config.{pick_prompt, ConfigLayout, load_presets, preset_named, preset_family, DEFAULT_PRESET, presets_reply}
 import crew_harness.projects.{EnvEntry, projects_get, parse_dotenv, normalize_folder_path, project_has_folder, valid_project_id}
 import crew_harness.storage.{remove_session_dir, open_data_dir, file_journal, file_store, list_sessions, valid_session_name, session_file_made, migrate_flat_sessions, image_ext, decode_image, save_image, find_image, replace_file}
 import crew_harness.pgstore.{PgWorld, pg_journal, pg_store}
@@ -33,7 +33,7 @@ import std.fs.{Fs, real_fs}
 import std.net.{real_net}
 import std.prelude.effects.{real_random}
 import std.os.{Os, real_os, cwd, args}
-import std.fs.{Fs, real_fs, Path, read_text, try_exists}
+import std.fs.{Fs, real_fs, Path, read_text, try_exists, create_dir_all}
 
 /// Outgoing: a text for the page `conn`; conn 0 - for every page that is attached.
 export type Outgoing { conn int, text str }
@@ -57,7 +57,8 @@ type Dialog {
     has_rank bool,
     rank int,
     rt RouteSession,
-    chosen []SavedChoice
+    chosen []SavedChoice,
+    preset str
 }
 
 // A choice of the owner (task 192t), kept per family: the agent, the setting (`mode`, `model`, `effort`) and the id chosen.
@@ -440,7 +441,7 @@ fn Hub mut @catalog_note(agent str, summary_text str) Time -> () {
     }
 }
 
-fn Hub @catalog_path() -> Path => Path.from_bytes("${@settings.data_dir}/${CATALOG_FILE}".bytes())
+fn Hub @catalog_path() -> Path => Path.from_bytes("${@settings.layout.cache}/${CATALOG_FILE}".bytes())
 
 // Write the file if a record changed and the gap since the last write has passed (`force`: now). A write that fails is tried again after the gap.
 fn Hub mut @catalog_save(force bool) Time -> () {
@@ -625,7 +626,7 @@ type Launch { folder str, env []EnvEntry }
 fn Hub @launch_for(project_id str, folder str) -> Result[Launch, str] {
     if project_id.byte_len() == 0 { return Ok(Launch { folder: "", env: []EnvEntry.new() }) }
     if !valid_project_id(project_id) { return Err("the project was not found") }
-    ro project = match projects_get(@settings.data_dir, project_id) {
+    ro project = match projects_get(@settings.layout.data, project_id) {
         Ok(p) => p
         Err(f) => return Err(if f.status == 404 { "the project was not found" } else { "the projects cannot be read" })
     }
@@ -669,7 +670,7 @@ fn Hub mut @agent_env(agent str, base []EnvEntry) -> []EnvEntry {
         Some(spec) => {
             ro word = "${spec.id} ${spec.program}".to_ascii_lower()
             if !word.contains("opencode") { return out }
-            ro extra = with Fs = real_fs(), Os = real_os() { opencode_env(@settings.data_dir) }
+            ro extra = with Fs = real_fs(), Os = real_os() { opencode_env(@settings.layout.cache) }
             if extra.len() == 0 {
                 @say_log("the agent ${agent} starts with the configuration of the owner as it is (no clean copy of it)")
                 return out
@@ -762,6 +763,15 @@ export fn start_hub_from(settings ServerSettings, table_text str) Proc Detach Ti
     ro migration = migrate_flat_sessions(settings.data_dir)
     if migration.sessions > 0 { hub.say_log("migrated ${migration.sessions} sessions to per-session folders") }
     for line in migration.kept { hub.say_log(line) }
+    // the folders of the layout that the hub writes to are made (state and cache hold the pid file, the catalog and the copy of the configuration of the agent)
+    if !settings.layout.legacy {
+        with Fs = real_fs() {
+            ro made_state = create_dir_all(Path.from_bytes(settings.layout.state.bytes()))
+            ro made_cache = create_dir_all(Path.from_bytes(settings.layout.cache.bytes()))
+        }
+    } else if settings.layout.home.byte_len() > 0 || settings.data_dir != "crew-data" {
+        hub.say_log("the old layout: data_dir ${settings.data_dir} holds sessions, projects, state and cache together; `crew-harness migrate --from ${settings.data_dir}` moves them into the new folders")
+    }
     hub.catalog_load()
     ro ids = if pg {
         match with Net = real_net() { pg_list(settings.pg) } {
@@ -786,7 +796,7 @@ fn Hub mut @resume_session(id str) Proc Detach Time -> () {
     match resume_stored(pg, root, world, @machine, id) {
         None => @say_log("the session ${id} cannot be resumed: no usable snapshot")
         Some(engine) => {
-            mut s = Dialog { id, name: id, agent: "", engine, world, clients: []AcpClient.new(), turn: "", lines: []str.new(), announced: false, model_announced: false, started_at: 0, slow_told: false, folder: "", project_id: "", has_rank: false, rank: 0, rt: route_session_new(), chosen: []SavedChoice.new() }
+            mut s = Dialog { id, name: id, agent: "", engine, world, clients: []AcpClient.new(), turn: "", lines: []str.new(), announced: false, model_announced: false, started_at: 0, slow_told: false, folder: "", project_id: "", has_rank: false, rank: 0, rt: route_session_new(), chosen: []SavedChoice.new(), preset: "" }
             mut saw_created = false
             for e in history_in(pg, root, s) {
                 if e.name == "session_created" && e.kind == EventKind.Input && !saw_created {
@@ -808,6 +818,13 @@ fn Hub mut @resume_session(id str) Proc Detach Time -> () {
                 if e.name == "session_renamed" && e.kind == EventKind.Input {
                     match jobject(e.input) {
                         Some(change) => { if jtext(change, "name").byte_len() > 0 { s.name = jtext(change, "name") } }
+                        None => ()
+                    }
+                }
+                // the owner chose the preset of the session (task 192.12): the last word is the preset
+                if e.name == "session_preset" && e.kind == EventKind.Input {
+                    match jobject(e.input) {
+                        Some(change) => { s.preset = jtext(change, "preset") }
                         None => ()
                     }
                 }
@@ -874,7 +891,7 @@ fn Hub mut @cs_make_session(cid str, name str, agent str, folder str, project_id
     ro root = @settings.data_dir
     mut world = PgWorld.open(@settings.pg, cid)
     ro engine = begin_session_engine(pg, root, world, @machine, cid)
-    mut s = Dialog { id: cid, name, agent, engine, world, clients: []AcpClient.new(), turn: "", lines: []str.new(), announced: false, model_announced: false, started_at: 0, slow_told: false, folder, project_id, has_rank: false, rank: 0, rt: route_session_new(), chosen: []SavedChoice.new() }
+    mut s = Dialog { id: cid, name, agent, engine, world, clients: []AcpClient.new(), turn: "", lines: []str.new(), announced: false, model_announced: false, started_at: 0, slow_told: false, folder, project_id, has_rank: false, rank: 0, rt: route_session_new(), chosen: []SavedChoice.new(), preset: "" }
     accept_in(pg, root, s, Incoming.signal("session_created", meta_text_child(name, agent, @cwd_of(folder), "", project_id, parent, pkind)))
     @add_session(s)
     ro at = @sessions.len() - 1
@@ -920,11 +937,12 @@ fn Hub mut @create(conn int, trace str, input JsonObject) Proc Detach Time -> ()
             ro root = @settings.data_dir
             mut world = PgWorld.open(@settings.pg, trace)
             ro engine = begin_session_engine(pg, root, world, @machine, trace)
-            mut s = Dialog { id: trace, name, agent, engine, world, clients: []AcpClient.new(), turn: "", lines: []str.new(), announced: false, model_announced: false, started_at: 0, slow_told: false, folder: launch.folder, project_id, has_rank: false, rank: 0, rt: route_session_new(), chosen: []SavedChoice.new() }
+            mut s = Dialog { id: trace, name, agent, engine, world, clients: []AcpClient.new(), turn: "", lines: []str.new(), announced: false, model_announced: false, started_at: 0, slow_told: false, folder: launch.folder, project_id, has_rank: false, rank: 0, rt: route_session_new(), chosen: []SavedChoice.new(), preset: "" }
             accept_in(pg, root, s, Incoming.signal("session_created", meta_text(name, agent, @cwd_of(launch.folder), project, project_id)))
             @add_session(s)
             ro at = @sessions.len() - 1
             @drain(at)
+            if jtext(input, "preset").byte_len() > 0 { @set_preset(trace, jtext(input, "preset")) }
             // the mode and the place of work chosen on the page before the first message (the default: interactive, with a tree)
             mut place = JsonObject.new()
             js(place, "route", if route_valid(jtext(input, "route")) { jtext(input, "route") } else { "interactive" })
@@ -1280,6 +1298,56 @@ fn send_transfer(mut s Dialog, request PartyRequest[str]) -> () {
     }
 }
 
+// ----- the presets (task 192.12): the table role -> {family, model, effort}; the independent step takes the family of dev_accept from the preset of the session -----
+
+fn preset_text(name str) -> str {
+    mut o = JsonObject.new()
+    jput(o, "preset", JsonValue.str(name))
+    JsonValue.object(o).to_str()
+}
+
+// The preset of the session: its own, else the one of the settings, else `default`.
+fn Hub @preset_name_of(s Dialog) -> str {
+    if s.preset.byte_len() > 0 { return s.preset }
+    if @settings.preset.byte_len() > 0 { return @settings.preset }
+    DEFAULT_PRESET
+}
+
+// The family of the role in the preset of the session ("" - the preset does not say, or a file of a preset is broken: the line goes to the log, the reserve order of the settings acts).
+fn Hub @preset_family_of(s Dialog, role str) -> str {
+    match with Fs = real_fs() { load_presets(@settings.layout, @settings.route_reviewer_order) } {
+        Ok(list) => match preset_named(list, @preset_name_of(s)) {
+            Some(p) => preset_family(p, role)
+            None => ""
+        }
+        Err(reason) => {
+            ro sent = @notes_tx.send("the presets: ${reason}")
+            ""
+        }
+    }
+}
+
+// The owner chose the preset of the session (a name of a preset that exists; "" - the preset of the settings): the same session and journal, every page is told by the event `session_preset`.
+fn Hub mut @set_preset(trace str, name str) Proc Detach Time -> () {
+    ro at = @find(trace)
+    if at < 0 { return }
+    if name.byte_len() > 0 {
+        ro known = match with Fs = real_fs() { load_presets(@settings.layout, @settings.route_reviewer_order) } {
+            Ok(list) => preset_named(list, name).is_some()
+            Err(reason) => false
+        }
+        if !known {
+            @tell_error(0, trace, @sessions[at].engine.step_number(), "", "the preset ${name} is not there")
+            return
+        }
+    }
+    mut s = @sessions[at]
+    s.preset = name
+    accept_in(@settings.store == "pg", @settings.data_dir, s, Incoming.signal("session_preset", preset_text(name)))
+    @sessions[at] = s
+    @drain(at)
+}
+
 fn renamed_text(name str) -> str {
     mut o = JsonObject.new()
     jput(o, "name", JsonValue.str(name))
@@ -1335,7 +1403,7 @@ fn Hub mut @move(trace str, project_id str) Proc Detach Time -> () {
     if at < 0 { return }
     mut name = ""
     if project_id.byte_len() > 0 {
-        match projects_get(@settings.data_dir, project_id) {
+        match projects_get(@settings.layout.data, project_id) {
             Ok(p) => { name = p.name }
             Err(f) => {
                 @tell_error(0, trace, @sessions[at].engine.step_number(), "", "the project is not there: ${f.message}")
@@ -1550,6 +1618,8 @@ export fn Hub mut @handle(conn int, text str) Proc Detach Time -> () {
         @move(trace, jtext(input, "project_id"))
     } else if kind == "session_rename" {
         @rename(trace, jtext(input, "name"))
+    } else if kind == "session_preset" {
+        @set_preset(trace, jtext(input, "preset"))
     } else if kind == "session_setting" {
         @choose(trace, jtext(input, "setting"), jtext(input, "value"))
     } else if kind == "machine_state_get" {

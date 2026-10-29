@@ -9,7 +9,7 @@ module crew_harness.server
 
 import crew_harness.product_machines.{dialog_machine_text, tree_machines_dir}
 import crew_harness.pgdb.{PgConfig}
-import crew_harness.config.{legacy_layout}
+import crew_harness.config.{legacy_layout, layout_with_data_dir}
 import std.encoding.json.{Json, JsonValue, JsonObject}
 import crew_harness.projects.{projects_create}
 import crew_harness.storage.{session_dir, session_file, session_images_dir, save_image, replace_file}
@@ -838,6 +838,30 @@ export fn scenario_rename(settings ServerSettings) Proc Detach Time Net Fs Os ->
     rig.shut()
     mut again = rig_open(settings)
     c.expect(kit_text(again.hub.page_lines("s-ren")) == kit_text(before), "the lines are the same after the restart")
+    again.shut()
+    c.report()
+}
+
+/// The owner chooses the preset of a session (task 192.12): with the new session or later; a preset that is not there is refused; the journal keeps the choice.
+export fn scenario_preset(settings ServerSettings) Proc Detach Time Net Fs Os -> str {
+    mut c = kit_check()
+    ro written = write_file("${settings.data_dir}/inst/config/presets/mix.json", "{\"roles\":{\"dev\":{\"family\":\"opencode\"},\"dev_accept\":{\"family\":\"second\"}}}")
+    ro with_layout = ServerSettings { layout: layout_with_data_dir("${settings.data_dir}/inst", settings.data_dir, ""), ...settings }
+    mut rig = rig_open(with_layout)
+    rig.attach(1)
+    rig.page(1, "session_created", "s-pre", "{\"name\":\"Набор\",\"agent\":\"opencode\",\"preset\":\"mix\"}")
+    c.expect(rig.until("\"kind\":\"session_preset\"", 5000), "the preset chosen with the new session is told to the page")
+    c.expect(line_input(first_of(rig.lines_for(1), "session_preset", 0), "preset") == "mix", "the preset is mix")
+    rig.page(1, "session_preset", "s-pre", "{\"preset\":\"nope\"}")
+    rig.run(300)
+    c.expect(kit_with(rig.lines_for(1), "\"kind\":\"session_preset\"") == 1, "a preset that is not there changes nothing")
+    c.expect(kit_with(rig.lines_for(1), "the preset nope is not there") >= 1, "the owner is told")
+    rig.page(1, "session_preset", "s-pre", "{\"preset\":\"default\"}")
+    c.expect(rig.until("\"preset\":\"default\"", 5000), "another preset is chosen")
+    ro before = rig.hub.page_lines("s-pre")
+    rig.shut()
+    mut again = rig_open(with_layout)
+    c.expect(kit_text(again.hub.page_lines("s-pre")) == kit_text(before), "the lines are the same after the restart")
     again.shut()
     c.report()
 }

@@ -6,6 +6,7 @@
 // Every change that must survive a restart is a signal of the journal (`route_set`, `route_task`, `route_step`, `route_note`, `route_review`); `RouteSession.apply` reads them again.
 module crew_harness.server
 
+import crew_harness.config.{modes_dirs}
 import alula.engine.{Incoming, EventKind, Link}
 import crew_harness.acp.{AcpClient, AcpConfig, open_client_traced, acp_link}
 import crew_harness.projects.{projects_get}
@@ -63,16 +64,28 @@ fn note_text(text str) -> str {
 // ----- the files of the modes, the page -----
 
 fn Hub @routes_path() -> str {
-    ro d = @settings.routes_dir
+    ro d = if @settings.routes_dir.byte_len() > 0 { @settings.routes_dir } else { "doc/routes" }
     if d.starts_with("/") || d.starts_with("\\") || d.contains(":") { d } else { "${@workdir}/${d}" }
+}
+
+// The folders of the files of the modes, the strongest first (task 192.12): `routes_dir` of the settings alone when it is set; else `.crew-harness/modes` of the project, `<home>/config/modes`,
+// and last `doc/routes` of the working folder (the texts of the product).
+fn Hub @mode_dirs() -> []str {
+    if @settings.routes_dir.byte_len() > 0 { return [@routes_path()] }
+    mut out = modes_dirs(@settings.layout)
+    out.push(@routes_path())
+    out
 }
 
 // The mode from its file at the moment (read each time: a changed text acts at once); a missing file is a mode without steps.
 fn Hub @route_doc(route str) -> RouteDoc {
-    match read_file("${@routes_path()}/${route}.md") {
-        Some(t) => parse_route_doc(route, t)
-        None => { route, instruction: "", steps: []RouteStep.new() }
+    for dir in @mode_dirs() {
+        match read_file("${dir}/${route}.md") {
+            Some(t) => return parse_route_doc(route, t)
+            None => ()
+        }
     }
+    { route, instruction: "", steps: []RouteStep.new() }
 }
 
 fn Hub @route_titles(doc RouteDoc) -> []str {
@@ -171,7 +184,7 @@ fn Hub @route_repo_dir(session str) -> str {
 fn Hub @route_trees(session str) -> str {
     ro at = @find(session)
     if at < 0 || @sessions[at].project_id.byte_len() == 0 { return "" }
-    match projects_get(@settings.data_dir, @sessions[at].project_id) {
+    match projects_get(@settings.layout.data, @sessions[at].project_id) {
         Ok(p) => p.worktrees_dir
         Err(f) => ""
     }
@@ -735,7 +748,7 @@ fn Hub mut @route_drop_review(session str) Time -> () {
 
 fn Hub mut @route_start_review(at int, index int, step RouteStep) Proc Detach Time -> () {
     ro s = @sessions[at]
-    ro family = pick_reviewer(@settings.route_reviewer_order, @agent_ids(), s.agent)
+    ro family = pick_reviewer_for(@preset_family_of(s, "dev_accept"), @settings.route_reviewer_order, @agent_ids(), s.agent)
     if family.byte_len() == 0 {
         @tell_error(0, s.id, s.engine.step_number(), "", "нет независимого проверяющего другой семьи: настройте agents и route_reviewer_order")
         @route_stop(at)

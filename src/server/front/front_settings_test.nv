@@ -4,7 +4,7 @@
 module server.front
 
 import std.os.{Os, MockOs, mock_os, real_os, temp_dir, pid}
-import std.fs.{Fs, real_fs, write_text, create_dir_all, Path}
+import std.fs.{Fs, real_fs, write_text, create_dir_all, remove_dir_all, Path}
 
 fn front_file(name str, text str) -> Path {
     ro base = with Os = real_os() { temp_dir() }
@@ -26,7 +26,7 @@ test "front settings: no file and no environment means the defaults" {
             assert(s.web_dir == "src/web")
             assert(s.hub_program == "target/crew-hub.exe")
             assert(s.hub_args.len() == 0)
-            assert(s.data_dir == "crew-data")
+            assert(s.data_dir.ends_with("/.crew-harness/data/sessions"))
         }
         Err(e) => assert(false)
     }
@@ -135,16 +135,36 @@ test "front settings: the recognizer is managed by default; the folder, the mode
         Ok(s) => {
             assert(s.stt_managed)
             assert(s.stt_model == "small")
-            assert(s.data_dir == "crew-data")
-            assert(s.stt_dir == "")
+            assert(s.data_dir.ends_with("/.crew-harness/data/sessions"))
+            assert(s.stt_dir.ends_with("/.crew-harness/tools/whisper"))
         }
         Err(e) => assert(false)
     }
-    // the default folder: CREW_STT_DIR (the installer's), else LOCALAPPDATA/crew-harness/stt
+    // the default folder: CREW_STT_DIR (the installer's), else an older install in LOCALAPPDATA/crew-harness/stt if it is there, else <home>/tools/whisper
     mut local = MockOs.new()
     local.put_env("LOCALAPPDATA", "C:/work/local")
     match with Os = mock_os(local), Fs = real_fs() { front_settings("") } {
-        Ok(s) => assert(s.stt_dir == "C:/work/local/crew-harness/stt")
+        Ok(s) => assert(s.stt_dir.ends_with("/.crew-harness/tools/whisper"))
+        Err(e) => assert(false)
+    }
+    mut no_home = MockOs.new()
+    no_home.set_home_str("")
+    no_home.put_env("LOCALAPPDATA", "C:/work/local")
+    match with Os = mock_os(no_home), Fs = real_fs() { front_settings("") } {
+        Ok(s) => assert(s.stt_dir == "C:/work/local/crew-harness/stt" && s.layout.legacy)
+        Err(e) => assert(false)
+    }
+    mut tools = MockOs.new()
+    tools.put_env("CREW_TOOLS_DIR", "C:/work/tools")
+    match with Os = mock_os(tools), Fs = real_fs() { front_settings("") } {
+        Ok(s) => assert(s.stt_dir == "C:/work/tools/whisper")
+        Err(e) => assert(false)
+    }
+    mut voice = MockOs.new()
+    voice.put_env("CREW_VOICE_DIR", "C:/work/voice")
+    voice.put_env("CREW_VOICE_MODEL", "medium")
+    match with Os = mock_os(voice), Fs = real_fs() { front_settings("") } {
+        Ok(s) => assert(s.stt_dir == "C:/work/voice" && s.stt_model == "medium")
         Err(e) => assert(false)
     }
     mut installer = MockOs.new()
@@ -217,7 +237,35 @@ test "front settings: the folder of the data and the limit of a picture" {
     }
     mut empty = MockOs.new()
     match with Os = mock_os(empty), Fs = real_fs() { front_settings("") } {
-        Ok(s) => assert(s.data_dir == "crew-data" && s.max_image_bytes == 10485760)
+        Ok(s) => assert(s.data_dir.ends_with("/.crew-harness/data/sessions") && s.max_image_bytes == 10485760)
         Err(e) => assert(false)
+    }
+}
+
+test "front settings: the layers of the hub are those of the front, an old data_dir stays flat, voice and stt are the same key" {
+    ro base = with Os = real_os() { temp_dir() }
+    ro id = with Os = real_os() { pid() }
+    ro root = base.join("crew-front-layers-${id}").display().replace("\\", "/")
+    with Fs = real_fs() {
+        ro made = create_dir_all(Path.from_bytes("${root}/inst/config".bytes()))
+        ro w1 = write_text(Path.from_bytes("${root}/inst/config/config.json".bytes()), "{\"port\":1111,\"stt\":{\"language\":\"ru\"},\"preset\":\"mix\"}")
+        ro w2 = write_text(Path.from_bytes("${root}/srv.json".bytes()), "{\"port\":2222,\"voice\":{\"model\":\"medium\"}}")
+    }
+    mut state = MockOs.new()
+    state.set_cwd_str("${root}/nowhere")
+    match with Os = mock_os(state), Fs = real_fs() { front_settings_in("${root}/srv.json", "${root}/inst", ["port=3333"]) } {
+        Ok(s) => {
+            assert(s.port == 3333 && s.stt_language == "ru" && s.stt_model == "medium" && s.preset == "mix")
+            assert(s.data_dir == "${root}/inst/data/sessions" && s.layout.data == "${root}/inst/data" && s.layout.state == "${root}/inst/state" && s.layout.cache == "${root}/inst/cache")
+        }
+        Err(e) => assert(false)
+    }
+    state.put_env("CREW_SERVER_DATA_DIR", "${root}/old")
+    match with Os = mock_os(state), Fs = real_fs() { front_settings_in("${root}/srv.json", "${root}/inst", []str.new()) } {
+        Ok(s) => assert(s.data_dir == "${root}/old" && s.layout.legacy && s.layout.state == "${root}/old" && s.layout.data == "${root}/old")
+        Err(e) => assert(false)
+    }
+    with Fs = real_fs() {
+        ro gone = remove_dir_all(Path.from_bytes(root.bytes()))
     }
 }

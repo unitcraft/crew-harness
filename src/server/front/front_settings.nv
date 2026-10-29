@@ -15,12 +15,13 @@ import std.text
 import std.encoding.json.{Json, JsonValue, JsonObject}
 import std.fs.{Fs, read_text, Path}
 import std.os.{Os, env}
+import crew_harness.config.{ConfigLayout, legacy_layout, layout_in, layout_with_data_dir, crew_home, work_dir_now, find_project_dir, file_layers, env_layer, arg_layer, merge_layers, normalize_layer, file_text, tools_dir_now}
 
 /// FrontSettings: where to listen, where the page is, how to start the hub, where the recognizer of the voice listens (`stt_url`, a local http address) and its default language.
 export type AgentChoice { id str, label str }
 /// The recognizer is a part of the control panel (task 192l): `stt_managed` - the front starts and ends it itself, `stt_dir` - the folder of the tool (bin/, models/),
 /// `stt_model` - the model (models/ggml-<model>.bin), `data_dir` - where the pid file `stt.pid` is written.
-export type FrontSettings { port int, web_dir str, hub_program str, hub_args []str, agents []AgentChoice, stt_url str, stt_language str, stt_managed bool, stt_dir str, stt_model str, data_dir str, max_image_bytes int }
+export type FrontSettings { port int, web_dir str, hub_program str, hub_args []str, agents []AgentChoice, stt_url str, stt_language str, stt_managed bool, stt_dir str, stt_model str, data_dir str, max_image_bytes int, layout ConfigLayout, preset str, reviewer_order []str }
 
 fn fs_env(key str) Os -> Option[str] {
     match env(key) {
@@ -70,18 +71,7 @@ fn fs_agents(base []AgentChoice) Os -> []AgentChoice {
         None => base
     }
 }
-fn fs_defaults() -> FrontSettings => { port: 8099, web_dir: "src/web", hub_program: "target/crew-hub.exe", hub_args: []str.new(), agents: fs_default_agents(), stt_url: "http://127.0.0.1:8178/inference", stt_language: "auto", stt_managed: true, stt_dir: "", stt_model: "small", data_dir: "crew-data", max_image_bytes: 10485760 }
-
-// The folder of the tool when nothing names it: the one the installer (scripts/install-stt.ps1) uses - CREW_STT_DIR, else %LOCALAPPDATA%/crew-harness/stt.
-fn fs_default_stt_dir() Os -> str {
-    match fs_env("CREW_STT_DIR") {
-        Some(dir) => dir
-        None => match fs_env("LOCALAPPDATA") {
-            Some(local) => "${local}/crew-harness/stt"
-            None => ""
-        }
-    }
-}
+fn fs_defaults() -> FrontSettings => { port: 8099, web_dir: "src/web", hub_program: "target/crew-hub.exe", hub_args: []str.new(), agents: fs_default_agents(), stt_url: "http://127.0.0.1:8178/inference", stt_language: "auto", stt_managed: true, stt_dir: "", stt_model: "small", data_dir: "crew-data", max_image_bytes: 10485760, layout: legacy_layout("crew-data"), preset: "default", reviewer_order: ["codex", "claude", "kimi", "opencode"] }
 
 // The voice never leaves this machine: a recognizer address that is not a local http one is the default (the hub says what is wrong).
 fn fs_stt_url(url str, fallback str) -> str {
@@ -150,7 +140,8 @@ fn fs_from_file(text str) -> FrontSettings {
         }
         None => base.agents
     }
-    ro stt = match o.get("stt") {
+    ro voice_o = normalize_layer(o)
+    ro stt = match voice_o.get("voice") {
         Some(t) => t.object()
         None => None
     }
@@ -206,52 +197,76 @@ fn fs_from_file(text str) -> FrontSettings {
         Some(v) => fs_image_limit(v.int() ?? base.max_image_bytes, base.max_image_bytes)
         None => base.max_image_bytes
     }
-    { port, web_dir, hub_program, hub_args, agents, stt_url, stt_language, stt_managed, stt_dir, stt_model, data_dir, max_image_bytes }
+    ro preset = match o.get("preset") {
+        Some(v) => match v.str() {
+            Some(text) => if text.byte_len() > 0 { text } else { base.preset }
+            None => base.preset
+        }
+        None => base.preset
+    }
+    ro reviewer_order = match o.get("route_reviewer_order") {
+        Some(v) => {
+            ro list = fs_strings(v)
+            if list.len() > 0 { list } else { base.reviewer_order }
+        }
+        None => base.reviewer_order
+    }
+    { port, web_dir, hub_program, hub_args, agents, stt_url, stt_language, stt_managed, stt_dir, stt_model, data_dir, max_image_bytes, layout: base.layout, preset, reviewer_order }
 }
 
-/// The settings of the front: the file (the argument, or CREW_SERVER_CONFIG), the environment over it.
-export fn front_settings(file str) Os Fs -> Result[FrontSettings, str] {
-    ro name = if file.byte_len() > 0 { file } else { fs_env("CREW_SERVER_CONFIG") ?? "" }
-    ro base = if name.byte_len() == 0 {
-        fs_defaults()
-    } else {
-        match read_text(Path.from_bytes(name.bytes())) {
-            Ok(t) => fs_from_file(t)
-            Err(e) => return Err("the settings file ${name} cannot be read")
+// The folder of the recognizer when no setting names it (task 192.12): an install of the older place (`%LOCALAPPDATA%/crew-harness/stt`) that is still there is used;
+// else `CREW_TOOLS_DIR/whisper` or `<home>/tools/whisper`; with no root at all, the older place.
+fn fs_default_stt_dir(layout ConfigLayout) Os Fs -> str {
+    ro old = match fs_env("LOCALAPPDATA") {
+        Some(local) => "${local.replace("\\", "/")}/crew-harness/stt"
+        None => ""
+    }
+    if old.byte_len() > 0 {
+        match file_text("${old}/bin/whisper-server.exe") {
+            Some(t) => return old
+            None => ()
         }
     }
-    ro port = match fs_env("CREW_SERVER_PORT") {
+    ro tools = tools_dir_now(layout)
+    if tools.byte_len() > 0 { return "${tools}/whisper" }
+    old
+}
+
+/// The settings of the front in the root of the instance named by CREW_HOME (or the folder of the user): see `front_settings_in`.
+export fn front_settings(file str) Os Fs -> Result[FrontSettings, str] => front_settings_in(file, crew_home(""), []str.new())
+
+/// The settings of the front by the same layers as the hub (task 192.12, `server_settings_in` of src/server/settings.nv): the defaults, `<home>/config/config.json`, the server file `file`
+/// (or CREW_SERVER_CONFIG), `.crew-harness/config.json` and `local.json` of the project, secrets.json, the variables CREW_*, the words `key=value` of `sets` (the arguments `--set`).
+export fn front_settings_in(file str, home str, sets []str) Os Fs -> Result[FrontSettings, str] {
+    ro name = if file.byte_len() > 0 { file } else { fs_env("CREW_SERVER_CONFIG") ?? "" }
+    if name.byte_len() > 0 && file_text(name).is_none() { return Err("the settings file ${name} cannot be read") }
+    ro project = find_project_dir(work_dir_now(), home)
+    ro at = layout_in(home, project)
+    mut layers = file_layers(at, name)?
+    layers.push(env_layer())
+    layers.push(arg_layer(sets))
+    ro merged = merge_layers(layers)
+    ro base = fs_from_file(JsonValue.object(merged).to_str())
+    ro data_set = match merged.get("data_dir") {
+        Some(v) => (v.str() ?? "").byte_len() > 0
+        None => false
+    }
+    ro layout = if data_set { layout_with_data_dir(home, base.data_dir, project) } else if home.byte_len() > 0 { at } else { legacy_layout(base.data_dir) }
+    // a variable with a wrong number is named, as the hub does
+    match fs_env("CREW_SERVER_PORT") {
         Some(text) => match text.to_int() {
-            Ok(n) => n
+            Ok(n) => ()
             Err(e) => return Err("CREW_SERVER_PORT must be a whole number")
         }
-        None => base.port
+        None => ()
     }
-    if port < 1 || port > 65535 { return Err("the port must be 1 to 65535") }
+    if base.port < 1 || base.port > 65535 { return Err("the port must be 1 to 65535") }
     ro hub_words = match fs_env("CREW_SERVER_HUB") {
         Some(command) => fs_words(command)
         None => []str.new()
     }
     ro hub_program = if hub_words.len() > 0 { hub_words[0] } else { base.hub_program }
     ro hub_args = if hub_words.len() > 0 { fs_rest(hub_words) } else { base.hub_args }
-    ro stt_url = fs_stt_url(fs_env("CREW_SERVER_STT_URL") ?? base.stt_url, base.stt_url)
-    ro stt_language = fs_env("CREW_SERVER_STT_LANGUAGE") ?? base.stt_language
-    ro stt_managed = match fs_env("CREW_SERVER_STT_MANAGED") {
-        Some(text) => if text == "true" { true } else if text == "false" { false } else { base.stt_managed }
-        None => base.stt_managed
-    }
-    ro stt_dir = fs_env("CREW_SERVER_STT_DIR") ?? (if base.stt_dir.byte_len() > 0 { base.stt_dir } else { fs_default_stt_dir() })
-    ro stt_model = match fs_env("CREW_SERVER_STT_MODEL") {
-        Some(text) => if stt_model_ok(text) { text } else { base.stt_model }
-        None => base.stt_model
-    }
-    ro data_dir = fs_env("CREW_SERVER_DATA_DIR") ?? base.data_dir
-    ro image_limit = match fs_env("CREW_SERVER_MAX_IMAGE_BYTES") {
-        Some(text) => match text.to_int() {
-            Ok(n) => fs_image_limit(n, base.max_image_bytes)
-            Err(e) => base.max_image_bytes
-        }
-        None => base.max_image_bytes
-    }
-    Ok({ port, web_dir: fs_env("CREW_SERVER_WEB_DIR") ?? base.web_dir, hub_program, hub_args, agents: fs_agents(base.agents), stt_url, stt_language, stt_managed, stt_dir, stt_model, data_dir, max_image_bytes: image_limit })
+    ro stt_dir = if base.stt_dir.byte_len() > 0 { base.stt_dir } else { fs_default_stt_dir(layout) }
+    Ok({ port: base.port, web_dir: base.web_dir, hub_program, hub_args, agents: fs_agents(base.agents), stt_url: base.stt_url, stt_language: base.stt_language, stt_managed: base.stt_managed, stt_dir, stt_model: base.stt_model, data_dir: layout.sessions, max_image_bytes: base.max_image_bytes, layout, preset: base.preset, reviewer_order: base.reviewer_order })
 }
