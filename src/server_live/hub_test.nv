@@ -2,7 +2,7 @@
 // The same scenarios run over PostgreSQL in src/server_pg: the results must be the same.
 module crew_harness.server_live
 
-import crew_harness.server.{kit_files, kit_files_mcp, scenario_question_mcp, scenario_question_mcp_timeout, scenario_chat, scenario_stream_burst, scenario_permission, scenario_question, scenario_question_off, scenario_cancel, scenario_switch_agent, scenario_rename, scenario_preset, scenario_order_move_delete, scenario_restart_idle, scenario_restart_open, scenario_crash, scenario_two_pages, scenario_rejects, scenario_many, scenario_broken_agent, scenario_renamed_table, scenario_migrate_flat, scenario_images, scenario_catalog, scenario_choose_cold, scenario_settings_persist, scenario_settings_family}
+import crew_harness.server.{kit_files, kit_files_mcp, scenario_question_mcp, scenario_question_mcp_timeout, scenario_chat, scenario_stream_burst, scenario_permission, scenario_question, scenario_question_off, scenario_cancel, scenario_switch_agent, scenario_rename, scenario_preset, scenario_prompt, scenario_order_move_delete, scenario_restart_idle, scenario_restart_open, scenario_crash, scenario_two_pages, scenario_rejects, scenario_many, scenario_broken_agent, scenario_renamed_table, scenario_migrate_flat, scenario_images, scenario_catalog, scenario_choose_cold, scenario_settings_persist, scenario_settings_family}
 
 fn clean(report str) -> () {
     if report.byte_len() > 0 { panic("NOT AS IT MUST BE: ${report}") }
@@ -45,6 +45,10 @@ test "files: a cancel keeps the session open" {
 
 test "files: a session is renamed in the header" {
     clean(scenario_rename(kit_files("rename", 30000)))
+}
+
+test "files: the texts of the hub come from the files of the layers" {
+    clean(scenario_prompt(kit_files("prompt", 30000)))
 }
 
 test "files: the preset of a session is chosen and kept" {

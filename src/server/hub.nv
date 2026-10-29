@@ -1787,6 +1787,9 @@ export fn Hub mut @close() Time -> () {
 }
 
 /// The ids of the sessions, in the order they were found or made.
+/// The lines of the log of the hub (the last 200).
+export fn Hub @log_lines() -> []str => @log
+
 export fn Hub @session_ids() -> []str {
     mut out = []str.new()
     for s in @sessions { out.push(s.id) }

@@ -842,6 +842,34 @@ export fn scenario_rename(settings ServerSettings) Proc Detach Time Net Fs Os ->
     c.report()
 }
 
+/// The texts of the hub are files by layers (task 192.12): a file of the user replaces the reminder before a message at once, a changed file acts at the next message, an empty file gives
+/// the built-in text and a line in the log of the hub.
+export fn scenario_prompt(settings ServerSettings) Proc Detach Time Net Fs Os -> str {
+    mut c = kit_check()
+    ro file = "${settings.data_dir}/inst/config/prompts/route_reminder.md"
+    ro made = write_file(file, "ПОДСКАЗКА СЛОЯ {route}")
+    ro with_layout = ServerSettings { layout: layout_with_data_dir("${settings.data_dir}/inst", settings.data_dir, ""), ...settings }
+    mut rig = rig_open(with_layout)
+    rig.attach(1)
+    rig.page(1, "session_created", "s-prm", "{\"name\":\"Тексты\",\"agent\":\"pictures\"}")
+    ro first = kit_ask(rig, "s-prm", "look")
+    c.expect(first.contains("ПОДСКАЗКА СЛОЯ interactive") && !first.contains("Напоминание: режим"), "the file of the layer replaces the reminder: ${first}")
+    ro changed = write_file(file, "ВТОРОЙ ТЕКСТ {route}")
+    ro second = kit_ask(rig, "s-prm", "look again")
+    c.expect(second.contains("ВТОРОЙ ТЕКСТ interactive"), "a changed file acts at the next message: ${second}")
+    ro emptied = write_file(file, "  ")
+    ro third = kit_ask(rig, "s-prm", "look once more")
+    c.expect(third.contains("Напоминание: режим") && !third.contains("ВТОРОЙ ТЕКСТ"), "an empty file gives the built-in text: ${third}")
+    rig.run(300)
+    mut told = false
+    for line in rig.hub.log_lines() {
+        if line.contains("route_reminder") && line.contains("is empty") { told = true }
+    }
+    c.expect(told, "the log of the hub says the file is empty")
+    rig.shut()
+    c.report()
+}
+
 /// The owner chooses the preset of a session (task 192.12): with the new session or later; a preset that is not there is refused; the journal keeps the choice.
 export fn scenario_preset(settings ServerSettings) Proc Detach Time Net Fs Os -> str {
     mut c = kit_check()
