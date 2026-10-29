@@ -279,7 +279,7 @@ export type CrewConfig = {
   answerMax: number
   /** секунд до автоответа плагина на форму встроенного вопросника (answer_delay_sec, задача 096); 0 — сразу */
   answerDelaySec: number
-  /** allow_self_assign: интегратору можно назначить задачу на собственную сессию (по умолчанию нет, задача 035) */
+  /** allow_self_assign: legacy-настройка, читается для совместимости; запрет assign не обходит (256). */
   allowSelfAssign: boolean
   /** числа цикла по маршрутам и пороги выбора (route_defaults, задача 092) поверх значений методики */
   routeDefaults: RouteSettings
@@ -1547,11 +1547,11 @@ export const HELP = `crew-harness — письма между вкладками
        route: "small"        — малый маршрут (задача 191): входные фразы владельца «сделай X мгновенно» / «сделай X, супер быстро»
                                 (распознаёт оркестратор, плагин их не разбирает; route_word — дословно, с датой) и estimate
                                 (T одной строкой); папка — три строки, приёмщика нет, приёмка — слово владельца на тестовом контуре.
-   crew_task {action, n?}      — задачи по номеру: list, show; интегратору ещё assign, push, reassign, cancel, backlog, resume,
+    crew_task {action, n?}      — задачи по номеру: list, show; интегратору ещё push, reassign, cancel, backlog, resume,
                                  priority, route (маршрут задачи записью), order, plan_decide, deliver (задачу с сессиями — на приёмку); приёмщику — review, check, round (план), precheck, merge, unlock, rework
-                                (sync: true — только влить свежую целевую ветку, не круг доработки), accept, cleanup (cleaned — старое имя). assign — открытой вкладке владельца;
+                                 (sync: true — только влить свежую целевую ветку, не круг доработки), accept, cleanup (cleaned — старое имя). assign запрещён;
                                 сессия задачи ведёт одну задачу и закрывается после cleanup: продолжение работы того же
-                                исполнителя — новой задачей (crew_spawn), assign на сессию задачи отказывает.
+                                исполнителя — новой задачей (crew_spawn), передача — reassign в новую выделенную сессию.
   crew_config {action}        — настройки проекта: guide (опросник для владельца), show (что действует и откуда),
                                 set {values} (интегратор; пишет рабочую копию файла настроек, действует с коммита), apply_template (интегратор;
                                 дописывает стандартный шаблон моделей: claude/codex/kimi, набор codex, потолок light; ключи проекта не трогает).
@@ -1700,7 +1700,7 @@ merge без предпроверки отклоняется: сначала pre
 Шаги приёмки проекта — из документа Канона (acceptance_file); порядок приёмки задаёт плагин.
 Шаги acceptance проекта порядок приёмки не описывают: его задаёт плагин (merge_precheck, accepted_slot); crew_doctor предупреждает о шаге, который его пересказывает.
 По умолчанию accepted_slot: free — принятая задача ждёт уборки и место в inflight_limit не занимает (cleanup_limit ограничивает
-число ждущих); прежнее поведение (занимает место до cleanup) — ключ accepted_slot: hold. task_extra_fields — дополнительные поля задачи проекта: crew_spawn и assign
+число ждущих); прежнее поведение (занимает место до cleanup) — ключ accepted_slot: hold. task_extra_fields — дополнительные поля задачи проекта: crew_spawn
 принимают extra {id: строка}; значения видны исполнителю, приёмщику и в show.
 
 ДРУГОЙ ПРОЕКТ. Писать в чужой проект можно только его интегратору (настройка проекта-получателя inbound: integrator
@@ -2252,7 +2252,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
     result: str("Result and where it lands: the place where it acts (e.g. doc/canon/process.md, section «…») or «нет: результат — код: <what is delivered>». Required for a new task with a folder when message is absent"),
     links: str("Links to other tasks (task-sessions.md of the methodology): lines «Зависит от», «Блокирует», «Пересекается (файлы)», «Начинается после», tasks by their folder paths; absent - «нет: … не передано»"),
     priority: { type: "string", enum: [...PRIORITIES], description: "P0 emergency, P1 first queue, P2 normal (default from the project), P3 when hands are free" },
-    extra: { type: "object", description: "crew_spawn and assign: values of the project's extra task fields {id: one line up to 300 characters}; the ids are declared by the project (task_extra_fields, see crew_config show)", additionalProperties: { type: "string" } },
+    extra: { type: "object", description: "crew_spawn: values of the project's extra task fields {id: one line up to 300 characters}; the ids are declared by the project (task_extra_fields, see crew_config show). The legacy assign input accepts the field for compatibility but assignment is refused", additionalProperties: { type: "string" } },
   }
   // МАРШРУТ ЗАДАЧИ (задача 092): поля входа crew_spawn и crew_task route; имена зарезервированы в config-schema.ts (RESERVED_FIELD_IDS)
   const routeInput = {
@@ -2694,7 +2694,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
         grades: { type: "object", description: "round: remarks per grade id of plan_grades", additionalProperties: { type: "number" } },
         sync: { type: "boolean", description: "rework: only merge the fresh target branch, not a round" },
         all: { type: "boolean", description: "list: include finished and cancelled", default: false },
-        message: str("assign in a project with task folders: the full text of task/message.md of the new folder by the template (as crew_spawn); migrate: exact saved original task text, never reconstructed"),
+        message: str("migrate: exact saved original task text, never reconstructed. Retained in the legacy assign input for compatibility; assign is refused before any task or folder is created"),
         source_id: str("migrate: id copied from the read-only saved-letter archive; expected task-<project>-<number>-<attempt>"),
         source_session: str("migrate: from_session copied from that same archived letter"),
         source_to: str("migrate: to copied from that same archived letter; must be the existing executor"),
@@ -2741,7 +2741,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
         const cfg = configFor(me)
         const missing = missingFields(input, cfg)
         if (missing.length) return { content: `Заказ не отправлен: нет полей ${missing.map((f) => FIELD_RU[f] ?? f).join(", ")}.` }
-        if (input.extra !== undefined && input.extra !== null) return { content: "Заказ не отправлен: extra для заказа не поддерживается (дополнительные поля проекта задаёт crew_spawn и assign своего проекта)." }
+        if (input.extra !== undefined && input.extra !== null) return { content: "Заказ не отправлен: extra для заказа не поддерживается (дополнительные поля проекта задаёт crew_spawn своего проекта)." }
         const title = String(input.title ?? "").trim() || String(input.goal).split(/\r?\n/)[0].slice(0, 60)
         const t = createTask({
           project, title, goal: String(input.goal).trim(), criteria: input.criteria?.trim(), boundaries: input.boundaries?.trim(), open_questions: input.open_questions?.trim(),

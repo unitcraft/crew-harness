@@ -101,6 +101,10 @@ cell("TT-5e crew_config: show is the one name (no view), plan settings named", /
 cell("TT-5f crew_watch is line by line", tools.crew_watch.description.split("\n").length >= 6, "")
 const help = await call("crew_help", "sesINTEG1", {})
 cell("TT-5g HELP explains planning and uses cleanup/done", /ЗАДАЧА-ПЛАН|задача-план/i.test(help) && /plan_decide/.test(help) && /approval/.test(help) && /cleanup/.test(help) && /ПЛАНИРОВАНИЕ/.test(help), "")
+cell("256 HELP does not offer assignment to an owner's tab", /assign запрещён/.test(help) && !/assign — открытой вкладке владельца/.test(help) && /передача — reassign/.test(help), "stale assignment hint")
+const legacy = (await import("../config-schema.ts")).SCHEMA.find((s) => s.key === "allow_self_assign")
+cell("256 the settings questionnaire marks allow_self_assign ineffective in all advice", /не действует/.test(legacy.question) && /true не даёт исключения/.test(legacy.why) && /не влияет/.test(legacy.recommend), JSON.stringify(legacy))
+cell("256 the message field documents only migration and refused legacy assignment", /migrate:/.test(tools.crew_task.input.properties.message.description) && /assign is refused/.test(tools.crew_task.input.properties.message.description) && !/assign in a project with task folders/.test(tools.crew_task.input.properties.message.description), tools.crew_task.input.properties.message.description)
 
 // ---- TT-6 view is gone, show works (task 066)
 const t6 = H.reviewing()

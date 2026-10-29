@@ -79,7 +79,7 @@ stops at the first failing file.
 | | `crew-task-folders` | a task with a folder on a real git repo: the folder committed on the task branch (main copy clean), a record of an existing folder, sessions С4-1 №1 / С3п-1 №2 / С4-2 №3 with launch lines, a session submit and `deliver`, a sub-task, an old record moved to `legacy/`, reassign of a session, titles and the session letter |
 | | `crew-task-message` | one template of `task/message.md` (task 065): `crew_spawn` builds the text from the fields with the sections in order and the goal as numbered points; refusals without `owner_words` (or without a date in it) and `result`, for a `message` without the sections, for `assign` in a project with folders; the plugin's own check of the text; old calls without the new fields in a project without folders and for a task session |
 | | `crew-task-show` | the show of a task with a folder: the panel group `045 <title>` / `↳ С4-3` within 32 columns, `/crew`, "Ждут вас", `taskRef`; a project without folders as before; the "Ход работ" scanner reads `tasks_dir` |
-| | `crew-no-self-assign` | `assign` to the author's own session refused (no task made), to another tab allowed, `allow_self_assign: true` allows, `reassign` never gives the author's session |
+| | `crew-no-self-assign` | `assign` refuses both the author's and another user's session, including forged `owner_words` and `allow_self_assign: true`; `crew_spawn` creates an independent executor and `reassign` never captures the author's session |
 | | `peers-place` | a task's worktree and branch, never the main copy |
 | | `peers-restart` | a restart between steps: each step finished exactly once |
 | | `peers-review` | submission, the review queue, the merge lock, acceptance checks on a real git repo, cleanup |
