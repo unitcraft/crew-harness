@@ -68,14 +68,14 @@ The password is in no file of the repository, no line of the output and no comma
 
 ## Settings
 
-A JSON file; every key is optional. The environment is over the file, key by key. Only test values are in the repository
+A JSON file; every key is optional. The settings come in layers (see "Where things lie" below): the files, then the environment, then the arguments, key by key. Only test values are in the repository
 (`src/server/server.example.json`); a password lives in the environment or in a file outside the repository, and is in no log line
 and no error (`describe()` leaves it out).
 
 | Key | Environment | Default | Meaning |
 |---|---|---|---|
 | `port` | `CREW_SERVER_PORT` | 8099 | the port on `127.0.0.1` (the server never listens on another address: no TLS yet) |
-| `data_dir` | `CREW_SERVER_DATA_DIR` | `crew-data` | the files of the file store, **and in both modes** the inbox files of the ACP client: a folder per session, see "Where the files of a session lie"; `projects.json` (the projects, task 192m) lies in it |
+| `data_dir` | `CREW_SERVER_DATA_DIR` | with a root `<CREW_HOME>/data/sessions`; without one `crew-data` | the files of the file store, **and in both modes** the inbox files of the ACP client: a folder per session, see "Where the files of a session lie"; `projects.json` (the projects, task 192m) lies in it |
 | `store` | `CREW_SERVER_STORE` | `files` | `files` (task 095) or `pg` (task 098) |
 | `pg` {`host`,`port`,`database`,`user`,`password`} | `CREW_PG_HOST`, `_PORT`, `_DATABASE`, `_USER`, `_PASSWORD` | `127.0.0.1`, 5432, `crew`, `crew_app`, - | the PostgreSQL connection (local host only); the same keys as `src/pgconf` |
 | `agents` [{`id`,`label`,`program`,`args`}] | `CREW_SERVER_AGENT` (one agent `opencode`, words separated by spaces) | `opencode.cmd acp` on Windows, `opencode acp` elsewhere | the agents the page can ask for by `id`; only `id` and `label` are exposed by the front at `/api/agents` |
@@ -87,7 +87,7 @@ and no error (`describe()` leaves it out).
 | `ask_form` | `CREW_SERVER_ASK_FORM` (`true`/`false`) | `true` | the agents may ask the owner a question with a choice (task 192i): the hub says at `initialize` that it shows forms and gives the agents that need it the MCP tool `ask_user_question`; `false` - nothing of it (an agent then cannot ask by a tool; Claude Code has no `AskUserQuestion` at all). See "Questions of the agent" |
 | `ask_timeout_seconds` | `CREW_SERVER_ASK_TIMEOUT_SECONDS` | 1800 | how long a call of the MCP tool `ask_user_question` waits for the owner; then the agent gets "таймаут ожидания ответа" |
 | `agents[].ask` | - | `native` | how the agent asks: `native` (its own tool, over `elicitation/create`), `mcp` (the hub gives it the MCP tool and a note), `off` (nothing) |
-| `routes_dir` | `CREW_SERVER_ROUTES_DIR` | `doc/routes` | the folder of the files of the modes of work (relative to the working folder of the hub); read from the disk each time a step starts (task 192q, "The modes of work" below) |
+| `routes_dir` | `CREW_SERVER_ROUTES_DIR` | - (by layers: `.crew-harness/modes`, `<CREW_HOME>/config/modes`, `doc/routes`) | the folder of the files of the modes of work (relative to the working folder of the hub); read from the disk each time a step starts (task 192q, "The modes of work" below) |
 | `route_reviewer_order` | - | `["codex","claude","kimi","opencode"]` | the families (ids of `agents`) tried for the independent reviewer: the first that is not the agent of the session; else any other agent |
 | `route_task_limit`, `route_task_messages` | - | 12, 40 | over this many subtasks or messages in a task `route_state` says `suggest_new_task` (0 - off) |
 | `route_fix_attempts` | - | 2 | the tries of the agent to resolve a conflict (of a merge of a subtask, of the rebase before publishing) |
@@ -100,9 +100,14 @@ and no error (`describe()` leaves it out).
 | `route_max_active` | - | 3 | the limit of the tasks in work at once in the whole hub (0 - none); over it the card asks for the over-limit word or puts the work in the queue; the queue starts by itself |
 | `route_tool` | - | `true` | the hub gives every agent that takes an HTTP MCP server the tools of the recognition of the tasks (`crew_task_list`; `crew_task` too with `route_auto_propose`) and the tools `crew_*` of the plugin (task 250, "The tools `crew_*` of the plugin in the product") |
 | `route_auto_propose` | - | `false` | `true` - the agent proposes a task by itself, one `crew_task` and a card with the code word; `false` - in the mode interactive tasks appear only by the button "Распознать задачи" |
-| `stt` {`url`,`language`,`managed`,`dir`,`model`} | `CREW_SERVER_STT_URL`, `CREW_SERVER_STT_LANGUAGE`, `CREW_SERVER_STT_MANAGED`, `CREW_SERVER_STT_DIR`, `CREW_SERVER_STT_MODEL` | `http://127.0.0.1:8178/inference`, `auto`, `true`, `CREW_STT_DIR` or `%LOCALAPPDATA%/crew-harness/stt`, `small` | the local speech recognizer (whisper.cpp `whisper-server`) that the front sends the voice to and, with `managed`, starts and ends itself (below); the address must be a plain `http://127.0.0.1:<port>/...` or `http://localhost:<port>/...` (the audio never leaves the machine); `language` is the default of `POST /api/stt`; `dir` holds `bin/whisper-server.exe` and `models/ggml-<model>.bin` |
+| `voice` {`url`,`language`,`managed`,`dir`,`model`} (the old name `stt` is read too; STT = speech-to-text) | `CREW_VOICE_URL`, `_LANGUAGE`, `_MANAGED`, `_DIR`, `_MODEL`, or the older `CREW_SERVER_STT_URL`, `CREW_SERVER_STT_LANGUAGE`, `CREW_SERVER_STT_MANAGED`, `CREW_SERVER_STT_DIR`, `CREW_SERVER_STT_MODEL` | `http://127.0.0.1:8178/inference`, `auto`, `true`, see "The voice" in "Where things lie", `small` | the local speech recognizer (whisper.cpp `whisper-server`) that the front sends the voice to and, with `managed`, starts and ends itself (below); the address must be a plain `http://127.0.0.1:<port>/...` or `http://localhost:<port>/...` (the audio never leaves the machine); `language` is the default of `POST /api/stt`; `dir` holds `bin/whisper-server.exe` and `models/ggml-<model>.bin` |
 | `max_image_bytes` | `CREW_SERVER_MAX_IMAGE_BYTES` | 10485760 (10 MB) | the largest picture of a message (1024 to 104857600); the front and the hub both refuse a larger one |
 | `hub` {`program`,`args`} | `CREW_SERVER_HUB` (words separated by spaces) | `target/crew-hub.exe` | how the front starts the hub |
+| `preset` | `CREW_PRESET` | `default` | the active preset (roles and presets below); a session may choose its own |
+| `auto_extend_confidence` | - | `high` | the confidence of the agent at which an addition to an open task is applied at once (`high`, `medium`, `off`) |
+| `task_scope` | - | `session` | the tasks the agent may extend: those of the session and its relatives (no other value) |
+| `wip_timeout_seconds`, `agent_start_timeout_seconds` | - | 300, 60 | the wait for the work tree to be ready; the wait for the agent to start |
+| - | `CREW_HOME`, `CREW_TOOLS_DIR` | `~/.crew-harness`, `<home>/tools` | the root of the instance and the folder of the tools (above) |
 | - | `CREW_SERVER_CONFIG` | - | the settings file, when no argument names it |
 
 The file store needs no database. For `store: pg` the easy way is the permanent database in Docker (`run-pg.ps1` above, [`src/pg/README.md`](../pg/README.md),
@@ -110,9 +115,68 @@ The file store needs no database. For `store: pg` the easy way is the permanent 
 is a member of `crew_app`). A server that restarts finds its sessions with `crew.list_sessions()`. An example with `store: pg` and no password:
 `src/server/server-pg.example.json` (the password comes from `CREW_PG_PASSWORD`).
 
+## Where things lie: the root `CREW_HOME`, the layers, the commands (task 192.12, [ADR-0016](../../doc/canon/decisions/ADR-0016-config-layout.md))
+
+The root of an instance is **`CREW_HOME`**: the argument `--home <folder>`, else the variable `CREW_HOME`, else `<the home folder of the user>/.crew-harness` (on Windows `C:/Users/<name>/.crew-harness`). There is no portable mode.
+
+| Folder | What lies in it | Can it be deleted |
+|---|---|---|
+| `config/` | what the user wrote: `config.json`, `roles.json`, `presets/<name>.json`, `modes/<mode>.md` (the modes of work and the tables of Alula of the user), `prompts/<name>.md`, `secrets.json` | no |
+| `data/` | what must not be lost: `projects.json`, `sessions/<id>/` (`journal`, `snapshot`, `acp.jsonl`, `inbox`, `images/`, the tasks outside a repository) | no |
+| `state/` | service files: `serve.*.log`, `stt.pid`, `last_dir.txt`, the backups and reports of `migrate` | yes |
+| `cache/` | made again: `agents.json` (the catalog of the families), `agent-config/` (the copy of the configuration of OpenCode without the plugin) | yes |
+| `tools/` | heavy installs: `whisper/` (the recognizer); `CREW_TOOLS_DIR` or `voice.dir` move it | yes (installed again by `scripts/install-stt.ps1`) |
+
+The **folder of a project** in its repository, `.crew-harness/`, has the same names: `config.json` (shared, in git), `local.json` (personal, absolute paths; the repository ignores it: the line `.crew-harness/local.json` in `.gitignore`), `modes/`, `presets/`, `prompts/`, `roles.json`. The tasks stay in `doc/tasks/`. The hub finds the folder from its working folder upwards.
+
+**The layers** of the settings, the lower ones are covered by the upper ones:
+
+1. the defaults in the code;
+2. `<CREW_HOME>/config/config.json`;
+3. **the server file** (`crew-harness serve <file>` or `CREW_SERVER_CONFIG`; the old way keeps working; it is put AFTER the user's file and BEFORE the project's, so a project can still cover it);
+4. `.crew-harness/config.json` of the project;
+5. `.crew-harness/local.json`;
+6. `<CREW_HOME>/config/secrets.json` (outside the repository, the rights for the owner only);
+7. the variables `CREW_*` (`CREW_SERVER_*` and `CREW_STT_*` stay, `CREW_VOICE_*` are synonyms; `CREW_HOME`, `CREW_TOOLS_DIR`, `CREW_PRESET` are new);
+8. the arguments of the command line: `--home <folder>`, `--set key=value` (a dotted key, `--set voice.language=en`; `true`, `false` and whole numbers are typed).
+
+The **modes of work** (the tables of Alula, `modes`): `routes_dir` of the settings alone when it is set; else `.crew-harness/modes/`, `<CREW_HOME>/config/modes/`, and last `doc/routes/` of the working folder of the hub (the texts of the product; Nova 0.1.0 cannot build a folder into the program, so the product still wants `doc/routes` beside the working folder unless the user puts the files into a layer). The code and the folder keep the name `routes`. **Roles and presets** (below) and **prompts** (below) use the same layers by name.
+
+**An old `data_dir`** (a settings file or `CREW_SERVER_DATA_DIR`) keeps the flat layout in that folder: `sessions`, `projects.json`, `agents.json`, `stt.pid`, `last_dir.txt` and `agent-config/` all lie in it, as before; the stands that started earlier work without a change. The hub writes a line "the old layout" to its log. No root known (no `CREW_HOME`, no home folder) and no `data_dir`: the old default `crew-data` in the working folder.
+
+**The commands** of `crew-harness`:
+
+| Command | What it does |
+|---|---|
+| `config list [--show-origin]` | all keys with the values in force; with the origin each line is `key=value<TAB>origin[<TAB>file]`, the origin is `default`, `user`, `server`, `project`, `local`, `secret`, `env` or `arg` |
+| `config get <key> [--show-origin]` | one value (a string without quotes) |
+| `config set <key> <value> [--project\|--local]` | writes the key into `<home>/config/config.json` (or `.crew-harness/config.json`, or `local.json`), the other keys stay; a secret key, a list and an unknown key are refused |
+| `doctor` | the paths and whether they exist, the layer files checked against the schema (`file:line: reason`), the rights of `secrets.json`, the old places; the exit code is 1 when a problem is found |
+| `migrate [--from <data_dir>] [--dry-run]` | moves the old flat folder into `data/`, `state/`, `cache/`; the small files are copied to `state/migrate-backup-<stamp>/` first, the sessions are moved by a rename, nothing that is there is overwritten, the report is printed and kept in `state/migrate-report-<stamp>.txt`; **nothing moves without the command**, `--dry-run` only lists; stop the server first |
+
+`--file <settings.json>` names the server file for `config`, `doctor` and `migrate` (else `CREW_SERVER_CONFIG`). A broken file of a layer stops the start with `file:line: reason`; the text of the file is never quoted. Unknown keys and a value of the wrong kind are reported by `doctor`.
+
+**Secrets** are not in `config.json`: only the environment (`CREW_PG_PASSWORD`) or `<CREW_HOME>/config/secrets.json` (the same keys as the settings: `{"pg":{"password":"..."}}`). A value of a secret key (a password, a token, a key) is never printed: `config list` shows `***`, `describe()` and the errors leave it out. `doctor` warns about a secret in a file that is not `secrets.json`.
+
+**The voice** (`voice`, was `stt`; STT is speech-to-text, the recognition of speech): the key `stt` is still read, `voice` is over it; the variables `CREW_VOICE_URL`, `_LANGUAGE`, `_MANAGED`, `_DIR`, `_MODEL` are the synonyms of `CREW_SERVER_STT_*` (the new name wins); the folder of the recognizer is `voice.dir`, else `CREW_VOICE_DIR` / `CREW_STT_DIR`, else an older install in `%LOCALAPPDATA%/crew-harness/stt` that is still there, else `CREW_TOOLS_DIR/whisper`, else `<CREW_HOME>/tools/whisper`.
+
+### Roles and presets (task 192.12)
+
+A **role** is a place in the process, not a model (`src/config/roles.nv`): `dev` (the executor of a task), `dev_accept` (the acceptor, not the author), `plan`, `plan_accept`, `spec`, `spec_accept`, `delivery`, `delivery_accept` (the stages of the plugin of the owner in short form) and `integrator`. `roles.json` of a layer changes them field by field or adds new ones: `{"dev": {"title": "...", "rule": "...", "independent": false}}`; `independent: true` means the holder must not be the author. A **preset** is a named table `role -> {family, model, effort}` in `presets/<name>.json` (`{"description": "...", "roles": {"dev": {"family": "codex", "model": "...", "effort": "high"}, "dev_accept": {"family": "claude"}}}`); the project's file covers the user's file of the same name. The built-in preset `default`: `dev` and `dev_accept` are the first two families of `route_reviewer_order`. The sets and profiles of the plugin of the owner are not copied here.
+
+The active preset is the setting `preset` (user, project, `CREW_PRESET`, or the choice of a session). A session chooses by the select under the field of a new session (`session_created` carries `preset`) or later by the message `session_preset {preset}` (the journal keeps it; the page gets the event `session_preset`; an unknown name is refused with a line to the owner; `""` returns to the preset of the settings). **The independent step** of a mode (`independent`) takes the family of the role `dev_accept` of the preset of the session; `route_reviewer_order` is the reserve when the preset has none, the family is the author, or it is not an agent of the settings. `GET /api/presets` gives `{"active", "presets":[{name, description, origin, roles}], "roles":[...]}` (a broken file adds `"error": "file:line: reason"` and leaves the built-in preset).
+
+### The texts of the hub in files: `prompts/<name>.md` (task 192.12)
+
+The texts that the hub says to the agents are files by layers: `.crew-harness/prompts/<name>.md`, then `<CREW_HOME>/config/prompts/<name>.md`, then the built-in text in the code (so the product works with no file). The hub reads the file at every use (a changed text acts at once). `{name}` is replaced by the value of that name; an unknown `{...}` stays as written. An empty file or a file that is not text is not used: the built-in text is, and a line goes to the log of the hub. The names (the values in braces): `tool_<tool>` (the description of a tool of the MCP server `crew`: `tool_ask_user_question`, `tool_crew_task`, `tool_crew_task_list` and the other `tool_crew_*`; the file holds the description only), `recognize_request` (the note "Распознать задачи"), `route_reminder` (`{route}`, `{step}`, `{place}`), `tasks_hint` (`{rows}`), `ask_hint` and `task_hint` (the notes about the tools), `ext_applied` (`{number}`, `{brief}`, `{shown}`), `ext_withdrawn` (`{brief}`, `{shown}`), `auto_extend`, `auto_extend_own`, `decision_new` / `decision_extend` (`{n}`, `{title}`, `{shown}`), `decision_queued` (`{n}`, `{title}`), `decision_no`.
+
+### Thresholds in the settings (task 192.12)
+
+`auto_extend_confidence` (`high` by default; `medium` also applies an addition of medium confidence at once; `off` - every addition is a card), `task_scope` (`session`: the tasks of the session and its relatives; no other value without the word of the owner), `context_drop_percent`, `route_keep_days`, `route_max_active`, `route_confirm_word`, `route_over_limit_word`, `wip_timeout_seconds`, `agent_start_timeout_seconds` are keys of `config.json` of any layer with the defaults of the code; all are in `config list --show-origin`.
+
 ### The catalog of the families: `agents.json`, `/api/agent-catalog` (task 192o)
 
-The hub keeps, for every agent (family), the last lists of models, efforts and modes that the agent gave and its current values, in `<data_dir>/agents.json`
+The hub keeps, for every agent (family), the last lists of models, efforts and modes that the agent gave and its current values, in `<cache>/agents.json` (`<CREW_HOME>/cache/agents.json`; in the flat layout `<data_dir>/agents.json`)
 (`{"agents":{"<id>":{"updated":<ms>,"model","model_id","models":[{id,name}],"effort","effort_name","efforts":[{id,name}],"mode","modes":[{id,name,description}]}}}`).
 Every `agent_model` of a session (the answer to `session/new`, `config_option_update`, `current_mode_update`) is merged into the record of the agent of that session
 (`catalog.nv`: a list the summary lacks stays the last one given; nothing changed - nothing is told or written). A changed record is told to every page at once as the event
@@ -132,7 +196,7 @@ The front turns a recording into text with a local recognizer (task 192f); nothi
 Whisper is a part of the control panel: the front starts it and ends it with itself. The files (whisper.cpp with CUDA, 685 MB, and the model `small`, 488 MB) are not in the repository (the public repository takes no file over 100 MB); `tools/stt/manifest.json` lists the addresses, sizes and SHA256.
 
 - **Install, one command:** `powershell -File scripts/install-stt.ps1` downloads the files of the manifest, checks the size and SHA256 (a mismatch stops it and the file is deleted), and unpacks them into the tool folder: `CREW_STT_DIR`, else `%LOCALAPPDATA%/crew-harness/stt`. A second run downloads nothing when everything is in place. `-Model medium` installs the larger model (then set `stt.model` to `medium`); `-Check` only says whether everything is there.
-- **Autostart:** with `stt.managed` (the default `true`) the front, at its start, (1) ends an orphan of ours left by a front that died (`<data_dir>/stt.pid` names a live `whisper-server`); (2) if something already answers at `stt.url`, uses it and never touches or ends it; (3) else, if `stt.dir` holds `bin/whisper-server.exe` and `models/ggml-<model>.bin`, starts `whisper-server` hidden on `127.0.0.1` at the port of `stt.url` and waits up to 30 s for `GET /` to answer 200 (the status is `starting` meanwhile); (4) else the status says `not_installed` and the log names `scripts/install-stt.ps1`. The front never fails because of the recognizer.
+- **Autostart:** with `stt.managed` (the default `true`) the front, at its start, (1) ends an orphan of ours left by a front that died (`<state>/stt.pid` names a live `whisper-server`); (2) if something already answers at `stt.url`, uses it and never touches or ends it; (3) else, if `stt.dir` holds `bin/whisper-server.exe` and `models/ggml-<model>.bin`, starts `whisper-server` hidden on `127.0.0.1` at the port of `stt.url` and waits up to 30 s for `GET /` to answer 200 (the status is `starting` meanwhile); (4) else the status says `not_installed` and the log names `scripts/install-stt.ps1`. The front never fails because of the recognizer.
 - **Autostop:** the recognizer is a child of the front in a Job Object (`Tree.Group`), so it ends with the front however the front ends (Ctrl+C, a kill, a crash). The pid file is the second line of defence: if a recognizer of ours is somehow left, the next start ends it and starts a new one.
 - **Variables:** `CREW_STT_DIR` (the folder of the installer and the default of `stt.dir`), `CREW_SERVER_STT_DIR`, `CREW_SERVER_STT_MODEL`, `CREW_SERVER_STT_URL`, `CREW_SERVER_STT_MANAGED=false` (the recognizer is yours: nothing is started or ended), `CREW_SERVER_STT_LANGUAGE`.
 - **Check:** `curl http://127.0.0.1:<port>/api/stt/status` gives `"available":true`; `curl -X POST --data-binary @voice.wav -H "Content-Type: audio/wav" "http://127.0.0.1:<port>/api/stt?lang=en"` gives `{"text":"..."}`.

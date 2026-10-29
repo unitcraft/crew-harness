@@ -18,6 +18,7 @@
 | Отличия и дополнения к методике | [process.md](process.md) |
 | Правила репозитория и машины | [AGENTS.md](../../AGENTS.md) — в корне, потому что агенты читают его оттуда при старте |
 | Решения (ADR) | [decisions/](decisions/README.md) |
+| Где что лежит (настройки и данные пульта) | [doc/README.md](../README.md), [ADR-0016](decisions/ADR-0016-config-layout.md) |
 | Документация частей | README корня и частей (`opencode-plugin/README.md` и т.д.) |
 
 Не Канон: задачи и всё в их папках — спецификации, планы, проверки, журналы ([doc/tasks/](../tasks/README.md)),

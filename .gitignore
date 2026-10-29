@@ -12,3 +12,6 @@ target/
 
 # Local replacement of a dependency by a folder (until a version of the package `alula` is published, tasks 144 and 148); it is never committed.
 nova.override.toml
+
+# Personal settings of a project of the control panel (absolute paths of the machine); the shared ones, .crew-harness/config.json, are committed (task 192.12).
+.crew-harness/local.json
