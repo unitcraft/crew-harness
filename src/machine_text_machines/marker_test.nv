@@ -1,28 +1,23 @@
-// marker_test.nv - the optional list marker `- ` before a line `Ключ: значение` (format 2.6): with and without it the JSON is the same, the columns of the
-// errors stay the columns of the file.
+// marker_test.nv - the marker `- ` of a key line (format 2.6): since 2.26 (AL-137) a key line without the marker is an error that
+// names the marker; since 0.28 `Начальное состояние` is an item of the list too, so the chat table holds no bare key line (task 255).
 module crew_harness.machine_text_machines
 
 import std.text
+import alula.machine_text.{error_text}
 import crew_harness.machines.{chat_table_text}
-
-fn pieces(text str, sep str) -> []str {
-    mut out = []str.new()
-    for p in text.split(sep) { out.push(p) }
-    out
-}
-
-// The text with the marker put before the line that starts with the given text.
-fn marked(text str, start str) -> str => text.replace("\n${start}", "\n- ${start}")
-
-fn json_of(text str) -> str => checked(text).json
 
 test "mk chat table" {
     ro text = chat_table_text()
-    ro plain = json_of(text)
-    mut all = text
-    for key in ["machine: ", "revision: ", "alula_version: ", "Начальное состояние: ", "Сторона: ", "Срок тишины: ", "Запрос:", "Читает: ", "При входе:", "При приёме:", "Кроме: ", "Результат: ", "Правит: "] {
-        all = marked(all, key)
+    for key in ["machine: ", "revision: ", "alula_version: ", "Начальное состояние: ", "Сторона: ", "Срок тишины: ", "Запрос:", "Результат: "] {
+        assert(text.contains("\n- ${key}"))
     }
-    assert(all != text)
-    assert(json_of(all) == plain)
+    ro bare = text.replace("\n- Сторона: пользователь", "\nСторона: пользователь")
+    assert(bare != text)
+    ro report = checked(bare)
+    assert(report.errors.len() > 0)
+    mut named = false
+    for e in report.errors {
+        if error_text(e, "chat.alula.md").contains("строка-ключ без маркера") { named = true }
+    }
+    assert(named)
 }
