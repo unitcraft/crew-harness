@@ -1442,7 +1442,7 @@ export fn scenario_machine_state(settings ServerSettings) Proc Detach Time Net F
     c.expect(told[told.len() - 1].contains("\"state\":\"Idle\""), "the machine is back in the first state: ${told[told.len() - 1]}")
     c.expect(kit_with(told, "\"code\":\"user_message\"") > 0, "the journal of the machine is in the event")
     c.expect(kit_with(told, "\"data\":{\"agent_attempt\"") > 0, "the data are the fields of the record, with no wrapper: ${told[0]}")
-    c.expect(told[told.len() - 1].contains("\"code\":\"cancel\""), "the cancel is in the journal of the machine: ${told[told.len() - 1]}")
+    c.expect(told[told.len() - 1].contains("\"code\":\"cancel_request\""), "the cancel is in the journal of the machine: ${told[told.len() - 1]}")
     c.expect(kit_with(rig.hub.page_lines("s-mach"), "machine_state") == 0, "the debug state is not a line of the session")
     rig.forget()
     rig.page(1, "machine_state_get", "s-mach", "{}")
