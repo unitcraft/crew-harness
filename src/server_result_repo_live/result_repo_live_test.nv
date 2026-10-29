@@ -1,0 +1,15 @@
+module crew_harness.server_result_repo_live
+
+import crew_harness.server.{kit_routes_remote, scenario_result_repo, scenario_result_repo_children}
+
+test "result repository: A owns the task, B owns the tree, publish and cleanup; restart and substitution" {
+    ro result = scenario_result_repo(kit_routes_remote("result-repository"))
+    if result.byte_len() > 0 { panic(result) }
+    assert(result == "")
+}
+
+test "result repository: child sessions inherit B and keep their accounting in A after restart" {
+    ro result = scenario_result_repo_children(kit_routes_remote("result-children"))
+    if result.byte_len() > 0 { panic(result) }
+    assert(result == "")
+}

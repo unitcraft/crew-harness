@@ -1049,6 +1049,12 @@ fn Hub mut @say(trace str, text str, items []JsonValue) Proc Detach Time -> () {
         return
     }
     if text.byte_len() == 0 && items.len() == 0 { return }
+    if @sessions[at].rt.result_repo.byte_len() > 0 {
+        match @route_target(trace) {
+            Ok(t) => ()
+            Err(e) => { @tell_error(0, trace, @sessions[at].engine.step_number(), "", "работа остановлена: репозиторий результата ${e}"); return }
+        }
+    }
     // task 192.2: the code word answers the last card of a proposal of a task and is not sent to the agent
     if items.len() == 0 && @ct_word(at, text) { return }
     if !@takes_message_at(at) {
@@ -1656,6 +1662,8 @@ export fn Hub mut @handle(conn int, text str) Proc Detach Time -> () {
         @route_tree_drop(trace, jflag(input, "force"))
     } else if kind == "session_worktree" {
         @route_worktree(trace, jflag(input, "on"))
+    } else if kind == "session_result_repo" {
+        @route_repo(trace, jtext(input, "repo_id"))
     } else if kind == "route_diff" {
         @route_diff(trace)
     } else if kind == "route_prop" {

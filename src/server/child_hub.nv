@@ -279,15 +279,24 @@ fn Hub mut @cs_spawn(at int, p Proposal, how str, queued bool) Proc Detach Time 
     // the mode of execution of the new session (task 192.13): the one chosen on the card, else the one of the session where the talk is
     ro route = if run_mode_ok(p.mode) { p.mode } else if cur.rt.route == "planning" { "interactive" } else { cur.rt.route }
     // the tree: cut from the head of the parent when it has one, else from main
-    ro base = @route_repo_dir(cur.id)
+    ro source = if pat >= 0 { par } else { cur }
+    ro target = match @route_target(source.id) {
+        Ok(t) => t
+        Err(e) => { @tell_error(0, cur.id, cur.engine.step_number(), "", "задача не создана: репозиторий результата ${e}"); return }
+    }
+    ro base = target.dir
     mut tree = TkTree { ok: false, branch: "", worktree: "", base: "", text: "" }
     if tk_is_repo(base) && cur.rt.use_tree {
-        tree = if pat >= 0 && par.rt.worktree.byte_len() > 0 { tk_subtask_tree(par.rt.worktree, number, slug, k) } else { tk_task_tree(base, number, slug, @route_trees(cur.id)) }
+        if pat >= 0 && par.rt.worktree.byte_len() > 0 && !tk_same_repo(par.rt.worktree, base) { return }
+        tree = if pat >= 0 && par.rt.worktree.byte_len() > 0 { tk_subtask_tree(par.rt.worktree, number, slug, k) } else { tk_task_tree(base, number, slug, target.trees) }
         if !tree.ok { @say_log("the tree of the task ${folder} cannot be made: ${tree.text}") }
+        if !tree.ok && source.rt.result_repo.byte_len() > 0 { return }
     }
     ro cid = @cs_new_id(cur.id, @sessions.len() + 1)
-    ro in_tree = tree.ok && dir_there("${tree.worktree}/doc/tasks")
-    ro dir = if in_tree { "${tree.worktree}/doc/tasks/${folder}/task" } else { "${@settings.data_dir}/${cid}/tasks/${folder}/task" }
+    ro own = @route_repo_dir(cur.id)
+    ro foreign = tk_is_repo(own) && !tk_same_repo(own, base)
+    ro in_tree = tree.ok && !foreign && dir_there("${tree.worktree}/doc/tasks")
+    ro dir = if in_tree { "${tree.worktree}/doc/tasks/${folder}/task" } else if foreign { "${own}/doc/tasks/${folder}/task" } else { "${@settings.data_dir}/${cid}/tasks/${folder}/task" }
     ro shown = if in_tree { "doc/tasks/${folder}/task" } else { dir }
     // the family of the session: the one chosen on the card, else the one of the session where the talk is
     ro agent = if p.agent.byte_len() > 0 && @agent_ids().contains(p.agent) { p.agent } else { cur.agent }
@@ -301,6 +310,15 @@ fn Hub mut @cs_spawn(at int, p Proposal, how str, queued bool) Proc Detach Time 
         }
     }
     ro cat = @cs_make_session(cid, p.title, agent, cur.folder, cur.project_id, if pat >= 0 { par.id } else { "" }, ptype, route)
+    mut binding = JsonObject.new()
+    js(binding, "repo", source.rt.result_repo)
+    js(binding, "repo_label", source.rt.result_label)
+    js(binding, "repo_common", source.rt.result_common)
+    js(binding, "repo_url", source.rt.result_url)
+    js(binding, "repo_remote", source.rt.result_remote)
+    js(binding, "repo_ref", source.rt.result_ref)
+    js(binding, "repo_dir", base)
+    @rt_journal(cat, "route_set", JsonValue.object(binding).to_str())
     ro has_ptree = pat >= 0 && tree.ok && par.rt.worktree.byte_len() > 0
     mut o = JsonObject.new()
     js(o, "id", folder)
@@ -310,6 +328,7 @@ fn Hub mut @cs_spawn(at int, p Proposal, how str, queued bool) Proc Detach Time 
     js(o, "branch", tree.branch)
     js(o, "worktree", tree.worktree)
     js(o, "base", tree.base)
+    js(o, "repo_dir", base)
     js(o, "title", subtask_title(p.title))
     js(o, "touches", joined(p.touches, "\n"))
     ji(o, "crew", 1)
@@ -512,6 +531,11 @@ fn Hub mut @cs_fail(cat int, why str) Proc Detach Time -> () {
 
 fn Hub mut @cs_merged(cat int) Proc Detach Time -> () {
     ro s = @sessions[cat]
+    if !tk_same_repo(s.rt.ptree, s.rt.worktree) { @cs_fail(cat, "репозитории дерева эпика и дочерней задачи различаются"); return }
+    match @route_bound_main(s) {
+        Ok(dir) => ()
+        Err(e) => { @cs_fail(cat, e); return }
+    }
     @route_close_agent_in(cat, s.rt.worktree)
     ro removed = tk_subtree_remove(s.rt.ptree, s.rt.worktree, s.rt.branch)
     if !removed.ok { @say_log("the tree of the child ${s.rt.task_id} is not removed: ${removed.text}") }
@@ -541,6 +565,11 @@ fn Hub mut @cs_merged(cat int) Proc Detach Time -> () {
 /// true - the merge is done or the resolving has started, false - it did not start (the owner was told why).
 fn Hub mut @cs_merge(cat int) Proc Detach Time -> bool {
     ro s = @sessions[cat]
+    if !tk_same_repo(s.rt.ptree, s.rt.worktree) { @cs_fail(cat, "репозитории дерева эпика и дочерней задачи различаются"); return false }
+    match @route_bound_main(s) {
+        Ok(dir) => ()
+        Err(e) => { @cs_fail(cat, e); return false }
+    }
     if s.rt.running || s.rt.job.byte_len() > 0 {
         @tell_error(0, s.id, s.engine.step_number(), "", "идёт другая работа: дождитесь её конца")
         return false

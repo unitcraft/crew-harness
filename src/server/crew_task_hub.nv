@@ -354,6 +354,7 @@ fn Hub mut @ct_create_old(at int, p Proposal, how str, queued bool) Proc Detach 
         js(o, "branch", made.branch)
         js(o, "worktree", made.worktree)
         js(o, "base", made.base)
+        js(o, "repo_dir", made.repo_dir)
         js(o, "title", subtask_title(p.title))
         js(o, "touches", touched)
         ji(o, "crew", 1)

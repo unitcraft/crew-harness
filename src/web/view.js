@@ -682,6 +682,40 @@ export function createView(doc, refs, deps) {
     if (worktreeButton.dataset.draft === 'true') handlers.onDraftWorktree(currentTrace, on); else handlers.onWorktree(currentTrace, on);
   });
   // Задача 192.12: набор «роль → семья, модель, усилие» — выбор под полем новой сессии и у открытой сессии
+  const resultRepoSelect = h(doc, 'select', { class: 'status-btn', hidden: true, title: 'Репозиторий результата', 'aria-label': 'Репозиторий результата' });
+  let resultRepoRecords = [];
+  function fillResultRepos(selected = '', label = '') {
+    resultRepoSelect.replaceChildren(h(doc, 'option', { value: '', text: 'Результат: свой репозиторий' }),
+      ...resultRepoRecords.map((p) => h(doc, 'option', { value: p.id, text: `Результат: ${p.dir} → ${p.remote}/${p.branch}` })));
+    if (selected && !resultRepoRecords.some((p) => p.id === selected)) resultRepoSelect.append(h(doc, 'option', { value: selected, text: `Результат: ${label || selected}` }));
+    resultRepoSelect.append(h(doc, 'option', { value: '__register', text: 'Подтвердить другой репозиторий…' }));
+    resultRepoSelect.value = selected;
+  }
+  resultRepoSelect.addEventListener('focus', async () => {
+    if (!projectsApi || !projectsApi.listResultRepos) return;
+    const selected = resultRepoSelect.value;
+    const r = await projectsApi.listResultRepos();
+    if (r.ok) { resultRepoRecords = (r.body && r.body.repositories) || []; fillResultRepos(selected); }
+  });
+  resultRepoSelect.addEventListener('change', async () => {
+    if (!currentTrace || resultRepoSelect.disabled) return;
+    if (resultRepoSelect.value !== '__register') { handlers.onResultRepo(currentTrace, resultRepoSelect.value); return; }
+    const trace = currentTrace;
+    const previous = current.session && current.session.routeState ? current.session.routeState.resultRepo : '';
+    fillResultRepos(previous);
+    const path = await projectsUi.pickFolder();
+    if (!path) return;
+    const inspected = await projectsApi.inspectResultRepo(path);
+    if (!inspected.ok) { handlers.onNotice(inspected.error, 'error'); return; }
+    const target = inspected.body;
+    const confirmed = await projectsUi.confirm({ title: 'Подтвердить репозиторий результата', text: `${target.dir}\n${target.common}\n${target.url}\n${target.remote}/${target.branch}\nКарточка проекта Crew не создаётся.`, ok: 'Подтверждаю', cancel: 'Отмена' });
+    if (!confirmed || trace !== currentTrace) return;
+    const registered = await projectsApi.registerResultRepo(target);
+    if (!registered.ok) { handlers.onNotice(registered.error, 'error'); return; }
+    resultRepoRecords.push(registered.body);
+    fillResultRepos(registered.body.id);
+    handlers.onResultRepo(trace, registered.body.id);
+  });
   const presetSelect = h(doc, 'select', { class: 'status-btn preset-chip', hidden: true, title: t('preset.label'), 'aria-label': t('preset.label') });
   presetSelect.addEventListener('change', () => {
     if (!currentTrace) return;
@@ -694,7 +728,7 @@ export function createView(doc, refs, deps) {
   const menu = h(doc, 'div', { class: 'menu', role: 'menu', hidden: true });
   // Одна группа чипов у правого края: семья, режим, модель и усилие; за ней кольцо контекста и спиннер (задача 192).
   const statusGroup = h(doc, 'div', { class: 'status-group' }, familyButton, modeButton, statusModel, modelButton, effortButton);
-  const status = h(doc, 'div', { class: 'composer-status', 'data-empty': 'true' }, worktreeButton, routeButton, h(doc, 'span', { class: 'grow' }), statusGroup, ringBox, spinner, presetSelect, menu);
+  const status = h(doc, 'div', { class: 'composer-status', 'data-empty': 'true' }, worktreeButton, routeButton, resultRepoSelect, h(doc, 'span', { class: 'grow' }), statusGroup, ringBox, spinner, presetSelect, menu);
 
   // Меню выбора режима, модели и усилия (задача 192): показывает только то, что агент отдал по ACP.
   const MENU_MODELS = 4;
@@ -1557,6 +1591,11 @@ export function createView(doc, refs, deps) {
     // проект и Worktree: у черновика — выбор; у открытой сессии без дерева — переключатель на следующую задачу
     const task = session.routeState && session.routeState.task;
     const hasTree = Boolean((task && task.worktree) || (session.routeState && session.routeState.where && session.routeState.where.kind === 'wip'));
+    const resultRepo = session.routeState ? session.routeState.resultRepo : '';
+    const resultLabel = session.routeState ? session.routeState.resultLabel : '';
+    resultRepoSelect.hidden = Boolean(session.draft);
+    resultRepoSelect.disabled = Boolean(task) || hasTree || busy || Boolean(session.routeState && session.routeState.where && session.routeState.where.kind === 'preparing');
+    fillResultRepos(resultRepo || '', resultLabel);
     const treeOn = session.draft ? session.worktree !== false : (session.routeState ? session.routeState.useTree !== false : true);
     worktreeButton.hidden = false;
     worktreeButton.dataset.draft = String(Boolean(session.draft));
@@ -1584,8 +1623,11 @@ export function createView(doc, refs, deps) {
     }
     const where = session.draft ? (noRepo ? t('where.draft_folder') : (treeOn ? whereText(session) : t('where.draft_off'))) : whereText(session);
     whereNote.hidden = !where;
-    whereNote.textContent = where;
-    whereNote.title = where;
+    const accounting = session.folder || (projectById(session.projectId) || {}).name || 'проект сессии';
+    const resultWhere = resultRepo ? `Учёт: ${accounting} → результат: ${resultLabel || resultRepo}` : '';
+    whereNote.hidden = !where && !resultWhere;
+    whereNote.textContent = [where, resultWhere].filter(Boolean).join(' · ');
+    whereNote.title = whereNote.textContent;
     familyButton.hidden = agents.length < 2;
     familyButton.replaceChildren(h(doc, 'span', { text: agentLabel(shown.agent) }));
     const hasModes = Boolean(options && options.modes.length > 0);

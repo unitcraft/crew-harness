@@ -1,0 +1,40 @@
+module crew_harness.projects
+
+import std.fs.{Fs, real_fs, Path, create_dir_all, write_text, remove_dir_all}
+import std.os.{Os, real_os, temp_dir, pid}
+import std.text
+
+test "result registry: owner confirms a repository without creating a Crew project; remote drift invalidates it" {
+    ro parent = with Os = real_os() { temp_dir() }
+    ro id = with Os = real_os() { pid() }
+    ro root = parent.join("crew-result-target-${id}").display()
+    with Fs = real_fs() { ro removed = remove_dir_all(Path.from_bytes(root.bytes())) }
+    ro dir = "${root}/repo"
+    with Fs = real_fs() {
+        ro made = create_dir_all(Path.from_bytes(dir.bytes()))
+        ro wrote = write_text(Path.from_bytes(dir.bytes()).join("file.txt"), "work\n")
+    }
+    ro init = rr_git(dir, ["init", "-b", "main"])
+    ro add = rr_git(dir, ["add", "file.txt"])
+    ro commit = rr_git(dir, ["-c", "user.name=Test", "-c", "user.email=test@example.test", "-c", "commit.gpgsign=false", "commit", "-m", "Initial"])
+    ro remote = rr_git(dir, ["remote", "add", "origin", "https://example.test/result.git"])
+    ro preview = match result_repo_inspect(dir.replace("\\", "/")) { Ok(r) => r, Err(e) => panic(e) }
+    mut body = result_repo_json(preview)
+    match result_repo_register(root, body) { Err(e) => assert(e.contains("confirmation")), Ok(r) => panic("unconfirmed target registered") }
+    rr_put(body, "word", "подтверждаю")
+    ro target = match result_repo_register(root, body) { Ok(r) => r, Err(e) => panic(e) }
+    assert(target.id.byte_len() > 0)
+    match projects_load(root) { Ok(p) => assert(p.len() == 0), Err(e) => panic(e.message) }
+    match result_repo_validate(root, target.id) { Ok(r) => assert(r.common == preview.common), Err(e) => panic(e) }
+    ro changed = rr_git(dir, ["remote", "set-url", "origin", "https://example.test/replaced.git"])
+    match result_repo_validate(root, target.id) { Err(e) => assert(e.contains("replaced")), Ok(r) => panic("changed URL accepted") }
+    match result_repo_register(root, body) { Err(e) => assert(e.contains("changed")), Ok(r) => panic("stale preview accepted") }
+    match result_repo_get(root, "../repo") { Err(e) => assert(e.contains("unknown")), Ok(r) => panic("path accepted as id") }
+    ro restored = rr_git(dir, ["remote", "set-url", "origin", "https://example.test/result.git"])
+    ro push_changed = rr_git(dir, ["config", "remote.origin.pushurl", "https://example.test/other.git"])
+    match result_repo_inspect(preview.dir) { Err(e) => assert(e.contains("fetch and push")), Ok(r) => panic("different push URL accepted") }
+    ro push_restored = rr_git(dir, ["config", "--unset", "remote.origin.pushurl"])
+    ro switched = rr_git(dir, ["switch", "-c", "other-ref"])
+    match result_repo_inspect(preview.dir) { Err(e) => assert(e.contains("on main")), Ok(r) => panic("another ref accepted") }
+    match result_repo_validate(root, target.id) { Err(e) => assert(e.contains("on main")), Ok(r) => panic("ref drift accepted") }
+}

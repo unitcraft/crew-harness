@@ -538,6 +538,11 @@ fn build_router(web_dir str, port int, hub_tx ChanTx[str], reg_tx ChanTx[Reg], a
     all_projects.get(projects_list_route(layout.data, port))
     all_projects.post(projects_post_route(layout.data, layout.state, port))
     ro r4m = router.route("/api/projects", all_projects)?
+    mut result_repos = MethodRouter.new()
+    result_repos.get(result_repos_route(layout.data, port))
+    result_repos.post(result_repo_post_route(layout.data, port))
+    ro result_repos_added = router.route("/api/result-repositories", result_repos)?
+    ro result_inspect_added = router.get("/api/result-repositories/inspect", result_repo_inspect_route(port))?
     mut one_project = MethodRouter.new()
     one_project.get(projects_get_route(layout.data, port))
     one_project.put(projects_put_route(layout.data, layout.state, port))

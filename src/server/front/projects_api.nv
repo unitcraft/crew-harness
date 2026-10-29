@@ -16,6 +16,40 @@ import crew_harness.projects.{Project, StoreFail, Listing, GitState, projects_lo
 import polaris.{ServerRequest, ServerResponse}
 import std.encoding.json.{Json, JsonValue, JsonObject}
 import std.text
+import crew_harness.projects.{result_repo_inspect, result_repo_register, result_repo_json, result_repos_list}
+
+fn result_repos_route(data_dir str, port int) -> fn(ServerRequest) -> ServerResponse {
+    fn(req ServerRequest) -> ServerResponse {
+        if !origin_allowed(req, port) { return api_error(403, "origin not allowed") }
+        mut rows = []JsonValue.new()
+        for r in result_repos_list(data_dir) { rows.push(JsonValue.object(result_repo_json(r))) }
+        mut o = JsonObject.new()
+        api_put(o, "repositories", JsonValue.array(rows))
+        json_reply(200, JsonValue.object(o).to_str())
+    }
+}
+
+fn result_repo_inspect_route(port int) -> fn(ServerRequest) -> ServerResponse {
+    fn(req ServerRequest) -> ServerResponse {
+        if !origin_allowed(req, port) { return api_error(403, "origin not allowed") }
+        match result_repo_inspect(req.query_param("path") ?? "") {
+            Ok(r) => json_reply(200, JsonValue.object(result_repo_json(r)).to_str())
+            Err(e) => api_error(400, e)
+        }
+    }
+}
+
+fn result_repo_post_route(data_dir str, port int) -> fn(ServerRequest) -> ServerResponse {
+    fn(req ServerRequest) -> ServerResponse {
+        if !origin_allowed(req, port) { return api_error(403, "origin not allowed") }
+        // Owner, 2026-10-30: ordinary UI confirmation in the existing local trust model; not isolation from arbitrary shell/HTTP.
+        ro body = match api_body(req) { Ok(o) => o, Err(e) => return api_error(400, e) }
+        match result_repo_register(data_dir, body) {
+            Ok(r) => json_reply(201, JsonValue.object(result_repo_json(r)).to_str())
+            Err(e) => api_error(400, e)
+        }
+    }
+}
 
 fn api_error(status int, reason str) -> ServerResponse => json_reply(status, stt_error_json(reason))
 

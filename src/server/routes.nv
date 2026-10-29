@@ -406,6 +406,16 @@ export type RouteSession {
     job str,
     attempt int,
     use_tree bool,
+    // task 257: the repository the RESULT of the task goes to: `result_repo` is the id of an owner-confirmed repository ("" - the project of the
+    // session itself), `result_label` its text for the page; `repo_dir` is the main copy resolved when the tree was made (pinned to the tree:
+    // the publish and the clean-up go there, whatever happens to the setting or the project later)
+    result_repo str,
+    result_label str,
+    repo_dir str,
+    result_common str,
+    result_url str,
+    result_remote str,
+    result_ref str,
     active_at int,
     extra TaskExtra,
     testing bool,
@@ -472,7 +482,7 @@ export fn route_session_new() -> RouteSession => {
     route: "interactive", told: false, states: []str.new(), running: false, current: -1, awaiting: false, reviewing: false,
     task_open: false, task_closed: false, by_crew: false, task_id: "", number: "", task_dir: "", task_shown: "", branch: "", worktree: "", title: "",
     messages: 0, subs: []SubRec.new(), merged_into: 0, force: "", last_state: "", last_check: 0, cwd_now: "", base: "", tstate: "active", tnote: "", unmerged: 0, unmerged_at: 0,
-    job: "", attempt: 0, use_tree: true, active_at: 0, extra: task_extra_none(), testing: false, dirty: false, ci_at: 0, diff: []DiffRec.new(), ov_n: 0, ov_with: 0, ov_files: []str.new(), ov_until: 0, asked: []int.new(), conflict_files: []str.new(),
+    job: "", attempt: 0, use_tree: true, result_repo: "", result_label: "", repo_dir: "", result_common: "", result_url: "", result_remote: "", result_ref: "", active_at: 0, extra: task_extra_none(), testing: false, dirty: false, ci_at: 0, diff: []DiffRec.new(), ov_n: 0, ov_with: 0, ov_files: []str.new(), ov_until: 0, asked: []int.new(), conflict_files: []str.new(),
     props: []Proposal.new(), prop_serial: 0, dismissed: []str.new(), last_msg: "", last_imgs: []str.new(), last_names: []str.new(), kicks: []str.new(), kick_ns: []int.new(), focus: 0, recent: []str.new(), marker_turn: "",
     kind: "", parent: "", parent_kind: "", parent_no: "", child_no: 0, ptree: "", pbranch: "", waits_sib: "", waits_k: 0, queued_c: false, touches: []str.new(), merged_c: false, epic: false, chain: false, tbl: "", epic_no: "", origin: "",
     wip_tree: "", wip_base: "", wip_unmerged: 0, wip_dirty: false, wip_idle: 0, wip_stale: false, wip_at: 0, wip_prep: 0, where_branch: "", hints: []HintRec.new(), ctx_used: 0, ctx_size: 0, ctx_scan: 0, ctx_hist: []CtxRec.new(), exts: []ExtRec.new(),
@@ -636,6 +646,21 @@ export fn RouteSession mut @apply(name str, text str) -> () {
             Some(v) => { @use_tree = v.bool() ?? (jtext(o, "worktree") != "false") }
             None => ()
         }
+        // task 257: the repository of the result (a registered repository id, not a project; "" - the own one)
+        match o.get("repo") {
+            Some(v) => {
+                if !@task_open && @worktree.byte_len() == 0 && @wip_tree.byte_len() == 0 && @wip_prep <= 0 {
+                    @result_repo = v.str() ?? ""
+                    @result_label = jtext(o, "repo_label")
+                    @result_common = jtext(o, "repo_common")
+                    @result_url = jtext(o, "repo_url")
+                    @result_remote = jtext(o, "repo_remote")
+                    @result_ref = jtext(o, "repo_ref")
+                    @repo_dir = jtext(o, "repo_dir")
+                }
+            }
+            None => ()
+        }
         ro route = jtext(o, "route")
         if route_valid(route) {
             @route = route
@@ -681,6 +706,7 @@ export fn RouteSession mut @apply(name str, text str) -> () {
     if name != "route_task" { return }
     ro op = jtext(o, "op")
     if op == "open" {
+        ro selected_dir = @repo_dir
         @reset_task()
         @task_open = true
         @by_crew = rj_int(o, "crew") == 1
@@ -691,6 +717,8 @@ export fn RouteSession mut @apply(name str, text str) -> () {
         @branch = jtext(o, "branch")
         @worktree = jtext(o, "worktree")
         @base = jtext(o, "base")
+        @repo_dir = jtext(o, "repo_dir")
+        if @repo_dir.byte_len() == 0 && @result_repo.byte_len() > 0 { @repo_dir = selected_dir }
         @title = jtext(o, "title")
         @messages = 1
         // the work of the session becomes this task: its tree and the branch made in it are the tree and the branch of the task
@@ -746,6 +774,7 @@ export fn RouteSession mut @apply(name str, text str) -> () {
         @branch = jtext(o, "branch")
         @worktree = jtext(o, "worktree")
         @base = jtext(o, "base")
+        @repo_dir = jtext(o, "repo_dir")
         @task_dir = jtext(o, "dir")
         @task_shown = jtext(o, "shown")
     } else if op == "wip" {
@@ -897,6 +926,9 @@ export fn route_view_text(rt RouteSession, titles []str, progress []Progress, su
     jput(o, "running", JsonValue.bool(rt.running))
     jput(o, "suggest_new_task", JsonValue.bool(suggest))
     jput(o, "use_tree", JsonValue.bool(rt.use_tree))
+    // task 257: the repository of the result is said to the page plainly ("" - the repository of the session itself)
+    jput(o, "result_repo", JsonValue.str(rt.result_repo))
+    jput(o, "result_label", JsonValue.str(if rt.result_label.byte_len() > 0 { rt.result_label } else { rt.result_repo }))
     // task 192.4: where the agent works while there is no task: a tree with no branch or the folder of the project on its branch
     if !rt.task_open {
         mut w = JsonObject.new()

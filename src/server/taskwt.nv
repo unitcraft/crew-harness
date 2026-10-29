@@ -71,6 +71,24 @@ fn tw_norm(p str) -> str {
 
 fn tw_key(p str) -> str => tw_norm(p).to_ascii_lower()
 
+/// The git directory shared by a worktree and its main copy (`rev-parse --git-common-dir`), canonical, for comparing; "" — not a repository.
+/// (task 257: the precheck of `publish` proves with it that the tree and the main copy are ONE repository — else the push would land in the
+/// tree's repository while the report and the clean-up spoke of the main copy of another.)
+fn tw_common_dir(dir str) Proc Os Fs -> str {
+    ro r = tw_git(dir, ["rev-parse", "--git-common-dir"])
+    if r.code != 0 { return "" }
+    mut p = tw_norm(r.out.trim_ascii())
+    if !p.contains(":/") && !p.starts_with("/") { p = "${tw_norm(dir)}/${p}" }
+    tw_canon(p)
+}
+
+/// The tree and the main copy are of one repository (a missing main copy is not a mismatch: `tw_update_main_copy` reports it apart).
+fn tw_same_repo(tree str, main_copy str) Proc Os Fs -> bool {
+    ro a = tw_common_dir(tree)
+    ro b = tw_common_dir(main_copy)
+    a.byte_len() == 0 || b.byte_len() == 0 || a.to_ascii_lower() == b.to_ascii_lower()
+}
+
 fn tw_base_name(p str) -> str {
     ro s = tw_norm(p)
     match s.rfind("/") {
@@ -768,7 +786,9 @@ fn tw_publish_tail(tree str, main_copy str, run_tests fn() Proc Os Fs -> str) Pr
     Published { sha, main_copy: copy, cleanup }
 }
 
-/// Publish a task, step by step: (1) `git fetch origin`; (2) `git rebase --rebase-merges origin/main` (the merges of the subtasks are kept; a conflict
+/// Publish a task, step by step: (0) the tree is a repository, not the main copy itself and OF THE SAME REPOSITORY as the main copy
+/// (task 257: a tree of another repository is refused — its push would land in that other repository while the report and the clean-up
+/// spoke of this main copy); (1) `git fetch origin`; (2) `git rebase --rebase-merges origin/main` (the merges of the subtasks are kept; a conflict
 /// leaves the rebase in progress and answers `Blocked{step: "rebase", conflict_files}`, to go on with `publish_continue`); (3) `run_tests()` -
 /// "" is green, anything else is the reason (`Blocked{step: "tests"}`); (4) `git push origin HEAD:main`, never forced, only from a descendant of
 /// origin/main; (5) in the main copy `git merge --ff-only origin/main`, only if it is clean, stands on main and is an ancestor of origin/main
@@ -779,6 +799,7 @@ export fn publish(task_tree_path str, main_copy_path str, run_tests fn() Proc Os
     ro main_copy = tw_norm(main_copy_path)
     if !tw_is_repo(tree) { return tw_blocked("precheck", "not a git repository") }
     if tw_key(tree) == tw_key(main_copy) { return tw_blocked("precheck", "the tree of the task is the main copy") }
+    if !tw_same_repo(tree, main_copy) { return tw_blocked("precheck", "the tree of the task is of another repository than the main copy") }
     if tw_merging(tree) || tw_rebasing(tree) { return tw_blocked("precheck", "a merge or a rebase is in progress in the tree: finish it first") }
     if tw_current_branch(tree).byte_len() == 0 { return tw_blocked("precheck", "the tree has a detached head") }
     if !tw_clean_enough(tree) { return tw_blocked("precheck", "the tree has uncommitted changes") }
@@ -802,6 +823,7 @@ export fn publish_continue(task_tree_path str, main_copy_path str, run_tests fn(
     ro main_copy = tw_norm(main_copy_path)
     if !tw_is_repo(tree) { return tw_blocked("precheck", "not a git repository") }
     if tw_key(tree) == tw_key(main_copy) { return tw_blocked("precheck", "the tree of the task is the main copy") }
+    if !tw_same_repo(tree, main_copy) { return tw_blocked("precheck", "the tree of the task is of another repository than the main copy") }
     if tw_rebasing(tree) {
         ro left = tw_stage_resolved(tree)
         if left.len() > 0 { return Blocked { reason: "conflicts are not resolved", step: "rebase", conflict_files: left } }

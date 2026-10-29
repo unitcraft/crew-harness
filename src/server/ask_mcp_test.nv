@@ -124,6 +124,12 @@ test "mcp: an unknown tool and an unknown method are errors of the protocol" {
     assert(mkey(mkey(mj(method.text), "error"), "code").int() == Some(-32601))
 }
 
+test "mcp: result repository registration is not an agent tool" {
+    ro out = mcp_handle("{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tools/call\",\"params\":{\"name\":\"register_result_repo\",\"arguments\":{\"dir\":\"/arbitrary\",\"word\":\"подтверждаю\"}}}")
+    assert(out.kind == "reply")
+    assert(mkey(mkey(mj(out.text), "result"), "isError").bool() == Some(true))
+}
+
 test "mcp: a notification has no answer, ping is answered, garbage is a parse error" {
     assert(mcp_handle("{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}").kind == "none")
     ro ping = mcp_handle("{\"jsonrpc\":\"2.0\",\"id\":9,\"method\":\"ping\"}")

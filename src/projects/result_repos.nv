@@ -1,0 +1,136 @@
+// Result targets are NOT Crew projects. Task signals carry an id; registration uses ordinary UI confirmation.
+// The owner accepted the existing local trust model (2026-10-30): no isolation from arbitrary shell/HTTP under the same OS account.
+module crew_harness.projects
+
+import std.fs.{Fs, real_fs, Path, canonicalize, read_text, write_atomic, create_dir_all, try_exists, read_dir}
+import std.os.{Os, real_os, Command, Tree}
+import std.encoding.json.{Json, JsonValue, JsonObject}
+import std.text
+
+export type ResultRepo { id str, name str, dir str, common str, remote str, url str, branch str }
+
+fn rr_str(o JsonObject, key str) -> str => match o.get(key) { Some(v) => v.str() ?? "", None => "" }
+fn rr_put(mut o JsonObject, key str, text str) -> () { ro old = o.insert(key, JsonValue.str(text)) }
+
+fn rr_git(dir str, args []str) Proc -> Result[str, str] {
+    with Os = real_os() {
+        mut command = Command.new("git")
+        command.arg("-C")
+        command.arg(dir)
+        for arg in args { command.arg(arg) }
+        command.env("GIT_TERMINAL_PROMPT", "0")
+        command.tree(Tree.Group)
+        mut text = ""
+        mut ok = false
+        with Fail[TimeoutError] = |_e| { () } {
+            supervised(timeout: 10000.to_millis()) {
+                match command.output() {
+                    Ok(out) => { if out.status.code() == 0 { text = out.stdout.to_str_lossy().trim_ascii(); ok = true } }
+                    Err(e) => ()
+                }
+            }
+        }
+        if ok { Ok(text) } else { Err("git did not finish successfully") }
+    }
+}
+
+fn rr_canon(path str) -> Result[str, str] {
+    with Fs = real_fs() {
+        match canonicalize(Path.from_bytes(path.bytes())) {
+            Ok(p) => {
+                ro text = p.display().replace("\\", "/")
+                Ok(if text.starts_with("//?/") { text[4..] } else { text })
+            }
+            Err(e) => Err("the repository folder is unavailable")
+        }
+    }
+}
+
+// This first vertical deliberately publishes origin/main only, exactly as taskwt.publish does.
+export fn result_repo_inspect(path str) Proc -> Result[ResultRepo, str] {
+    ro normalized = normalize_folder_path(path)?
+    ro dir = rr_canon(normalized)?
+    ro top = rr_canon(rr_git(dir, ["rev-parse", "--show-toplevel"])?)?
+    if top.to_ascii_lower() != dir.to_ascii_lower() { return Err("select the repository root, not a subfolder") }
+    ro git = rr_git(dir, ["rev-parse", "--path-format=absolute", "--git-common-dir"])?
+    ro common = rr_canon(git)?.to_ascii_lower()
+    ro url = rr_git(dir, ["remote", "get-url", "origin"])?
+    ro push_url = rr_git(dir, ["remote", "get-url", "--push", "origin"])?
+    if push_url != url { return Err("separate fetch and push URLs are not supported for a result target") }
+    if url.byte_len() == 0 || url.contains("\n") || url.contains("\r") || (url.contains("://") && url.contains("@")) { return Err("remote URL is missing or contains credentials") }
+    ro branch = rr_git(dir, ["symbolic-ref", "--short", "HEAD"])?
+    if branch != "main" { return Err("the result main copy must be on main") }
+    Ok(ResultRepo { id: "", name: dir, dir, common, remote: "origin", url, branch: "main" })
+}
+
+export fn result_repo_json(r ResultRepo) -> JsonObject {
+    mut o = JsonObject.new()
+    rr_put(o, "id", r.id)
+    rr_put(o, "name", r.name)
+    rr_put(o, "dir", r.dir)
+    rr_put(o, "common", r.common)
+    rr_put(o, "remote", r.remote)
+    rr_put(o, "url", r.url)
+    rr_put(o, "branch", r.branch)
+    o
+}
+
+fn rr_record(o JsonObject) -> ResultRepo => { id: rr_str(o, "id"), name: rr_str(o, "name"), dir: rr_str(o, "dir"), common: rr_str(o, "common"), remote: rr_str(o, "remote"), url: rr_str(o, "url"), branch: rr_str(o, "branch") }
+fn rr_file(root str, id str) -> Path => Path.from_bytes(root.bytes()).join("result-repositories").join("${id}.json")
+
+export fn result_repo_get(root str, id str) -> Result[ResultRepo, str] {
+    if !valid_project_id(id) { return Err("unknown result repository id") }
+    with Fs = real_fs() {
+        ro text = match read_text(rr_file(root, id)) { Ok(t) => t, Err(e) => return Err("the result repository is not registered") }
+        ro value = match Json.parse(text) { Ok(v) => v, Err(e) => return Err("the result registry is invalid") }
+        ro o = match value.object() { Some(o) => o, None => return Err("the result record is invalid") }
+        ro r = rr_record(o)
+        if r.id != id || rr_str(o, "word") != "подтверждаю" { return Err("the result record lacks matching id or confirmation metadata") }
+        Ok(r)
+    }
+}
+
+export fn result_repo_validate(root str, id str) Proc -> Result[ResultRepo, str] {
+    ro saved = result_repo_get(root, id)?
+    ro live = result_repo_inspect(saved.dir)?
+    if saved.common != live.common || saved.dir != live.dir || saved.remote != live.remote || saved.url != live.url || saved.branch != live.branch {
+        return Err("the registered repository, main copy, remote URL or ref was replaced")
+    }
+    Ok(saved)
+}
+
+export fn result_repo_register(root str, input JsonObject) Proc Time -> Result[ResultRepo, str] {
+    if rr_str(input, "word") != "подтверждаю" { return Err("owner confirmation is required") }
+    mut r = result_repo_inspect(rr_str(input, "dir"))?
+    if r.common != rr_str(input, "common") || r.url != rr_str(input, "url") || r.remote != rr_str(input, "remote") || r.branch != rr_str(input, "branch") {
+        return Err("the target changed since it was shown; inspect and confirm again")
+    }
+    r.id = new_project_id()
+    mut o = result_repo_json(r)
+    rr_put(o, "word", "подтверждаю")
+    rr_put(o, "source", "owner-page-local-trust")
+    ro old = o.insert("at", JsonValue.int(Time.now().unix_millis()))
+    with Fs = real_fs() {
+        ro parent = Path.from_bytes(root.bytes()).join("result-repositories")
+        match create_dir_all(parent) { Ok(done) => (), Err(e) => return Err("cannot create the result registry") }
+        ro file = rr_file(root, r.id)
+        ro already_there = match try_exists(file) { Ok(b) => b, Err(e) => true }
+        if already_there { return Err("result id collision or unavailable registry") }
+        match write_atomic(file, JsonValue.object(o).to_str().bytes()) { Ok(done) => (), Err(e) => return Err("cannot save the result target") }
+    }
+    Ok(r)
+}
+
+export fn result_repos_list(root str) -> []ResultRepo {
+    mut rows = []ResultRepo.new()
+    with Fs = real_fs() {
+        ro entries = match read_dir(Path.from_bytes(root.bytes()).join("result-repositories")) { Ok(e) => e, Err(e) => return rows }
+        for entry in entries {
+            ro name = entry.name_str() ?? ""
+            if name.ends_with(".json") {
+                match result_repo_get(root, name[..name.byte_len() - 5]) { Ok(r) => rows.push(r), Err(e) => () }
+            }
+        }
+    }
+    rows
+}

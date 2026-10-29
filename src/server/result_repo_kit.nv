@@ -1,0 +1,138 @@
+// Task 257: a task owned by A produces code in B. All repositories and registry records are temporary.
+module crew_harness.server
+
+import crew_harness.projects.{result_repo_inspect, result_repo_register, result_repo_json, result_repos_list, projects_load}
+import std.encoding.json.{JsonObject, JsonValue}
+import std.fs.{Fs}
+import std.os.{Os}
+
+fn result_test_register(root str, dir str) Proc Time -> str {
+    ro inspected = match result_repo_inspect(dir) { Ok(r) => r, Err(e) => panic(e) }
+    mut input = result_repo_json(inspected)
+    jput(input, "word", JsonValue.str("подтверждаю"))
+    match result_repo_register(root, input) { Ok(r) => r.id, Err(e) => panic(e) }
+}
+
+export fn scenario_result_repo(settings ServerSettings) Proc Detach Time Net Fs Os -> str {
+    mut c = kit_check()
+    ro owner = settings.workdir
+    ro result = tk_canon(rk_repo_remote("${owner}/../result"))
+    ro initial_a = rk_head(owner, "main")
+    ro initial_b = rk_head(result, "main")
+    ro id = result_test_register(settings.layout.data, result)
+    ro record = "${settings.layout.data}/result-repositories/${id}.json"
+    ro saved_record = rk_text(record)
+    ro projects = match projects_load(settings.layout.data) { Ok(p) => p, Err(f) => return f.message }
+    c.expect(projects.len() == 0, "B is registered without creating any Crew project")
+    mut rig = rig_open(settings)
+    rig.attach(1)
+    rig.page(1, "session_created", "s-target", "{\"name\":\"Owner A\",\"agent\":\"opencode\"}")
+    rig.run(300)
+    rig.page(1, "route_apply", "s-target", "{\"items\":[{\"id\":1,\"action\":\"register_result_repo\",\"dir\":\"/arbitrary\",\"word\":\"подтверждаю\"}]}")
+    rig.run(100)
+    c.expect(result_repos_list(settings.layout.data).len() == 1, "route_apply cannot register a repository path")
+    rig.page(1, "session_result_repo", "s-target", "{\"repo_id\":\"unknown-project\"}")
+    rig.run(300)
+    c.expect(jtext(ck_state(rig, 1, "s-target"), "result_repo") == "", "an unknown project does not change the target")
+    rig.page(1, "session_result_repo", "s-target", "{\"repo_id\":\"${id}\"}")
+    rig.run(300)
+    c.expect(jtext(ck_state(rig, 1, "s-target"), "result_repo") == id, "a known project is selected visibly")
+    c.expect(rig.seed_task("s-target", "t1", "Foreign result", ["result.txt"]), "the owner starts the task")
+    ro task = rk_task(ck_state(rig, 1, "s-target"))
+    ro tree = jtext(task, "worktree")
+    ro task_id = jtext(task, "id")
+    c.expect(tk_same_repo(tree, result) && !tk_same_repo(tree, owner), "the tree belongs to B, not A")
+    c.expect(path_there("${owner}/doc/tasks/${task_id}/task/message.1.md"), "the assignment stays in A/doc/tasks")
+    c.expect(!path_there("${tree}/doc/tasks/${task_id}"), "the foreign tree has no task documents of A")
+    rig.page(1, "session_result_repo", "s-target", "{}")
+    rig.run(300)
+    c.expect(jtext(ck_state(rig, 1, "s-target"), "result_repo") == id, "an open task cannot be redirected")
+    c.expect(rig.seed_task("s-target", "t2", "Second part", ["part.txt"]), "a subtask is recorded")
+    rig.page(1, "route_subtask_worktree", "s-target", "{\"n\":2}")
+    rig.run(1500)
+    ro subtree = jtext(rk_sub(ck_state(rig, 1, "s-target"), 1), "worktree")
+    c.expect(tk_same_repo(subtree, result), "a subtask stays in result B")
+    rig.page(1, "route_subtask_done", "s-target", "{\"n\":2}")
+    c.expect(rig.wait_merged(1, 60000), "the subtask merges into B's task tree")
+
+    rig.shut()
+    mut again = rig_open(settings)
+    again.attach(1)
+    again.run(500)
+    c.expect(jtext(ck_state(again, 1, "s-target"), "result_repo") == id, "restart preserves the target identity")
+    c.expect(jtext(rk_task(ck_state(again, 1, "s-target")), "worktree") == tree, "restart preserves the tree")
+    ro missing = write_file(record, "")
+    again.shut()
+    again = rig_open(settings)
+    again.attach(1)
+    again.page(1, "route_tree_drop", "s-target", "{\"force\":true}")
+    again.page(1, "route_merge", "s-target", "{}")
+    again.run(500)
+    c.expect(dir_there(tree) && rk_head(result, "main") == initial_b, "a missing target after restart blocks publish and cleanup")
+    ro registry_restored = write_file(record, saved_record)
+    ro wrote = write_file("${tree}/result.txt", "from B\n")
+    ro owner_status = git_run(owner, ["status", "--porcelain"]).text
+    // Reusing an id for another repository must not redirect publish or cleanup.
+    ro wrong_repo = match result_repo_inspect(owner) { Ok(r) => r, Err(e) => return e }
+    mut wrong = result_repo_json(wrong_repo)
+    jput(wrong, "id", JsonValue.str(id))
+    jput(wrong, "word", JsonValue.str("подтверждаю"))
+    ro replaced = write_file(record, JsonValue.object(wrong).to_str())
+    again.page(1, "route_merge", "s-target", "{}")
+    again.run(500)
+    c.expect(rk_head(owner, "main") == initial_a && rk_head(result, "main") == initial_b && dir_there(tree), "a substituted target blocks publish and keeps the tree")
+    ro restored = write_file(record, saved_record)
+    again.page(1, "route_merge", "s-target", "{}")
+    again.run(2000)
+    c.expect(jtext(rk_task(ck_state(again, 1, "s-target")), "state") == "done", "B is published")
+    c.expect(rk_head(owner, "main") == initial_a, "publish B does not move A's branch")
+    c.expect(git_run(owner, ["status", "--porcelain"]).text == owner_status, "publish B does not change A's files")
+    // A Windows checkout may use CRLF (global core.autocrlf); keep the content assertion exact after newline normalization.
+    c.expect(rk_text("${result}/result.txt").replace("\r\n", "\n") == "from B\n", "B's main copy gets the result")
+    c.expect(!dir_there(tree) && !dir_there(subtree), "B's trees are removed")
+    again.shut()
+    c.report()
+}
+
+export fn scenario_result_repo_children(mut settings ServerSettings) Proc Detach Time Net Fs Os -> str {
+    settings.route_children = true
+    mut c = kit_check()
+    ro owner = settings.workdir
+    ro result = tk_canon(rk_repo_remote("${owner}/../result-children"))
+    ro id = result_test_register(settings.layout.data, result)
+    mut rig = rig_open(settings)
+    rig.attach(1)
+    rig.page(1, "session_created", "s-owner", "{\"name\":\"Owner\",\"agent\":\"opencode\"}")
+    rig.run(300)
+    rig.page(1, "session_result_repo", "s-owner", "{\"repo_id\":\"${id}\"}")
+    c.expect(ck_list(rig, "s-owner", "parent", [ck_item("new", "Result parent", 0, 0, ["parent.txt"])], "Result parent"), "a parent task is proposed")
+    ck_apply(rig, "s-owner", [["Result parent", "work", "new", "0"]])
+    rig.run(2000)
+    ro parent = ck_find(rig, 1, "Result parent")
+    ro parent_tree = ck_tree(rig, 1, parent)
+    c.expect(parent.byte_len() > 0 && tk_same_repo(parent_tree, result), "a new task inherits B from its posting session")
+    c.expect(ck_list(rig, "s-owner", "child", [ck_item("child", "Result child", 1, 0, ["child.txt"])], "Result child"), "a child is proposed")
+    ck_apply(rig, "s-owner", [["Result child", "work", "child", "1"]])
+    rig.run(2000)
+    ro child = ck_find(rig, 1, "Result child")
+    ro child_tree = ck_tree(rig, 1, child)
+    c.expect(tk_same_repo(child_tree, result) && ck_parent(rig, 1, child) == parent, "the child keeps the parent's result repository")
+    ro child_id = ck_task_id(rig, 1, child)
+    c.expect(path_there("${owner}/doc/tasks/${child_id}/task/message.md") && !path_there("${child_tree}/doc/tasks/${child_id}"), "the child's assignment is accounted in A, not B")
+    c.expect(ck_idle(rig, parent, 60000) && ck_idle(rig, child, 60000), "the parent and child finish their initial turns before restart")
+    rig.shut()
+    mut again = rig_open(settings)
+    again.attach(1)
+    again.run(500)
+    c.expect(jtext(ck_state(again, 1, child), "result_repo") == id, "the child's target survives restart")
+    c.expect(ck_idle(again, parent, 60000) && ck_idle(again, child, 60000), "the restored sessions are ready for merging")
+    c.expect(ck_commit(child_tree, "child.txt"), "the child has real work to merge")
+    again.page(1, "route_merge", child, "{}")
+    c.expect(ck_wait_row(again, parent, ck_number(again, 1, child), "merged", 30000), "the child reaches merged state: ${ck_errors(again)}")
+    c.expect(!dir_there(child_tree) && dir_there(parent_tree) && path_there("${parent_tree}/child.txt"), "merging the child carries its work and removes only its B tree")
+    again.page(1, "route_tree_drop", parent, "{\"force\":true}")
+    again.run(1000)
+    c.expect(!dir_there(parent_tree), "explicit cleanup removes the parent's B tree")
+    again.shut()
+    c.report()
+}

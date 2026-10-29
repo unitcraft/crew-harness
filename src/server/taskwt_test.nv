@@ -642,6 +642,39 @@ test "taskwt publish: a tree with uncommitted files, a merge in progress, the ma
     tt_rm(w.root)
 }
 
+// task 257: the accounting may name a result repository that differs from the repository of the task's tree; publish must not silently
+// push into the tree's repository while reporting the main copy of another — such a pair is refused at the precheck.
+test "taskwt publish: a tree of another repository than the main copy is refused" {
+    ro w = tt_world("pubcross-a")
+    ro other = tt_world("pubcross-b")
+    ro tree = tt_task(w, "192", "demo")
+    tt_commit(tree.path, "work.txt", "work\n", "work")
+    match publish(tree.path, other.main, tt_green) {
+        Published { sha, main_copy, cleanup } => panic("a tree of another repository published")
+        Blocked { reason, step, conflict_files } => {
+            assert(step == "precheck")
+            assert(reason.contains("another repository"))
+        }
+    }
+    match publish_continue(tree.path, other.main, tt_green) {
+        Published { sha, main_copy, cleanup } => panic("publish_continue: a tree of another repository published")
+        Blocked { reason, step, conflict_files } => {
+            assert(step == "precheck")
+            assert(reason.contains("another repository"))
+        }
+    }
+    // nothing was pushed anywhere
+    assert(tg(w.origin, ["rev-list", "--count", "main"]) == "1")
+    assert(tg(other.origin, ["rev-list", "--count", "main"]) == "1")
+    // the control: the same tree with the main copy of ITS repository publishes
+    match publish(tree.path, w.main, tt_green) {
+        Published { sha, main_copy, cleanup } => assert(tg(w.origin, ["rev-parse", "main"]) == sha)
+        Blocked { reason, step, conflict_files } => panic("the same-repository pair refused: ${reason}")
+    }
+    tt_rm(w.root)
+    tt_rm(other.root)
+}
+
 // ----- nothing pushes by itself -----
 
 test "taskwt: no push without publish - the log of git calls and the head of origin" {

@@ -9,7 +9,7 @@ module crew_harness.server
 import crew_harness.config.{modes_dirs}
 import alula.engine.{Incoming, EventKind, Link}
 import crew_harness.acp.{AcpClient, AcpConfig, open_client_traced, acp_link}
-import crew_harness.projects.{projects_get}
+import crew_harness.projects.{projects_get, result_repo_validate}
 import std.encoding.json.{Json, JsonValue, JsonObject}
 
 const REVIEW_LIMIT_MS = 1200000
@@ -168,9 +168,9 @@ fn Hub mut @rt_state(at int, state str, note str) Proc Detach Time -> () {
 
 // ----- the task: folder, tree, files of the subtasks -----
 
-type TaskMade { ok bool, id str, number str, dir str, shown str, branch str, worktree str, base str }
+type TaskMade { ok bool, id str, number str, dir str, shown str, branch str, worktree str, base str, repo_dir str }
 
-fn no_task() -> TaskMade => { ok: false, id: "", number: "", dir: "", shown: "", branch: "", worktree: "", base: "" }
+fn no_task() -> TaskMade => { ok: false, id: "", number: "", dir: "", shown: "", branch: "", worktree: "", base: "", repo_dir: "" }
 
 // The numbers taken: the folders of `doc/tasks` of the repository and the task branches; outside a repository - the folders of the session in the data folder.
 // The repository the tasks of a session live in: the folder of its project (the working folder of the agent without a task), else the working folder of the hub.
@@ -178,6 +178,86 @@ fn Hub @route_repo_dir(session str) -> str {
     ro at = @find(session)
     if at < 0 { return @workdir }
     @cwd_of(@sessions[at].folder)
+}
+
+/// RouteTarget: the repository the RESULT of the task of a session goes to (task 257): its main copy and the folder of its trees.
+type RouteTarget { dir str, trees str }
+
+// The repository of the result (task 257): `rt.result_repo` is an owner-confirmed registry id ("" - the repository of the
+// session itself), resolved EVERY time. A removed or replaced repository, or a changed main copy, is an `Err`:
+// do not silently redirect work after restart. Never a path from the outside: only an id that exists and matches its pinned identity.
+fn Hub @route_target(session str) Proc -> Result[RouteTarget, str] {
+    ro at = @find(session)
+    if at < 0 { return Err("the session is gone") }
+    ro repo = @sessions[at].rt.result_repo
+    if repo.byte_len() == 0 { return Ok(RouteTarget { dir: @route_repo_dir(session), trees: @route_trees(session) }) }
+    ro p = result_repo_validate(@settings.layout.data, repo)?
+    ro dir = p.dir
+    ro common = tk_common_dir(dir)
+    ro rt = @sessions[at].rt
+    if rt.result_url != p.url || rt.result_remote != p.remote || rt.result_ref != p.branch {
+        return Err("the result remote URL or ref was changed")
+    }
+    if common.byte_len() == 0 || rt.result_common.byte_len() == 0 || common != rt.result_common {
+        return Err("the repository of the result disappeared or was replaced")
+    }
+    if rt.repo_dir.byte_len() > 0 && tk_canon(rt.repo_dir) != dir { return Err("the main copy of the result was changed") }
+    Ok(RouteTarget { dir, trees: "" })
+}
+
+// The main copy the publish and the clean-up of the tree of this session go to (task 257): the one pinned to the tree when it was made
+// (`repo_dir`), else the folder of the session - a tree made before this task or without a target lives in the repository of the session.
+fn Hub @route_main_copy(s Dialog) -> str => if s.rt.repo_dir.byte_len() > 0 { s.rt.repo_dir } else { @cwd_of(s.folder) }
+
+// Resolve again before any publication or cleanup; neither the project registry nor the saved path alone is sufficient.
+fn Hub @route_bound_main(s Dialog) Proc -> Result[str, str] {
+    ro target = @route_target(s.id)?
+    ro main = @route_main_copy(s)
+    if !tk_same_repo(main, target.dir) || !tk_same_repo(s.rt.worktree, main) {
+        return Err("the task tree and the pinned result repository do not match")
+    }
+    if s.rt.result_repo.byte_len() > 0 {
+        ro fetch_url = git_run(s.rt.worktree, ["remote", "get-url", s.rt.result_remote])
+        ro push_url = git_run(s.rt.worktree, ["remote", "get-url", "--push", s.rt.result_remote])
+        if !fetch_url.ok || !push_url.ok || fetch_url.text.trim_ascii() != s.rt.result_url || push_url.text.trim_ascii() != s.rt.result_url {
+            return Err("the task tree's result remote URL changed")
+        }
+    }
+    Ok(main)
+}
+
+// The switch "Репозиторий результата" of a session (task 257): the id of a registered repository ("" - the repository of the session
+// itself). Only while the session has no tree: the tree and the publish of an open work are bound to the repository the tree was cut from.
+fn Hub mut @route_repo(trace str, repo str) Proc Detach Time -> () {
+    ro at = @find(trace)
+    if at < 0 { return }
+    ro s = @sessions[at]
+    if s.rt.task_open || s.rt.worktree.byte_len() > 0 || s.rt.wip_tree.byte_len() > 0 || s.rt.wip_prep > 0 {
+        @tell_error(0, trace, s.engine.step_number(), "", "у работы уже есть дерево: репозиторий результата не меняется")
+        return
+    }
+    mut o = JsonObject.new()
+    mut label = ""
+    if repo.byte_len() > 0 {
+        ro p = match result_repo_validate(@settings.layout.data, repo) {
+            Ok(p) => p
+            Err(e) => {
+                @tell_error(0, trace, s.engine.step_number(), "", "репозиторий результата не задан: ${e}")
+                return
+            }
+        }
+        label = "${p.dir} → ${p.remote}/${p.branch}"
+        js(o, "repo_dir", p.dir)
+        js(o, "repo_common", p.common)
+        js(o, "repo_url", p.url)
+        js(o, "repo_remote", p.remote)
+        js(o, "repo_ref", p.branch)
+    }
+    js(o, "repo", repo)
+    js(o, "repo_label", label)
+    if repo.byte_len() > 0 { jput(o, "worktree", JsonValue.bool(true)) }
+    @rt_journal(at, "route_set", JsonValue.object(o).to_str())
+    @route_broadcast(at, true)
 }
 
 // The folder of the trees of the project of the session (task 192.5, the setting "папка деревьев" of the project): "" - beside the main copy; a session with no project has no setting.
@@ -206,25 +286,43 @@ fn Hub mut @take_task_number(session str) Proc Detach Time -> int {
 }
 
 fn Hub mut @route_make_task(session str, route str, text str, use_tree bool) Proc Detach Time -> TaskMade {
-    ro base = @route_repo_dir(session)
+    ro own = @route_repo_dir(session)
+    // task 257: the result may go to another known repository (the project of `rt.result_repo`): the number and the folder of the task stay
+    // with the session that asked, the tree and the publish go to the repository of the result. A target that cannot be resolved - no tree.
+    mut base = own
+    mut trees = @route_trees(session)
+    match @route_target(session) {
+        Ok(t) => { base = t.dir; trees = t.trees }
+        Err(e) => {
+            @say_log("the repository of the result of ${session} cannot be resolved: ${e}")
+            return no_task()
+        }
+    }
     ro repo = tk_is_repo(base)
+    ro at = @find(session)
+    ro explicit = at >= 0 && @sessions[at].rt.result_repo.byte_len() > 0
+    if explicit && !use_tree && route != "planning" { return no_task() }
     // a tree is made when the session wants one (the switch "Worktree") and the mode is not the planning (it writes the task and touches no code: the tree comes later)
     ro want_tree = repo && use_tree && route != "planning"
     // task 192.2: the mode "interactive" makes a task only for a confirmed proposal (`crew_task`, `crew_task_list`), see crew_task_hub.nv
-    ro tasks_here = want_tree && dir_there("${base}/doc/tasks")
     ro number = task_number_text(@take_task_number(session))
     ro slug = task_slug(text)
     ro folder = "${number}-${slug}"
     mut tree = TkTree { ok: false, branch: "", worktree: "", base: "", text: "" }
     if want_tree {
-        tree = tk_task_tree(base, number, slug, @route_trees(session))
+        tree = tk_task_tree(base, number, slug, trees)
         if !tree.ok { @say_log("the tree of the task ${folder} cannot be made: ${tree.text}") }
+        if !tree.ok && explicit { return no_task() }
     }
-    if tree.ok && tasks_here {
-        return { ok: true, id: folder, number, dir: "${tree.worktree}/doc/tasks/${folder}/task", shown: "doc/tasks/${folder}/task", branch: tree.branch, worktree: tree.worktree, base: tree.base }
+    // the folder of the task lives in the tree only when the tree is of the OWN repository of the session: a foreign repository is not polluted (task 257)
+    ro tasks_here = tree.ok && tk_is_repo(own) && tk_same_repo(own, tree.worktree) && dir_there("${base}/doc/tasks")
+    ro repo_dir = if tree.ok { base } else { "" }
+    if tasks_here {
+        return { ok: true, id: folder, number, dir: "${tree.worktree}/doc/tasks/${folder}/task", shown: "doc/tasks/${folder}/task", branch: tree.branch, worktree: tree.worktree, base: tree.base, repo_dir }
     }
-    ro dir = "${@settings.data_dir}/${session}/tasks/${folder}/task"
-    { ok: true, id: folder, number, dir, shown: dir, branch: tree.branch, worktree: tree.worktree, base: tree.base }
+    ro foreign = repo && tk_is_repo(own) && !tk_same_repo(own, base)
+    ro dir = if foreign { "${own}/doc/tasks/${folder}/task" } else { "${@settings.data_dir}/${session}/tasks/${folder}/task" }
+    { ok: true, id: folder, number, dir, shown: dir, branch: tree.branch, worktree: tree.worktree, base: tree.base, repo_dir }
 }
 
 fn Hub mut @route_write_sub(at int, n int, text str) Proc Detach Time -> () {
@@ -256,6 +354,7 @@ fn Hub mut @route_on_message(at int, text str) Proc Detach Time -> str {
         js(o, "branch", made.branch)
         js(o, "worktree", made.worktree)
         js(o, "base", made.base)
+        js(o, "repo_dir", made.repo_dir)
         js(o, "title", subtask_title(text))
         @rt_task_op(at, "open", o)
         @route_write_sub(at, 1, text)
@@ -405,22 +504,32 @@ fn Hub mut @route_leave_planning(at int) Proc Detach Time -> () {
 }
 
 // A task that was made without a tree gets one: the branch `task/NNN-slug`, the folder of the task goes into it whole (with `images/`) and from now on lives there, the agent works in the tree.
+// Task 257: the tree is cut in the repository of the RESULT (`rt.result_repo`); a tree of a foreign repository does not take the folder of the task in.
 fn Hub mut @route_attach_tree(at int) Proc Detach Time -> bool {
     ro s = @sessions[at]
     if !s.rt.task_open || s.rt.worktree.byte_len() > 0 { return false }
-    ro base = @route_repo_dir(s.id)
+    ro own = @route_repo_dir(s.id)
+    mut base = own
+    mut trees = @route_trees(s.id)
+    match @route_target(s.id) {
+        Ok(t) => { base = t.dir; trees = t.trees }
+        Err(e) => {
+            @tell_error(0, s.id, s.engine.step_number(), "", "репозиторий результата не читается (${e}): дерево не создано")
+            return false
+        }
+    }
     if !tk_is_repo(base) {
-        @tell_error(0, s.id, s.engine.step_number(), "", "папка проекта не репозиторий git: дерево сделать нельзя")
+        @tell_error(0, s.id, s.engine.step_number(), "", "папка репозитория результата не репозиторий git: дерево сделать нельзя")
         return false
     }
-    ro tree = tk_task_tree(base, s.rt.number, task_slug_of(s.rt.task_id), @route_trees(s.id))
+    ro tree = tk_task_tree(base, s.rt.number, task_slug_of(s.rt.task_id), trees)
     if !tree.ok {
         @tell_error(0, s.id, s.engine.step_number(), "", "дерево задачи не создано: ${tree.text}")
         return false
     }
     mut dir = s.rt.task_dir
     mut shown = s.rt.task_shown
-    if dir_there("${tree.worktree}/doc/tasks") {
+    if tk_is_repo(own) && tk_same_repo(own, tree.worktree) && dir_there("${tree.worktree}/doc/tasks") {
         ro into = "${tree.worktree}/doc/tasks/${s.rt.task_id}/task"
         if io_copy_dir(s.rt.task_dir, into) < 0 {
             @tell_error(0, s.id, s.engine.step_number(), "", "папка задачи не перенесена в дерево ${tree.worktree}")
@@ -433,6 +542,7 @@ fn Hub mut @route_attach_tree(at int) Proc Detach Time -> bool {
     js(o, "branch", tree.branch)
     js(o, "worktree", tree.worktree)
     js(o, "base", tree.base)
+    js(o, "repo_dir", base)
     js(o, "dir", dir)
     js(o, "shown", shown)
     @rt_task_op(at, "attach_tree", o)
@@ -445,6 +555,10 @@ fn Hub mut @route_worktree(trace str, on bool) Proc Detach Time -> () {
     ro at = @find(trace)
     if at < 0 { return }
     ro s = @sessions[at]
+    if !on && s.rt.result_repo.byte_len() > 0 {
+        @tell_error(0, trace, s.engine.step_number(), "", "для выбранного репозитория результата нужно своё дерево")
+        return
+    }
     if !on && (s.rt.worktree.byte_len() > 0 || s.rt.wip_tree.byte_len() > 0) {
         @tell_error(0, trace, s.engine.step_number(), "", "у работы уже есть дерево: выключить Worktree нельзя")
         return
@@ -586,6 +700,12 @@ fn Hub mut @route_mark_progress(at int, title str, skipped bool) -> () {
 
 // A turn of the agent with a hidden note: the visible line is `label`, the note goes before it in the prompt. "" - sent, else why not.
 fn Hub mut @route_agent_turn(at int, label str, prelude str) Proc Detach Time -> str {
+    if @sessions[at].rt.result_repo.byte_len() > 0 {
+        match @route_target(@sessions[at].id) {
+            Ok(t) => ()
+            Err(e) => return "репозиторий результата: ${e}"
+        }
+    }
     @route_sync_cwd(at)
     ro reason = @ensure_client(at)
     if reason.byte_len() > 0 {
@@ -912,7 +1032,7 @@ fn Hub mut @route_observe(at int) Proc Detach Time -> () {
         // the last run of CI of main, asked of GitHub now and then (no `gh`, no network: no data)
         if now_millis() - s.rt.ci_at > 120000 {
             s.rt.ci_at = now_millis()
-            s.rt.extra = TaskExtra { branch_tests: s.rt.extra.branch_tests, head: s.rt.extra.head, main_tests: tk_main_ci(@cwd_of(s.folder)), main_source: "ci", idle_days: s.rt.extra.idle_days, stale: s.rt.extra.stale }
+            s.rt.extra = TaskExtra { branch_tests: s.rt.extra.branch_tests, head: s.rt.extra.head, main_tests: tk_main_ci(@route_main_copy(s)), main_source: "ci", idle_days: s.rt.extra.idle_days, stale: s.rt.extra.stale }
         }
         s.rt.extra = @route_extra(s)
         @sessions[at] = s
@@ -1173,8 +1293,12 @@ fn Hub mut @route_new_task(trace str) Proc Detach Time -> () {
             @route_broadcast(at, false)
             return
         }
+        ro main = match @route_bound_main(s) {
+            Ok(dir) => dir
+            Err(e) => { @tell_error(0, trace, s.engine.step_number(), "", "уборка остановлена: ${e}"); return }
+        }
         @route_close_agent_in(at, s.rt.worktree)
-        ro gone = tk_tree_remove(@cwd_of(s.folder), s.rt.worktree, s.rt.branch)
+        ro gone = tk_tree_remove(main, s.rt.worktree, s.rt.branch)
         if !gone.ok { @say_log("the tree of the task ${s.rt.task_id} is not removed: ${gone.text}") }
     }
     mut o = JsonObject.new()
@@ -1203,10 +1327,19 @@ fn Hub mut @route_tree_drop(trace str, force bool) Proc Detach Time -> () {
         @tell_error(0, trace, s.engine.step_number(), "", "в дереве есть не влитая работа (${count} коммитов): удалить её можно только явной кнопкой «Удалить вместе с работой»")
         return
     }
-    ro out = "${@settings.data_dir}/${s.id}/tasks/${s.rt.task_id}/task"
-    ro copied = io_copy_dir(s.rt.task_dir, out)
+    ro main = match @route_bound_main(s) {
+        Ok(dir) => dir
+        Err(e) => { @tell_error(0, trace, s.engine.step_number(), "", "уборка остановлена: ${e}"); return }
+    }
+    ro own = @route_repo_dir(s.id)
+    ro foreign = tk_is_repo(own) && !tk_same_repo(own, main)
+    ro out = if foreign { s.rt.task_dir } else { "${@settings.data_dir}/${s.id}/tasks/${s.rt.task_id}/task" }
+    if out != s.rt.task_dir && io_copy_dir(s.rt.task_dir, out) < 0 {
+        @tell_error(0, trace, s.engine.step_number(), "", "дерево не удалено: не удалось сохранить папку задачи")
+        return
+    }
     @route_close_agent_in(at, s.rt.worktree)
-    ro gone = tk_tree_drop(@cwd_of(s.folder), s.rt.worktree, s.rt.branch)
+    ro gone = tk_tree_drop(main, s.rt.worktree, s.rt.branch)
     if !gone.ok {
         @tell_error(0, trace, s.engine.step_number(), "", "дерево не удалено: ${gone.text}")
         return
@@ -1265,6 +1398,10 @@ fn Hub mut @route_merge(trace str) Proc Detach Time -> () {
         return
     }
     // task 192.3: a child of a parent with a branch merges into that branch
+    match @route_bound_main(s) {
+        Ok(dir) => ()
+        Err(e) => { @route_publish_fail(at, "репозиторий результата: ${e}"); return }
+    }
     if s.rt.kind == "child" && s.rt.ptree.byte_len() > 0 {
         ro merged = @cs_merge(at)
         return
@@ -1306,8 +1443,12 @@ fn Hub mut @route_publish_fail(at int, why str) Proc Detach Time -> () {
 // One step of publishing and what to do with its answer.
 fn Hub mut @route_publish_step(at int, mode str) Proc Detach Time -> () {
     ro s = @sessions[at]
+    ro main = match @route_bound_main(s) {
+        Ok(dir) => dir
+        Err(e) => { @route_publish_fail(at, "репозиторий результата: ${e}"); return }
+    }
     if mode == "final" || mode == "merge" { @route_close_agent_in(at, s.rt.worktree) }
-    ro r = tk_publish(s.rt.worktree, @cwd_of(s.folder), mode)
+    ro r = tk_publish(s.rt.worktree, main, mode)
     if r.status == "done" {
         mut me = @sessions[at]
         me.rt.job = ""

@@ -256,13 +256,15 @@ export function parseRouteState(input) {
   const src = isObject(input) ? input : {};
   const route = normalizeRoute(src.route);
   const useTree = src.use_tree !== false;
-  if (!routeInfo(route).hasSteps) return { route, stepless: true, steps: [], running: false, useTree, task: parseTask(src.task), where: parseWhere(src.where), crew: parseCrewTask(src), kids: parseKids(src), hints: parseHints(src), context: parseContext(src) };
+  const resultRepo = str(src.result_repo);
+  const resultLabel = str(src.result_label);
+  if (!routeInfo(route).hasSteps) return { route, stepless: true, steps: [], running: false, useTree, resultRepo, resultLabel, task: parseTask(src.task), where: parseWhere(src.where), crew: parseCrewTask(src), kids: parseKids(src), hints: parseHints(src), context: parseContext(src) };
   const steps = (Array.isArray(src.steps) ? src.steps : []).filter(isObject).map((s, i) => ({
     n: Number.isInteger(s.n) ? s.n : i + 1,
     title: str(s.title),
     state: STEP_STATES.includes(s.state) ? s.state : 'pending',
   }));
-  return { route, stepless: false, steps, running: src.running === true, useTree, task: parseTask(src.task), where: parseWhere(src.where), crew: parseCrewTask(src), kids: parseKids(src), hints: parseHints(src), context: parseContext(src) };
+  return { route, stepless: false, steps, running: src.running === true, useTree, resultRepo, resultLabel, task: parseTask(src.task), where: parseWhere(src.where), crew: parseCrewTask(src), kids: parseKids(src), hints: parseHints(src), context: parseContext(src) };
 }
 
 export const INTERACTIVE_STATE = Object.freeze(parseRouteState({ route: DEFAULT_ROUTE }));
@@ -451,6 +453,7 @@ export const routeSignal = Object.freeze({
   testsRun: () => ({ kind: 'route_tests_run', input: {} }),
   treeDrop: (force) => ({ kind: 'route_tree_drop', input: { force: force === true } }),
   worktree: (on) => ({ kind: 'session_worktree', input: { on: on === true } }),
+  resultRepo: (repoId) => ({ kind: 'session_result_repo', input: { repo_id: str(repoId) } }),
   subtaskParallel: (n, on) => ({ kind: 'route_subtask_parallel', input: { n, on: on === true } }),
   subtaskChoose: (n, tree) => ({ kind: 'route_subtask_choose', input: { n, tree: tree === 'shared' ? 'shared' : 'own' } }),
 });

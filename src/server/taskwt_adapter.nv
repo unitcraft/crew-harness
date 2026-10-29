@@ -17,6 +17,16 @@ export type TkPublish { status str, step str, reason str, files []str, main_note
 /// Is the folder the root of a git repository (a `.git` folder or file)?
 export fn tk_is_repo(dir str) -> bool => path_there("${dir}/.git")
 
+/// Both folders must exist and belong to ONE git repository (the canonical common git dir, task 257).
+export fn tk_same_repo(a str, b str) Proc -> bool {
+    ro left = tk_common_dir(a)
+    ro right = tk_common_dir(b)
+    left.byte_len() > 0 && left == right
+}
+
+export fn tk_common_dir(dir str) Proc -> str => with Os = real_os(), Fs = real_fs() { tw_common_dir(dir).to_ascii_lower() }
+export fn tk_canon(dir str) -> str => with Fs = real_fs() { tw_canon(dir) }
+
 /// The names of the task branches (`task/007-x` as `007-x`, also those of `origin`), for the number of the next task.
 export fn tk_branch_names(main_copy str) Proc -> []str {
     mut out = []str.new()

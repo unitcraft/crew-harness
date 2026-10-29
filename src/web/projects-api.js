@@ -23,6 +23,9 @@ export function createProjectsApi(fetchFn, failText = 'Нет связи с се
   }
 
   return {
+    listResultRepos() { return call('GET', '/api/result-repositories'); },
+    inspectResultRepo(path) { return call('GET', `/api/result-repositories/inspect?path=${encodeURIComponent(path)}`); },
+    registerResultRepo(snapshot) { return call('POST', '/api/result-repositories', { ...snapshot, word: 'подтверждаю' }); },
     async list() {
       const r = await call('GET', '/api/projects');
       return r.ok ? { ok: true, projects: parseProjects(r.body) } : r;

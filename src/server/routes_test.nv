@@ -330,6 +330,19 @@ test "routes: the journal replays the state: the task, the steps, a new task cle
     assert(rt.route == "full")
 }
 
+test "routes result repository: replay keeps the target and route_set cannot redirect an open task" {
+    mut rt = route_session_new()
+    rt.apply("route_set", "{\"repo\":\"projectb\",\"repo_label\":\"B\",\"repo_dir\":\"/result\",\"repo_common\":\"/result/.git\"}")
+    rt.apply("route_task", "{\"op\":\"open\",\"id\":\"001-work\",\"number\":\"001\",\"dir\":\"/owner/doc/tasks/001-work/task\",\"worktree\":\"/result-work\",\"repo_dir\":\"/result\"}")
+    rt.apply("route_set", "{\"route\":\"full\",\"repo\":\"projectc\",\"repo_dir\":\"/wrong\",\"repo_common\":\"/wrong/.git\"}")
+    rt.normalize()
+    assert(rt.result_repo == "projectb" && rt.repo_dir == "/result")
+    assert(rt.result_common == "/result/.git" && rt.route == "full")
+    assert(rt.task_dir == "/owner/doc/tasks/001-work/task")
+    ro view = rt_obj(route_view_text(rt, [], [], false, 0, task_extra_none()))
+    assert(jtext(view, "result_repo") == "projectb" && jtext(view, "result_label") == "B")
+}
+
 test "routes: the working folder of the agent is the tree of the subtask, else the tree of the task, else the folder of the session" {
     mut rt = route_session_new()
     assert(rt.agent_dir("/repo") == "/repo")

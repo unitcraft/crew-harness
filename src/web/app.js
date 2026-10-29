@@ -366,6 +366,7 @@ const handlers = {
   onSessionPreset(trace, name) { send('session_preset', trace, nextStep(model, trace), { preset: name }); },
   onDraftWorktree(trace, on) { saveWorktreePref(on === true); model = patchDraft(model, trace, { worktree: on === true }); render(); },
   onWorktree(trace, on) { send(...signal(trace, routeSignal.worktree(on))); },
+  onResultRepo(trace, repoId) { send(...signal(trace, routeSignal.resultRepo(repoId))); },
   onRouteRun(trace) { send(...signal(trace, routeSignal.run())); },
   onRouteSkip(trace, step) { send(...signal(trace, routeSignal.skip(step))); },
   onRouteStop(trace) { send(...signal(trace, routeSignal.stop())); },

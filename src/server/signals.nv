@@ -28,7 +28,7 @@ export fn signals_given_by_code() -> []CodeSignal => [
     cs("session_placed", "input", "src/server/hub.nv: Hub.reorder, Hub.move", "rank, and project_id, project when the session goes to another project (JSON text)", false),
     cs("agent_switched", "input", "src/server/hub.nv: Hub.switch_agent", "from, to, shown, total, cut (JSON text)", false),
     cs("message_images", "input", "src/server/hub.nv: Hub.say (the pictures of the message that follows: n, name, mime, bytes)", "images (JSON text)", false),
-    cs("route_set", "input", "src/server/routes_hub.nv: Hub.rt_journal (the mode of work of the session)", "route (JSON text)", false),
+    cs("route_set", "input", "src/server/routes_hub.nv: Hub.rt_journal (mode, worktree and owner-confirmed result binding)", "route, worktree, repo, repo_label, repo_dir, repo_common, repo_url, repo_remote, repo_ref (JSON text)", false),
     cs("route_task", "input", "src/server/routes_hub.nv: Hub.rt_task_op (the task and its subtasks, trees, state)", "op and its fields (JSON text)", false),
     cs("route_step", "input", "src/server/routes_hub.nv: Hub.rt_step (the state of a step of the mode)", "n, state (JSON text)", false),
     cs("context_compacted", "input", "src/server/crew_task_hub.nv: Hub.ctx_watch (the context of the agent was compacted)", "{before, after, at} (JSON text)", false),
