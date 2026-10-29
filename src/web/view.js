@@ -36,6 +36,7 @@ import {
   STATE_KEYS, sessionList, splitBlocks, filterSessions, groupSessions, descendantsOf, effectivePins, timeline, paragraphs, inlineSpans,
   workSummary, messageTime, groupThousands, ruForm, effortChoices, shownOf, familyOf, filterModels, groupModels, usagePercent, usageLevel, tokenParts, durationLabel, agoParts, fileParts, taskSummary,
 } from './state.js';
+import { attention, SILENT_DEFAULT_MIN } from './attention.js';
 import {
   ROUTES, STEP_ICON, STEP_STATE_KEY, SUBTASK_STATE_KEY, routeName, routeDescription, counterText, stepToSkip, showStrip, stripActions,
   subtaskPercent, subtaskProgressText, showSubtasks, INTERACTIVE_STATE, NOTE_KEY, taskHeading, subtaskActions, hasSubtaskActions, bannerCount, subtaskCountText,
@@ -129,6 +130,25 @@ export function createView(doc, refs, deps) {
   // ---------------------------------------------------------------- левая колонка
 
   const themeButton = h(doc, 'button', { type: 'button', class: 'icon-btn' });
+  // задача 192.14: выключатели «колокольчик» (уведомления браузера) и «звук»; по умолчанию выключены, состояние ведёт notify.js
+  const bellButton = h(doc, 'button', { type: 'button', class: 'icon-btn attn-toggle', 'data-kind': 'bell', 'aria-pressed': 'false', title: t('attn.bell_off'), 'aria-label': t('attn.bell_off') }, icon(doc, 'i-bell'));
+  const soundButton = h(doc, 'button', { type: 'button', class: 'icon-btn attn-toggle', 'data-kind': 'sound', 'aria-pressed': 'false', title: t('attn.sound_off'), 'aria-label': t('attn.sound_off') }, icon(doc, 'i-volume'));
+  bellButton.addEventListener('click', () => handlers.onBell && handlers.onBell());
+  soundButton.addEventListener('click', () => handlers.onSound && handlers.onSound());
+  let toggleSig = '';
+  function renderToggles(ui) {
+    const n = ui.notify || { bell: false, sound: false, denied: false };
+    const sig = JSON.stringify([n.bell, n.sound, n.denied]);
+    if (sig === toggleSig) return;
+    toggleSig = sig;
+    const bellText = n.bell ? t('attn.bell_on') : (n.denied ? t('attn.bell_denied') : t('attn.bell_off'));
+    bellButton.setAttribute('aria-pressed', String(Boolean(n.bell)));
+    bellButton.title = bellText;
+    bellButton.setAttribute('aria-label', bellText);
+    soundButton.setAttribute('aria-pressed', String(Boolean(n.sound)));
+    soundButton.title = n.sound ? t('attn.sound_on') : t('attn.sound_off');
+    soundButton.setAttribute('aria-label', soundButton.title);
+  }
   const search = h(doc, 'input', {
     type: 'search', class: 'search-input', autocomplete: 'off', placeholder: t('sessions.search'), 'aria-label': t('sessions.search'),
   });
@@ -140,7 +160,7 @@ export function createView(doc, refs, deps) {
   const notFound = h(doc, 'p', { class: 'empty', text: t('sessions.not_found'), hidden: true });
 
   refs.side.replaceChildren(
-    h(doc, 'div', { class: 'side-head' }, h(doc, 'h2', { text: t('sessions.title') }), themeButton),
+    h(doc, 'div', { class: 'side-head' }, h(doc, 'h2', { text: t('sessions.title') }), h(doc, 'span', { class: 'side-head-tools' }, bellButton, soundButton, themeButton)),
     h(doc, 'div', { class: 'side-tools' },
       h(doc, 'label', { class: 'search' }, icon(doc, 'i-search'), search)),
     agentNotice, retryAgents, groupsBox, listEmpty, notFound,
@@ -150,8 +170,8 @@ export function createView(doc, refs, deps) {
   search.addEventListener('input', () => { query = search.value; if (current.ui) renderList(current.model, current.ui); });
 
   /** Метка «Нужен ваш ответ»: оранжевая точка и плашка; в списке сессий и в карточке вопросов. */
-  function askBadge() {
-    return h(doc, 'span', { class: 'ask-badge' }, h(doc, 'span', { class: 'ask-dot', 'aria-hidden': 'true' }), h(doc, 'span', { class: 'ask-badge-text', text: t('ask.need') }));
+  function askBadge(text = t('ask.need')) {
+    return h(doc, 'span', { class: 'ask-badge' }, h(doc, 'span', { class: 'ask-dot', 'aria-hidden': 'true' }), h(doc, 'span', { class: 'ask-badge-text', text }));
   }
 
   // ---- проекты: список приходит из страницы (ui.projects), окна живут в projects-ui.js
@@ -190,10 +210,14 @@ export function createView(doc, refs, deps) {
     const unread = Boolean(ui.unread && ui.unread[s.id] === true);
     const taskInfo = sessionTask(s);
     const stateLabel = t(STATE_KEYS[s.state]);
+    const attn = attention(s, { now: now(), silentMin: ui.silentMin ?? SILENT_DEFAULT_MIN, unread, acked: (ui.acked || {})[s.id] || '' });
+    const attnText = attn.state === 'waiting' ? t('attn.waiting') : attn.state === 'silent' ? t('attn.silent', { n: attn.minutes }) : attn.state === 'error' ? t('attn.error') : '';
     const merge = mergeLabel(s.routeState && s.routeState.task);
     const item = sideKit.isRenaming(s.id) ? sideKit.renameField(s) : h(doc, 'button', {
       type: 'button',
       class: 'session-item',
+      'data-attn': attn.state,
+      'data-blink': attn.blink ? 'true' : false,
       'data-merge': merge ? merge.kind : false,
       'aria-current': active ? 'true' : 'false',
       title: t('sessions.time_title', { state: stateLabel, time: formatTime(s.updatedAt) }),
@@ -204,7 +228,8 @@ export function createView(doc, refs, deps) {
     taskInfo ? h(doc, 'span', { class: 'task-no', text: taskInfo.number, title: taskInfo.title ? t('route.task_no_title', { number: taskInfo.number, title: taskInfo.title }) : t('route.task_head_bare', { number: taskInfo.number }) }) : false,
     h(doc, 'span', { class: 'session-name', text: s.name }),
     s.pendingQuestion ? h(doc, 'span', { class: 'ask-line' }, askBadge()) : false,
-    h(doc, 'span', { class: 'dot', 'data-state': s.state, 'aria-hidden': 'true' }),
+    attnText ? h(doc, 'span', { class: 'attn-label', 'data-attn': attn.state, text: attnText }) : false,
+    h(doc, 'span', { class: 'dot', 'data-state': s.state, 'data-attn': attn.state, 'aria-hidden': 'true' }),
     h(doc, 'span', { class: 'sr', text: stateLabel }),
     merge ? h(doc, 'span', { class: 'session-merge', 'data-kind': merge.kind, text: merge.text }) : false);
     if (!sideKit.isRenaming(s.id)) item.addEventListener('click', () => handlers.onSelect(s.id));
@@ -294,7 +319,7 @@ export function createView(doc, refs, deps) {
     const pins = effectivePins(all, ui.pins);
     const filtered = filterSessions(all, query);
     const groups = groupSessions(filtered, { pinned: pins, projects: projectsList, includeEmpty: query.trim() === '', collapsed: foldedParents });
-    const rowSig = (r) => [r.depth, r.kids, r.collapsed, r.session.parent, r.session.id, r.session.name, r.session.state, r.session.updatedAt, r.session.rank, r.session.projectId, (sessionTask(r.session) || {}).number, ui.unread ? ui.unread[r.session.id] : undefined, Boolean(r.session.pendingQuestion), (mergeLabel(r.session.routeState && r.session.routeState.task) || {}).text];
+    const rowSig = (r) => [r.depth, r.kids, r.collapsed, r.session.parent, r.session.id, r.session.name, r.session.state, r.session.updatedAt, r.session.rank, r.session.projectId, (sessionTask(r.session) || {}).number, ui.unread ? ui.unread[r.session.id] : undefined, Boolean(r.session.pendingQuestion), (mergeLabel(r.session.routeState && r.session.routeState.task) || {}).text, (() => { const a = attention(r.session, { now: now(), silentMin: ui.silentMin ?? SILENT_DEFAULT_MIN, unread: Boolean(ui.unread && ui.unread[r.session.id] === true), acked: (ui.acked || {})[r.session.id] || '' }); return `${a.state}:${a.blink}:${a.minutes}`; })()];
     const sig = JSON.stringify([ui.selected, activeProject, query, groupMenu, sideKit.sig(), groups.pinned.map(rowSig), groups.projects.map((p) => [p.project, p.id, p.rows.map(rowSig)])]);
     const shown = groups.pinned.length + groups.projects.length;
     listEmpty.hidden = all.length > 0 || (projectsList !== null && projectsList.length > 0);
@@ -1360,6 +1385,11 @@ export function createView(doc, refs, deps) {
         node.replaceChildren(h(doc, 'span', { text }));
         break;
       }
+      case 'needs': {
+        node.dataset.needs = 'true';
+        node.replaceChildren(askBadge(t('attn.need_reply')));
+        break;
+      }
       case 'actions': {
         const copy = h(doc, 'button', { type: 'button', class: 'icon-btn small', 'aria-label': t('chat.copy'), title: t('chat.copy') }, icon(doc, 'i-copy'));
         copy.addEventListener('click', () => handlers.onCopy(item.text));
@@ -1370,7 +1400,10 @@ export function createView(doc, refs, deps) {
       default: {
         const dots = h(doc, 'span', { class: 'dots', 'aria-hidden': 'true' }, h(doc, 'i'), h(doc, 'i'), h(doc, 'i'));
         node.replaceChildren(dots, h(doc, 'span', { text: t('chat.running') }),
-          item.since > 0 ? h(doc, 'span', { class: 'elapsed', 'data-since': item.since, text: durationText(now() - item.since) }) : false);
+          item.since > 0 ? h(doc, 'span', { class: 'elapsed', 'data-since': item.since, text: durationText(now() - item.since) }) : false,
+          h(doc, 'span', { class: 'silent-note', hidden: true, 'data-last': item.last || 0 },
+            h(doc, 'span', { class: 'silent-text' }),
+            (() => { const b = h(doc, 'button', { type: 'button', class: 'link-btn silent-cancel', text: t('attn.interrupt') }); b.addEventListener('click', () => { if (currentTrace) handlers.onCancel(currentTrace); }); return b; })()));
       }
     }
   }
@@ -2126,6 +2159,15 @@ export function createView(doc, refs, deps) {
       const text = timeText(Number(node.dataset.at));
       if (node.textContent !== text) node.textContent = text;
     }
+    const silentMin = (current.ui && current.ui.silentMin) ?? SILENT_DEFAULT_MIN;
+    for (const node of doc.querySelectorAll('.silent-note[data-last]')) {
+      const last = Number(node.dataset.last);
+      const minutes = silentMin > 0 && last > 0 ? Math.floor((now() - last) / 60000) : 0;
+      const show = minutes >= silentMin && silentMin > 0;
+      node.hidden = !show;
+      const textNode = node.querySelector('.silent-text');
+      if (show && textNode) { const text = t('attn.silent_line', { n: minutes }); if (textNode.textContent !== text) textNode.textContent = text; }
+    }
     for (const node of doc.querySelectorAll('[data-ago]')) {
       const text = agoText(Number(node.dataset.ago));
       if (node.textContent !== text) node.textContent = text;
@@ -2164,6 +2206,7 @@ export function createView(doc, refs, deps) {
       const wide = Boolean(win && win.matchMedia && win.matchMedia(WIDE_QUERY).matches);
       railButton.setAttribute('aria-pressed', String(railOpen === null ? wide : railOpen));
       renderTheme(ui.theme);
+      renderToggles(ui);
       renderList(model, ui);
       renderChat(model, ui);
       renderRail(session);

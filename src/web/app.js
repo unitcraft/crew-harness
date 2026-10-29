@@ -9,6 +9,8 @@ import {
   initialModel, reduce, makeEvent, nextStep, normalizeTheme, nextTheme, THEME_KEY, beginSwitch, undoSwitch,
   addDraft, dropDrafts, patchDraft, nameFromText,
 } from './state.js';
+import { waitingKeys, waitKey, SILENT_DEFAULT_MIN } from './attention.js';
+import { createNotifier } from './notify.js';
 import { t } from './strings.js';
 import { createView } from './view.js';
 import { createQueue } from './queue.js';
@@ -57,6 +59,14 @@ function applyTheme(value) {
 
 document.title = t('app.title');
 
+// Внимание к сессии (задача 192.14): заголовок «(N) …», значок вкладки, уведомление и «динь»; выключатели помнятся в localStorage.
+const notifier = createNotifier({
+  doc: document, win: globalThis, storage: (() => { try { return globalThis.localStorage; } catch { return null; } })(),
+  timers: { every: (fn, ms) => { const id = setInterval(fn, ms); return () => clearInterval(id); } },
+  Notification: globalThis.Notification, AudioContext: globalThis.AudioContext || globalThis.webkitAudioContext,
+  baseTitle: t('app.title'), blinkText: t('attn.tab_title'),
+});
+
 let model = initialModel();
 let status = { state: 'connecting' };
 const UNREAD_KEY = 'crew-console-unread';
@@ -72,7 +82,7 @@ function saveUnread(value) {
 // ссылка на сессию (#s=<id>): после загрузки журнала страница её открывает
 const linked = /^#s=(.+)$/.exec(globalThis.location ? globalThis.location.hash : '');
 const ui = {
-  selected: null, projects: null, pane: 'list', flash: '', flashTone: 'error', awaiting: linked ? decodeURIComponent(linked[1]) : null, theme: readTheme(), pins: {}, unread: readUnread(),
+  selected: null, projects: null, pane: 'list', flash: '', flashTone: 'error', awaiting: linked ? decodeURIComponent(linked[1]) : null, theme: readTheme(), pins: {}, unread: readUnread(), acked: {}, silentMin: SILENT_DEFAULT_MIN, notify: { bell: notifier.bellOn(), sound: notifier.soundOn(), denied: false },
 };
 applyTheme(ui.theme);
 
@@ -118,6 +128,19 @@ function draw() {
     ui.pane = 'chat';
     ui.awaiting = null;
   }
+  // открытая и видимая сессия, которая ждёт, считается замеченной: подсветка в списке гаснет
+  const viewing = typeof document.hasFocus === 'function' ? document.hasFocus() && !document.hidden : !document.hidden;
+  const opened = ui.selected ? model.sessions[ui.selected] : undefined;
+  if (viewing && opened && !opened.draft) {
+    const key = waitKey(opened);
+    if (key !== '' && ui.acked[opened.id] !== key) ui.acked = { ...ui.acked, [opened.id]: key };
+  }
+  const all = Object.values(model.sessions);
+  for (const x of all) { const m = x.routeState && x.routeState.crew ? x.routeState.crew.silentMinutes : -1; if (m >= 0) { ui.silentMin = m; break; } }
+  const names = {};
+  for (const x of all) names[x.id] = x.name;
+  notifier.update(waitingKeys(all, ui.acked), names, ui.selected || '');
+  ui.notify = { bell: notifier.bellOn(), sound: notifier.soundOn(), denied: ui.notify.denied };
   view.render(model, ui, status);
 }
 
@@ -207,6 +230,12 @@ const handlers = {
     if (ui.unread[trace]) { ui.unread = { ...ui.unread, [trace]: false }; saveUnread(ui.unread); }
     render();
   },
+  async onBell() {
+    const on = await notifier.setBell(!notifier.bellOn());
+    ui.notify = { bell: on, sound: notifier.soundOn(), denied: !on && typeof globalThis.Notification === 'function' && globalThis.Notification.permission === 'denied' };
+    render();
+  },
+  onSound() { notifier.setSound(!notifier.soundOn()); render(); },
   onUnread(trace, on) { ui.unread = { ...ui.unread, [trace]: on }; saveUnread(ui.unread); render(); },
   onMoveSession(trace, projectId) { send('session_move', trace, nextStep(model, trace), { project_id: projectId }); },
   onDeleteSession(trace, branch = '') { send('session_delete', trace, nextStep(model, trace), branch ? { branch } : {}); },
@@ -405,6 +434,10 @@ async function start() {
     status: document.getElementById('status'), overlay: document.getElementById('overlay'),
   }, { agents, now: ctx.now, handlers, registryFailed, imageSrc: mock ? mock.mockImageSrc : undefined, projectsApi });
   setInterval(() => view.tick(), TICK_MS);
+  setInterval(() => render(), 30000); // «молчит N мин» в списке обновляется сам
+  document.addEventListener('visibilitychange', () => { notifier.visibilityChanged(); render(); });
+  globalThis.addEventListener('focus', () => { notifier.visibilityChanged(); render(); });
+  globalThis.addEventListener('blur', () => notifier.visibilityChanged());
   transport = createTransport({
     mode: picked.mode, url: picked.url,
     server: mock ? mock.createMockServer({ now: ctx.now, machines: true }) : undefined,

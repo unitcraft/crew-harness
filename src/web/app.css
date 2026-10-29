@@ -1380,3 +1380,21 @@ input[aria-invalid="true"] { border-color: var(--danger); }
 .req-note { font-size: 12px; }
 .rail .req-card .link-btn { margin-left: 0; }
 .req-commands { max-height: 220px; overflow: auto; }
+
+/* ---- внимание к сессии (задача 192.14) */
+.side-head-tools { display: inline-flex; align-items: center; gap: 2px; }
+.attn-toggle[aria-pressed="true"] { color: var(--accent); }
+.session-item[data-attn="waiting"] .session-name { font-weight: 700; }
+.session-item[data-attn="error"] .session-name { color: var(--danger); }
+.dot[data-attn="waiting"] { background: var(--warn); animation: none; }
+.dot[data-attn="silent"] { background: var(--warn); animation: none; }
+.dot[data-attn="unread"] { background: var(--accent); animation: none; }
+.dot[data-attn="error"] { background: var(--danger); animation: none; }
+.session-item[data-blink="true"] .dot[data-attn="waiting"], .session-item[data-blink="true"] .attn-label[data-attn="waiting"] { animation: attn-blink 2s ease-in-out infinite; }
+.attn-label { flex: none; font-size: 11px; font-weight: 600; color: var(--warn); white-space: nowrap; }
+.attn-label[data-attn="error"] { color: var(--danger); }
+.item[data-needs="true"], [data-needs="true"] { margin-top: 2px; }
+.silent-note { display: inline-flex; align-items: center; gap: 8px; margin-left: 10px; color: var(--warn); font-size: 12px; }
+.silent-note[hidden] { display: none; }
+@keyframes attn-blink { 50% { opacity: .25; } }
+@media (prefers-reduced-motion: reduce) { .session-item[data-blink="true"] .dot, .session-item[data-blink="true"] .attn-label { animation: none; } }

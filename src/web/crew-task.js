@@ -62,6 +62,8 @@ export function parseCrewTask(input) {
     confirmWord: str(src.confirm_word),
     overWord: str(src.over_word),
     candidates: num(src.candidates),
+    // задача 192.14: сколько минут молчания агента при идущем ходе считать «молчит» (настройка хаба agent_silent_minutes); -1 — хаб не прислал
+    silentMinutes: Number.isFinite(src.silent_minutes) && src.silent_minutes >= 0 ? Math.floor(src.silent_minutes) : -1,
     // дополнения открытых задач, применённые сразу (задача 192.7): серые строки ленты с кнопкой «Отменить»
     extensions: (Array.isArray(src.extensions) ? src.extensions : []).filter(isObject).map((x) => ({ id: num(x.id), task: num(x.task), title: str(x.title), text: str(x.text), at: num(x.at), undone: x.undone === true })).filter((x) => x.id > 0),
     // открытые задачи, к которым можно отнести работу: дочерняя задача эпика K (любая открытая задача становится эпиком с первой дочерней) или «Дополнить K»
