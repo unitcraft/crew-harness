@@ -3,11 +3,11 @@ module crew_harness.machine_run_machines
 
 import alula.machine.{text_of_file, Null}
 import alula.engine.{Incoming, EventKind, StepEnvironment}
-import crew_harness.machines.{machine_files, all_registry}
+import crew_harness.machines.{machine_files, product_registry}
 import alula.machine_run.{AlulaMachine, AlulaState, load_alula_machine}
 
 fn ac_load(file str) -> AlulaMachine {
-    match load_alula_machine(text_of_file(machine_files(), file), all_registry()) {
+    match load_alula_machine(text_of_file(machine_files(), file), product_registry()) {
         Ok(m) => m
         Err(e) => panic("${file} does not load: ${e}")
     }
@@ -131,13 +131,4 @@ test "ac chat: the end takes nothing" {
     ro done = ac_feed(m, ac_open(m), stamped(EventKind.Answered, "agent_done", Some("agent-1"), ""))
     assert(!m.accepts_signal(done, "user_message"))
     assert(!m.accepts_signal(done, "cancel_request"))
-}
-
-test "ac common event: a signal of the machine of the session start is taken in a state and not in the pause or the end" {
-    ro m = ac_load("session_start.alula.json")
-    ro base = AlulaState { name: "Gate2", started: true, input: Null, data: m.initial_data, taken: []str.new() }
-    assert(m.accepts_signal(base, "human_stop"))
-    assert(m.accepts_signal(base, "parent_stop"))
-    assert(!m.accepts_signal(ac_named(base, "Pause"), "human_stop"))
-    assert(!m.accepts_signal(ac_named(base, "End"), "human_stop"))
 }

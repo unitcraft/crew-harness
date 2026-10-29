@@ -1,13 +1,13 @@
 // v213_test.nv - task 149: the machines of the product are written at Alula 2.13 (format 2.14): the keys `Запрос:` and `Читает:`, `сигнал(…)`, the column `сигналы`, ASCII signs, the JSON names in brackets,
 // no section of the expansion of a fragment; every JSON is what `compile` makes of its file; the circles `compile -> render -> compile` and `convert ru -> en -> ru` give an equal tree in both languages,
-// the line of connection of the fragment has the parameter `сигнал_остановки`.
+// the line of connection names the library beside the machine (the machines of the methodology with «Пауза» and `сигнал_остановки` left the product with task 249).
 module crew_harness.alula_eq_machines
 
 import std.text
 import alula.machine.{text_of_file}
 import crew_harness.machines.{machine_files, table_files, connects_library}
 
-fn all_tables() -> []str => ["chat.alula.md", "cycle_check.alula.md", "dialog.alula.md", "dialog_steps.alula.md", "session_start.alula.md", "task_runner.alula.md", "agent_step.alula.md"]
+fn all_tables() -> []str => ["chat.alula.md", "dialog.alula.md"]
 
 fn tree_name(name str) -> str => name.replace(".alula.md", ".alula.json")
 
@@ -47,7 +47,7 @@ test "v213 tables write signals" {
         ro text = text_of_file(table_files(), name)
         if text.contains("| сигнал(") { with_signals += 1 }
     }
-    assert(with_signals >= 7)
+    assert(with_signals == 2)
 }
 
 test "v213 tables write request and reads" {
@@ -94,19 +94,17 @@ test "v213 check takes every table" {
     }
 }
 
-test "v213 the connection of the library has the signal parameter" {
-    for name in ["dialog_steps.alula.md", "session_start.alula.md", "cycle_check.alula.md", "agent_step.alula.md"] {
+test "v213 the connection of the library names its file" {
+    for name in all_tables() {
         ro text = text_of_file(table_files(), name)
-        // Alula 2.26 (AL-140): the connection is the heading `### Пауза` with the table of the values of the parameters
-        assert(text.contains("### Пауза\n- Файл: libs/pause.alula.md\n"))
-        assert(text.contains("| сигнал_остановки | "))
-        assert(!text.contains("Пауза(сигнал_остановки:"))
-        assert(!text.contains("слово_остановки"))
+        // Alula 2.26 (AL-140): the connection is the heading with the name of the library, its file beside the machine and its hash
+        assert(text.contains("### Отмена запроса\n- Файл: libs/call_cancel.alula.md\n- Хеш: "))
+        assert(!text.contains("Отмена запроса("))
     }
 }
 
 test "v213 circle of every machine that includes the fragment" {
-    for name in ["dialog_steps.alula.md"] {
+    for name in all_tables() {
         // the Russian circle only: a machine that connects a library does not go through the English file on the package 0.9.0 (task 239, `connects_library`)
         for lang in ["ru"] {
             ro first = run_with(["compile", "/m/${name}"], one("/m/${name}", text_of_file(table_files(), name)))

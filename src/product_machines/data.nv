@@ -1,6 +1,6 @@
 // data.nv - the machines of the product as data that the programs embed: the chat (`machines/product/chat.alula.json`) and the many-turn chat `dialog` that the hub runs, with the table of the journal codes
 // of the product (`machines/product/journal.md`). The package `alula` knows the language only (two primitives, 35 codes, spec 7a); the registry of the product is the language and these codes: the
-// machines of the product call no primitive of their own. The tests read the same files and the machines of the methodology from `crew_harness.machines` (tests only).
+// machines of the product call no primitive of their own. The tests read the same files from `crew_harness.machines` (tests only).
 module crew_harness.product_machines
 
 import alula.machine.{NamedText, Registry, load_host}

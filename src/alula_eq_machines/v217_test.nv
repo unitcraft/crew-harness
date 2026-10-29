@@ -1,13 +1,14 @@
 // v217_test.nv - task 151: the machines of the product are written at Alula 2.17 (format 2.17): no brackets after the names (the automatic names and the section `## Имена`), the dash in the
 // table `Запрос`, the party of a free input where the user writes when he wants to; every JSON is what `compile` makes of its file; the circles `compile -> render -> compile` and `convert ru -> en -> ru`
-// give an equal tree in both languages, and the trees differ from the trees of 2.14 only by the key `counter` of the three machines of the chat.
+// give an equal tree in both languages, and the trees differ from the trees of 2.14 only by the key `counter` of the machines of the chat (the machines of the methodology left the product
+// with task 249).
 module crew_harness.alula_eq_machines
 
 import std.text
 import alula.machine.{text_of_file}
 import crew_harness.machines.{machine_files, table_files}
 
-fn tables217() -> []str => ["chat.alula.md", "cycle_check.alula.md", "dialog.alula.md", "dialog_steps.alula.md", "session_start.alula.md", "task_runner.alula.md", "agent_step.alula.md"]
+fn tables217() -> []str => ["chat.alula.md", "dialog.alula.md"]
 
 // ` (latin)` right after a name in a row of a table or in a heading of a state
 fn has_bracket_after_name217(line str) -> bool {
@@ -54,36 +55,19 @@ test "v217 the tables that need rows have the section of the names" {
     for name in tables217() {
         if text_of_file(table_files(), name).contains("## Имена") { with_names += 1 }
     }
-    assert(with_names >= 6)
+    assert(with_names == 2)
 }
 
-test "v217 the task runner has its rows of the names" {
-    ro text = text_of_file(table_files(), "task_runner.alula.md")
-    assert(text.contains("## Имена\n"))
-    assert(text.contains("| последняя_проверка_реализации | last_review |"))
-}
-
-// the number of the bars `|` of a row of a table
-fn bars217(line str) -> int {
-    mut n = 0
-    for c in line.chars() { if "${c}" == "|" { n += 1 } }
-    n
-}
-
-// Alula 2.26 (AL-138): the table `Запрос` has no column `читает`; the dash of an expression is an empty cell, the same name (4.2)
+// Alula 2.26 (AL-138): the table `Запрос` has no column `читает`
 test "v217 the tables use the default expression of the request" {
-    mut same_name = 0
     for name in tables217() {
         for line in text_of_file(table_files(), name).split("\n") {
             assert(!line.contains("| поле запроса | выражение | читает |"))
-            if line.starts_with("| ") && line.ends_with(" |  |") && bars217(line) == 3 { same_name += 1 }
         }
     }
-    assert(same_name >= 10)
 }
 
 test "v217 the chat machines write their user as a free input" {
-    // `dialog_steps` keeps the gates of its user: its state ЖДУ reads data through a table `Запрос` of the executor, which a free input does not have
     for name in ["chat.alula.md", "dialog.alula.md"] {
         ro text = text_of_file(table_files(), name)
         assert(text.contains("| пользователь | user | human(итог ИсходВорот) | — |"))
@@ -95,18 +79,11 @@ test "v217 the chat machines write their user as a free input" {
     }
 }
 
-test "v217 the other machines keep the counters of their gates" {
-    ro text = text_of_file(table_files(), "session_start.alula.md")
-    assert(text.contains("попытка_вратаря"))
-    assert(text.contains("попытка_усиленного"))
-}
-
-test "v217 the trees of the chat machines have no counter of the user and the other keeps it" {
+test "v217 the trees of the chat machines have no counter of the user" {
     for name in ["chat.alula.json", "dialog.alula.json"] {
         ro text = text_of_file(machine_files(), name).replace(" ", "")
         assert(!text.contains("\"counter\":\"user_attempt\""))
     }
-    assert(text_of_file(machine_files(), "dialog_steps.alula.json").replace(" ", "").contains("\"counter\":\"user_attempt\""))
 }
 
 test "v217 the trees keep the counters of the agents" {

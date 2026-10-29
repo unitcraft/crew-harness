@@ -8,7 +8,7 @@ import std.io.{IoCapture, mock_io}
 import std.os.{MockOs, mock_os}
 import alula.machine.{NamedText}
 import alula.alula_cli.{execute}
-import crew_harness.machines.{methodology_registry_text, all_journal_text, library_files_in, callee_files_in}
+import crew_harness.machines.{product_journal_text, library_files_in}
 import alula.machine_text.{translate_checked, translate_report, render_machine, render_summary}
 
 /// Ran: what a run of the program left: the exit code, the standard output, the standard error, the text of the file `back` (empty when it is not there).
@@ -32,18 +32,14 @@ fn run_full(argv []str, files []NamedText, back_path str, fail_writes bool) -> R
             make_parents(f.name)
             ro written = write_text(Path.posix(f.name), f.text)
         }
-        // the host of the machines beside the files of every folder that has none (the program reads `registry.md` and `journal.md` from the folder of the file)
+        // the host of the machines beside the files of every folder that has none (the program reads `journal.md` from the folder of the file; the product has no `registry.md`: its registry is
+        // the language, task 249)
         for dir in host_dirs(files) {
-            ro registry = write_text(Path.posix("${dir}/registry.md"), methodology_registry_text())
-            ro journal = write_text(Path.posix("${dir}/journal.md"), all_journal_text())
-            // the libraries of the methodology beside the machines (Alula 2.26, section 9): the tables connect `libs/pause.alula.md` and `libs/cycle_arithmetic.alula.md`
+            ro journal = write_text(Path.posix("${dir}/journal.md"), product_journal_text())
+            // the library of the product beside the machines (Alula 2.26, section 9): the tables connect `libs/call_cancel.alula.md`
             for lib in library_files_in(dir) {
                 make_parents(lib.name)
                 ro written_lib = write_text(Path.posix(lib.name), lib.text)
-            }
-            // the called machines beside a table with a party `machine <имя>` (Alula 0.27, AL-146): the types of the party come from them
-            for callee in callee_files_in(dir, files) {
-                ro written_callee = write_text(Path.posix(callee.name), callee.text)
             }
         }
         if fail_writes { fs.fail_writes() }
@@ -86,17 +82,6 @@ fn dir_of(name str) -> str {
         i += 1
     }
     kept.join("/")
-}
-
-// Does a file of the folder belong to a machine of the methodology (the agent step, the cycle check, the session start, the task runner)?
-fn for_methodology(files []NamedText, dir str) -> bool {
-    for f in files {
-        if dir_of(f.name) != dir { continue }
-        for word in ["agent_step", "cycle_check", "session_start", "task_runner"] {
-            if f.name.contains(word) { return true }
-        }
-    }
-    false
 }
 
 // Every folder above the file is there.

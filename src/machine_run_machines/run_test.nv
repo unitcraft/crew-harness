@@ -3,17 +3,17 @@ module crew_harness.machine_run_machines
 
 import alula.machine.{Value, Int, value_equal}
 import alula.engine.{FailCode, Incoming, EventKind, StepEnvironment, fail_code_word}
-import crew_harness.machines.{all_registry}
+import crew_harness.machines.{product_registry}
 import alula.machine_run.{load_alula_machine}
 
 test "loads" {
     for name in ["chat.alula.json", "dialog.alula.json"] {
-        match load_alula_machine(machine_text(name), all_registry()) {
+        match load_alula_machine(machine_text(name), product_registry()) {
             Ok(m) => assert(m.def.states.len() >= 3)
             Err(e) => assert(e == "")
         }
     }
-    match load_alula_machine("{}", all_registry()) {
+    match load_alula_machine("{}", product_registry()) {
         Ok(m) => assert(false)
         Err(e) => assert(e.contains("kind"))
     }

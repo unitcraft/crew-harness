@@ -1,12 +1,13 @@
 // v212_test.nv - task 125: the program `alula` and the machines of the product on Alula 2.12: every machine file says `format: 2.12`, every JSON is what `compile` makes of its file, a file of 2.11
-// is refused with a message that names 2.12, the circles `compile -> render -> compile` and `convert ru -> en -> ru` give an equal tree with the line of connection of the fragment "Pause".
+// is refused with a message that names 2.12, the circles `compile -> render -> compile` and `convert ru -> en -> ru` give an equal tree with the line of connection of a library (the machines of the
+// methodology and their «Пауза» left the product with task 249; the product connects «Отмена запроса»).
 module crew_harness.alula_eq_machines
 
 import std.text
 import alula.machine.{NamedText, text_of_file}
 import crew_harness.machines.{machine_files, table_files}
 
-fn product_tables() -> []str => ["chat.alula.md", "cycle_check.alula.md", "dialog.alula.md", "dialog_steps.alula.md", "session_start.alula.md", "agent_step.alula.md"]
+fn product_tables() -> []str => ["chat.alula.md", "dialog.alula.md"]
 
 fn json_of_table(name str) -> str => name.replace(".alula.md", ".alula.json")
 
@@ -69,26 +70,16 @@ test "v212 json of 2.11 is refused" {
     assert(made.code != 0)
 }
 
-// Alula 2.26 (AL-140): the connection of the library «Пауза» is a heading `### Пауза` with the file beside the machine, its hash and the table of the values of the parameters
+// Alula 2.26 (AL-140): the connection of a library is a heading with the name of the library, the file beside the machine and its hash
 test "v212 the connection of the library in the written file" {
-    ro made = run_with(["render", "/m/dialog_steps.alula.json"], one("/m/dialog_steps.alula.json", text_of_file(machine_files(), "dialog_steps.alula.json")))
+    ro made = run_with(["render", "/m/dialog.alula.json"], one("/m/dialog.alula.json", text_of_file(machine_files(), "dialog.alula.json")))
     assert(made.code == 0)
-    assert(made.out.contains("## Подключения\n\n### Пауза\n- Файл: libs/pause.alula.md\n- Хеш: "))
-    assert(made.out.contains("| сигнал_остановки | \"halt\" |"))
-    assert(made.out.contains("| вход_заново | \"ничего\" |"))
-    assert(!made.out.contains("Пауза("))
-}
-
-test "v212 the connection of the library in english" {
-    ro made = run_with(["render", "/m/dialog_steps.alula.json", "--language", "en"], one("/m/dialog_steps.alula.json", text_of_file(machine_files(), "dialog_steps.alula.json")))
-    assert(made.code == 0)
-    assert(made.out.contains("## Includes\n"))
-    assert(made.out.contains("- File: libs/pause.en.alula.md\n- Hash: "))
-    assert(!made.out.contains("Pause(halt_signal: "))
+    assert(made.out.contains("## Подключения\n\n### Отмена запроса\n- Файл: libs/call_cancel.alula.md\n- Хеш: "))
+    assert(!made.out.contains("Отмена запроса("))
 }
 
 test "v212 circle of every machine that includes the fragment" {
-    for name in ["dialog_steps.alula.json", "session_start.alula.json", "cycle_check.alula.json", "agent_step.alula.json", "dialog.alula.json"] {
+    for name in ["dialog.alula.json"] {
         assert(circle(name, "ru") == "")
         assert(circle(name, "en") == "")
         assert(convert_circle(name) == "")

@@ -6,11 +6,11 @@ import std.text
 import std.encoding.json.{Json, JsonValue, JsonObject}
 import alula.machine.{text_of_file}
 import alula.machine_text.{translate_checked_with, translate_report_with, TranslateReport, render_machine, RenderReport, error_text}
-import crew_harness.machines.{machine_files, all_registry, translation_files, connects_library, part_mended}
+import crew_harness.machines.{machine_files, product_registry, translation_files, connects_library, part_mended}
 
 fn machine_json(name str) -> str => text_of_file(machine_files(), name)
 
-fn checked(text str) -> TranslateReport => translate_checked_with(text, all_registry(), translation_files())
+fn checked(text str) -> TranslateReport => translate_checked_with(text, product_registry(), translation_files())
 
 // The keys that a circle does not keep: the title (the header of the canonical file holds the Latin name of the machine, 1b (а)) and the version of the language of the tree.
 fn dropped_keys() -> []str => ["title", "alula_version"]

@@ -1,118 +1,24 @@
-// data.nv - the machines of the product and the machines of the methodology (kept here until task 159) as data, compiled into the program and the tests with `embed_str` (a path is read relative to this file):
-// the JSON `kind: machine`, the tables, the scenarios, the registry of the primitives and the table of the journal codes of each owner (`machines/product/`, `machines/methodology/`). The package `alula` knows
-// only the language (one primitive, 35 codes, spec 7a); the rest is registered here: `product_registry()` and `methodology_registry()` are the language and the data of the owner.
+// data.nv - the machines of the product as data, compiled into the tests with `embed_str` (a path is read relative to this file): the JSON `kind: machine`, the tables, the scenarios, the library and
+// the table of the journal codes of the product (`machines/product/`). The package `alula` knows only the language (one primitive, 35 codes, spec 7a); `product_registry()` is the language and the codes
+// of the product. The machines of the methodology left the product with task 249 (it closes task 159, their move): they live in the set of the methodology (its repository, `alula-machines/`).
 module crew_harness.machines
 
-import alula.machine.{NamedText, Registry, text_of_file, HostRegistryData, parse_registry_table, load_host, host_registry, parse_journal, journal_find}
-import alula.machine_run.{NestedRegistry, load_alula_machine}
+import alula.machine.{NamedText, Registry, text_of_file, load_host}
 
-/// The machines as JSON, by the name of the file (`chat.alula.json`): the product and the methodology.
+/// The machines as JSON, by the name of the file (`chat.alula.json`).
 export fn machine_files() -> []NamedText => [
-    NamedText { name: "agent_step.alula.json", text: embed_str("../../machines/methodology/agent_step.alula.json") },
     NamedText { name: "chat.alula.json", text: embed_str("../../machines/product/chat.alula.json") },
-    NamedText { name: "cycle_check.alula.json", text: embed_str("../../machines/methodology/cycle_check.alula.json") },
-    NamedText { name: "dialog.alula.json", text: embed_str("../../machines/product/dialog.alula.json") },
-    NamedText { name: "dialog_steps.alula.json", text: embed_str("../../machines/methodology/dialog_steps.alula.json") },
-    NamedText { name: "session_start.alula.json", text: embed_str("../../machines/methodology/session_start.alula.json") },
-    NamedText { name: "task_runner.alula.json", text: embed_str("../../machines/methodology/task_runner.alula.json") }
+    NamedText { name: "dialog.alula.json", text: embed_str("../../machines/product/dialog.alula.json") }
 ]
 
 /// The machines written as tables, by the name of the file (`chat.alula.md`).
 export fn table_files() -> []NamedText => [
-    NamedText { name: "agent_step.alula.md", text: embed_str("../../machines/methodology/agent_step.alula.md") },
     NamedText { name: "chat.alula.md", text: embed_str("../../machines/product/chat.alula.md") },
-    NamedText { name: "cycle_check.alula.md", text: embed_str("../../machines/methodology/cycle_check.alula.md") },
-    NamedText { name: "dialog.alula.md", text: embed_str("../../machines/product/dialog.alula.md") },
-    NamedText { name: "dialog_steps.alula.md", text: embed_str("../../machines/methodology/dialog_steps.alula.md") },
-    NamedText { name: "session_start.alula.md", text: embed_str("../../machines/methodology/session_start.alula.md") },
-    NamedText { name: "task_runner.alula.md", text: embed_str("../../machines/methodology/task_runner.alula.md") }
+    NamedText { name: "dialog.alula.md", text: embed_str("../../machines/product/dialog.alula.md") }
 ]
 
-/// The scenarios, by the name of the file (`chat-ack.alula.test.json`): the product and the methodology.
+/// The scenarios, by the name of the file (`chat-ack.alula.test.json`).
 export fn test_files() -> []NamedText => [
-    NamedText { name: "agent-step-accounting-1.alula.test.json", text: embed_str("../../machines/methodology/tests/agent-step-accounting-1.alula.test.json") },
-    NamedText { name: "agent-step-agent-turn-1.alula.test.json", text: embed_str("../../machines/methodology/tests/agent-step-agent-turn-1.alula.test.json") },
-    NamedText { name: "agent-step-agent-turn-2.alula.test.json", text: embed_str("../../machines/methodology/tests/agent-step-agent-turn-2.alula.test.json") },
-    NamedText { name: "agent-step-agent-turn-3.alula.test.json", text: embed_str("../../machines/methodology/tests/agent-step-agent-turn-3.alula.test.json") },
-    NamedText { name: "agent-step-agent-turn-4.alula.test.json", text: embed_str("../../machines/methodology/tests/agent-step-agent-turn-4.alula.test.json") },
-    NamedText { name: "agent-step-agent-turn-5.alula.test.json", text: embed_str("../../machines/methodology/tests/agent-step-agent-turn-5.alula.test.json") },
-    NamedText { name: "agent-step-agent-turn-6.alula.test.json", text: embed_str("../../machines/methodology/tests/agent-step-agent-turn-6.alula.test.json") },
-    NamedText { name: "agent-step-agent-turn-7.alula.test.json", text: embed_str("../../machines/methodology/tests/agent-step-agent-turn-7.alula.test.json") },
-    NamedText { name: "agent-step-agent-turn-8.alula.test.json", text: embed_str("../../machines/methodology/tests/agent-step-agent-turn-8.alula.test.json") },
-    NamedText { name: "agent-step-agent-turn-9.alula.test.json", text: embed_str("../../machines/methodology/tests/agent-step-agent-turn-9.alula.test.json") },
-    NamedText { name: "agent-step-budget-1.alula.test.json", text: embed_str("../../machines/methodology/tests/agent-step-budget-1.alula.test.json") },
-    NamedText { name: "agent-step-budget-2.alula.test.json", text: embed_str("../../machines/methodology/tests/agent-step-budget-2.alula.test.json") },
-    NamedText { name: "agent-step-budget-3.alula.test.json", text: embed_str("../../machines/methodology/tests/agent-step-budget-3.alula.test.json") },
-    NamedText { name: "agent-step-budget-4.alula.test.json", text: embed_str("../../machines/methodology/tests/agent-step-budget-4.alula.test.json") },
-    NamedText { name: "agent-step-common-1.alula.test.json", text: embed_str("../../machines/methodology/tests/agent-step-common-1.alula.test.json") },
-    NamedText { name: "agent-step-common-2.alula.test.json", text: embed_str("../../machines/methodology/tests/agent-step-common-2.alula.test.json") },
-    NamedText { name: "agent-step-common-3.alula.test.json", text: embed_str("../../machines/methodology/tests/agent-step-common-3.alula.test.json") },
-    NamedText { name: "agent-step-common-4.alula.test.json", text: embed_str("../../machines/methodology/tests/agent-step-common-4.alula.test.json") },
-    NamedText { name: "agent-step-common-5.alula.test.json", text: embed_str("../../machines/methodology/tests/agent-step-common-5.alula.test.json") },
-    NamedText { name: "agent-step-continuation-1.alula.test.json", text: embed_str("../../machines/methodology/tests/agent-step-continuation-1.alula.test.json") },
-    NamedText { name: "agent-step-continuation-2.alula.test.json", text: embed_str("../../machines/methodology/tests/agent-step-continuation-2.alula.test.json") },
-    NamedText { name: "agent-step-end-end-1.alula.test.json", text: embed_str("../../machines/methodology/tests/agent-step-end-end-1.alula.test.json") },
-    NamedText { name: "agent-step-end-errored-1.alula.test.json", text: embed_str("../../machines/methodology/tests/agent-step-end-errored-1.alula.test.json") },
-    NamedText { name: "agent-step-end-halted-1.alula.test.json", text: embed_str("../../machines/methodology/tests/agent-step-end-halted-1.alula.test.json") },
-    NamedText { name: "agent-step-end-halted-10.alula.test.json", text: embed_str("../../machines/methodology/tests/agent-step-end-halted-10.alula.test.json") },
-    NamedText { name: "agent-step-end-halted-11.alula.test.json", text: embed_str("../../machines/methodology/tests/agent-step-end-halted-11.alula.test.json") },
-    NamedText { name: "agent-step-end-halted-2.alula.test.json", text: embed_str("../../machines/methodology/tests/agent-step-end-halted-2.alula.test.json") },
-    NamedText { name: "agent-step-end-halted-3.alula.test.json", text: embed_str("../../machines/methodology/tests/agent-step-end-halted-3.alula.test.json") },
-    NamedText { name: "agent-step-end-halted-4.alula.test.json", text: embed_str("../../machines/methodology/tests/agent-step-end-halted-4.alula.test.json") },
-    NamedText { name: "agent-step-end-halted-5.alula.test.json", text: embed_str("../../machines/methodology/tests/agent-step-end-halted-5.alula.test.json") },
-    NamedText { name: "agent-step-end-halted-6.alula.test.json", text: embed_str("../../machines/methodology/tests/agent-step-end-halted-6.alula.test.json") },
-    NamedText { name: "agent-step-end-halted-7.alula.test.json", text: embed_str("../../machines/methodology/tests/agent-step-end-halted-7.alula.test.json") },
-    NamedText { name: "agent-step-end-halted-8.alula.test.json", text: embed_str("../../machines/methodology/tests/agent-step-end-halted-8.alula.test.json") },
-    NamedText { name: "agent-step-end-halted-9.alula.test.json", text: embed_str("../../machines/methodology/tests/agent-step-end-halted-9.alula.test.json") },
-    NamedText { name: "agent-step-flow-attempts.alula.test.json", text: embed_str("../../machines/methodology/tests/agent-step-flow-attempts.alula.test.json") },
-    NamedText { name: "agent-step-flow-cancel-open.alula.test.json", text: embed_str("../../machines/methodology/tests/agent-step-flow-cancel-open.alula.test.json") },
-    NamedText { name: "agent-step-flow-continue-outside.alula.test.json", text: embed_str("../../machines/methodology/tests/agent-step-flow-continue-outside.alula.test.json") },
-    NamedText { name: "agent-step-flow-death-between.alula.test.json", text: embed_str("../../machines/methodology/tests/agent-step-flow-death-between.alula.test.json") },
-    NamedText { name: "agent-step-flow-failure-no-result.alula.test.json", text: embed_str("../../machines/methodology/tests/agent-step-flow-failure-no-result.alula.test.json") },
-    NamedText { name: "agent-step-flow-failure-unknown-code.alula.test.json", text: embed_str("../../machines/methodology/tests/agent-step-flow-failure-unknown-code.alula.test.json") },
-    NamedText { name: "agent-step-flow-form-fix.alula.test.json", text: embed_str("../../machines/methodology/tests/agent-step-flow-form-fix.alula.test.json") },
-    NamedText { name: "agent-step-flow-happy.alula.test.json", text: embed_str("../../machines/methodology/tests/agent-step-flow-happy.alula.test.json") },
-    NamedText { name: "agent-step-flow-input-missing.alula.test.json", text: embed_str("../../machines/methodology/tests/agent-step-flow-input-missing.alula.test.json") },
-    NamedText { name: "agent-step-flow-input-without-context.alula.test.json", text: embed_str("../../machines/methodology/tests/agent-step-flow-input-without-context.alula.test.json") },
-    NamedText { name: "agent-step-flow-input-without-dialog-kind.alula.test.json", text: embed_str("../../machines/methodology/tests/agent-step-flow-input-without-dialog-kind.alula.test.json") },
-    NamedText { name: "agent-step-flow-input-without-kind.alula.test.json", text: embed_str("../../machines/methodology/tests/agent-step-flow-input-without-kind.alula.test.json") },
-    NamedText { name: "agent-step-flow-input-without-limits.alula.test.json", text: embed_str("../../machines/methodology/tests/agent-step-flow-input-without-limits.alula.test.json") },
-    NamedText { name: "agent-step-flow-input-without-profile.alula.test.json", text: embed_str("../../machines/methodology/tests/agent-step-flow-input-without-profile.alula.test.json") },
-    NamedText { name: "agent-step-flow-input-without-session.alula.test.json", text: embed_str("../../machines/methodology/tests/agent-step-flow-input-without-session.alula.test.json") },
-    NamedText { name: "agent-step-flow-input-without-step.alula.test.json", text: embed_str("../../machines/methodology/tests/agent-step-flow-input-without-step.alula.test.json") },
-    NamedText { name: "agent-step-flow-input-without-trace.alula.test.json", text: embed_str("../../machines/methodology/tests/agent-step-flow-input-without-trace.alula.test.json") },
-    NamedText { name: "agent-step-flow-other-party.alula.test.json", text: embed_str("../../machines/methodology/tests/agent-step-flow-other-party.alula.test.json") },
-    NamedText { name: "agent-step-flow-parent-wrong-id.alula.test.json", text: embed_str("../../machines/methodology/tests/agent-step-flow-parent-wrong-id.alula.test.json") },
-    NamedText { name: "agent-step-flow-pause-continue.alula.test.json", text: embed_str("../../machines/methodology/tests/agent-step-flow-pause-continue.alula.test.json") },
-    NamedText { name: "agent-step-flow-permission-human.alula.test.json", text: embed_str("../../machines/methodology/tests/agent-step-flow-permission-human.alula.test.json") },
-    NamedText { name: "agent-step-flow-policy-elevated-lens.alula.test.json", text: embed_str("../../machines/methodology/tests/agent-step-flow-policy-elevated-lens.alula.test.json") },
-    NamedText { name: "agent-step-flow-policy-elevated.alula.test.json", text: embed_str("../../machines/methodology/tests/agent-step-flow-policy-elevated.alula.test.json") },
-    NamedText { name: "agent-step-flow-restart-midturn.alula.test.json", text: embed_str("../../machines/methodology/tests/agent-step-flow-restart-midturn.alula.test.json") },
-    NamedText { name: "agent-step-flow-retries-exhausted.alula.test.json", text: embed_str("../../machines/methodology/tests/agent-step-flow-retries-exhausted.alula.test.json") },
-    NamedText { name: "agent-step-flow-stop-in-pause.alula.test.json", text: embed_str("../../machines/methodology/tests/agent-step-flow-stop-in-pause.alula.test.json") },
-    NamedText { name: "agent-step-flow-stop-in-permission.alula.test.json", text: embed_str("../../machines/methodology/tests/agent-step-flow-stop-in-permission.alula.test.json") },
-    NamedText { name: "agent-step-flow-stop-in-window.alula.test.json", text: embed_str("../../machines/methodology/tests/agent-step-flow-stop-in-window.alula.test.json") },
-    NamedText { name: "agent-step-flow-timeout.alula.test.json", text: embed_str("../../machines/methodology/tests/agent-step-flow-timeout.alula.test.json") },
-    NamedText { name: "agent-step-flow-transient-then-answer.alula.test.json", text: embed_str("../../machines/methodology/tests/agent-step-flow-transient-then-answer.alula.test.json") },
-    NamedText { name: "agent-step-pause-1.alula.test.json", text: embed_str("../../machines/methodology/tests/agent-step-pause-1.alula.test.json") },
-    NamedText { name: "agent-step-pause-2.alula.test.json", text: embed_str("../../machines/methodology/tests/agent-step-pause-2.alula.test.json") },
-    NamedText { name: "agent-step-pause-3.alula.test.json", text: embed_str("../../machines/methodology/tests/agent-step-pause-3.alula.test.json") },
-    NamedText { name: "agent-step-pause-4.alula.test.json", text: embed_str("../../machines/methodology/tests/agent-step-pause-4.alula.test.json") },
-    NamedText { name: "agent-step-permission-1.alula.test.json", text: embed_str("../../machines/methodology/tests/agent-step-permission-1.alula.test.json") },
-    NamedText { name: "agent-step-permission-2.alula.test.json", text: embed_str("../../machines/methodology/tests/agent-step-permission-2.alula.test.json") },
-    NamedText { name: "agent-step-policy-1.alula.test.json", text: embed_str("../../machines/methodology/tests/agent-step-policy-1.alula.test.json") },
-    NamedText { name: "agent-step-policy-2.alula.test.json", text: embed_str("../../machines/methodology/tests/agent-step-policy-2.alula.test.json") },
-    NamedText { name: "agent-step-policy-3.alula.test.json", text: embed_str("../../machines/methodology/tests/agent-step-policy-3.alula.test.json") },
-    NamedText { name: "agent-step-reply-validation-1.alula.test.json", text: embed_str("../../machines/methodology/tests/agent-step-reply-validation-1.alula.test.json") },
-    NamedText { name: "agent-step-reply-validation-2.alula.test.json", text: embed_str("../../machines/methodology/tests/agent-step-reply-validation-2.alula.test.json") },
-    NamedText { name: "agent-step-reply-validation-3.alula.test.json", text: embed_str("../../machines/methodology/tests/agent-step-reply-validation-3.alula.test.json") },
-    NamedText { name: "agent-step-reply-validation-4.alula.test.json", text: embed_str("../../machines/methodology/tests/agent-step-reply-validation-4.alula.test.json") },
-    NamedText { name: "agent-step-retry-1.alula.test.json", text: embed_str("../../machines/methodology/tests/agent-step-retry-1.alula.test.json") },
-    NamedText { name: "agent-step-retry-2.alula.test.json", text: embed_str("../../machines/methodology/tests/agent-step-retry-2.alula.test.json") },
-    NamedText { name: "agent-step-retry-3.alula.test.json", text: embed_str("../../machines/methodology/tests/agent-step-retry-3.alula.test.json") },
-    NamedText { name: "agent-step-start-1.alula.test.json", text: embed_str("../../machines/methodology/tests/agent-step-start-1.alula.test.json") },
-    NamedText { name: "agent-step-step-outcome-1.alula.test.json", text: embed_str("../../machines/methodology/tests/agent-step-step-outcome-1.alula.test.json") },
-    NamedText { name: "agent-step-step-outcome-2.alula.test.json", text: embed_str("../../machines/methodology/tests/agent-step-step-outcome-2.alula.test.json") },
     NamedText { name: "chat-ack-discarded.alula.test.json", text: embed_str("../../machines/product/tests/chat-ack-discarded.alula.test.json") },
     NamedText { name: "chat-ack-restart.alula.test.json", text: embed_str("../../machines/product/tests/chat-ack-restart.alula.test.json") },
     NamedText { name: "chat-ack.alula.test.json", text: embed_str("../../machines/product/tests/chat-ack.alula.test.json") },
@@ -152,108 +58,6 @@ export fn test_files() -> []NamedText => [
     NamedText { name: "chat-tool-and-permission.alula.test.json", text: embed_str("../../machines/product/tests/chat-tool-and-permission.alula.test.json") },
     NamedText { name: "chat-unknown-name.alula.test.json", text: embed_str("../../machines/product/tests/chat-unknown-name.alula.test.json") },
     NamedText { name: "chat-unknown-request.alula.test.json", text: embed_str("../../machines/product/tests/chat-unknown-request.alula.test.json") },
-    NamedText { name: "cycle-after-session-1.alula.test.json", text: embed_str("../../machines/methodology/tests/cycle-after-session-1.alula.test.json") },
-    NamedText { name: "cycle-after-session-2.alula.test.json", text: embed_str("../../machines/methodology/tests/cycle-after-session-2.alula.test.json") },
-    NamedText { name: "cycle-after-session-3.alula.test.json", text: embed_str("../../machines/methodology/tests/cycle-after-session-3.alula.test.json") },
-    NamedText { name: "cycle-after-session-4.alula.test.json", text: embed_str("../../machines/methodology/tests/cycle-after-session-4.alula.test.json") },
-    NamedText { name: "cycle-ceiling-1.alula.test.json", text: embed_str("../../machines/methodology/tests/cycle-ceiling-1.alula.test.json") },
-    NamedText { name: "cycle-ceiling-2.alula.test.json", text: embed_str("../../machines/methodology/tests/cycle-ceiling-2.alula.test.json") },
-    NamedText { name: "cycle-common-1.alula.test.json", text: embed_str("../../machines/methodology/tests/cycle-common-1.alula.test.json") },
-    NamedText { name: "cycle-common-2.alula.test.json", text: embed_str("../../machines/methodology/tests/cycle-common-2.alula.test.json") },
-    NamedText { name: "cycle-common-3.alula.test.json", text: embed_str("../../machines/methodology/tests/cycle-common-3.alula.test.json") },
-    NamedText { name: "cycle-common-4.alula.test.json", text: embed_str("../../machines/methodology/tests/cycle-common-4.alula.test.json") },
-    NamedText { name: "cycle-common-5.alula.test.json", text: embed_str("../../machines/methodology/tests/cycle-common-5.alula.test.json") },
-    NamedText { name: "cycle-criterion-1.alula.test.json", text: embed_str("../../machines/methodology/tests/cycle-criterion-1.alula.test.json") },
-    NamedText { name: "cycle-criterion-2.alula.test.json", text: embed_str("../../machines/methodology/tests/cycle-criterion-2.alula.test.json") },
-    NamedText { name: "cycle-end-end-1.alula.test.json", text: embed_str("../../machines/methodology/tests/cycle-end-end-1.alula.test.json") },
-    NamedText { name: "cycle-end-errored-1.alula.test.json", text: embed_str("../../machines/methodology/tests/cycle-end-errored-1.alula.test.json") },
-    NamedText { name: "cycle-end-halted-1.alula.test.json", text: embed_str("../../machines/methodology/tests/cycle-end-halted-1.alula.test.json") },
-    NamedText { name: "cycle-end-halted-2.alula.test.json", text: embed_str("../../machines/methodology/tests/cycle-end-halted-2.alula.test.json") },
-    NamedText { name: "cycle-end-halted-3.alula.test.json", text: embed_str("../../machines/methodology/tests/cycle-end-halted-3.alula.test.json") },
-    NamedText { name: "cycle-failure-1.alula.test.json", text: embed_str("../../machines/methodology/tests/cycle-failure-1.alula.test.json") },
-    NamedText { name: "cycle-failure-2.alula.test.json", text: embed_str("../../machines/methodology/tests/cycle-failure-2.alula.test.json") },
-    NamedText { name: "cycle-failure-3.alula.test.json", text: embed_str("../../machines/methodology/tests/cycle-failure-3.alula.test.json") },
-    NamedText { name: "cycle-fix-outcome-1.alula.test.json", text: embed_str("../../machines/methodology/tests/cycle-fix-outcome-1.alula.test.json") },
-    NamedText { name: "cycle-fix-outcome-2.alula.test.json", text: embed_str("../../machines/methodology/tests/cycle-fix-outcome-2.alula.test.json") },
-    NamedText { name: "cycle-fix-outcome-3.alula.test.json", text: embed_str("../../machines/methodology/tests/cycle-fix-outcome-3.alula.test.json") },
-    NamedText { name: "cycle-fix-outcome-4.alula.test.json", text: embed_str("../../machines/methodology/tests/cycle-fix-outcome-4.alula.test.json") },
-    NamedText { name: "cycle-fix-outcome-5.alula.test.json", text: embed_str("../../machines/methodology/tests/cycle-fix-outcome-5.alula.test.json") },
-    NamedText { name: "cycle-flow-cancel-in-pause.alula.test.json", text: embed_str("../../machines/methodology/tests/cycle-flow-cancel-in-pause.alula.test.json") },
-    NamedText { name: "cycle-flow-ceiling-another-pass.alula.test.json", text: embed_str("../../machines/methodology/tests/cycle-flow-ceiling-another-pass.alula.test.json") },
-    NamedText { name: "cycle-flow-ceiling-cut-scope.alula.test.json", text: embed_str("../../machines/methodology/tests/cycle-flow-ceiling-cut-scope.alula.test.json") },
-    NamedText { name: "cycle-flow-clean.alula.test.json", text: embed_str("../../machines/methodology/tests/cycle-flow-clean.alula.test.json") },
-    NamedText { name: "cycle-flow-codes-delivery.alula.test.json", text: embed_str("../../machines/methodology/tests/cycle-flow-codes-delivery.alula.test.json") },
-    NamedText { name: "cycle-flow-codes-implementation.alula.test.json", text: embed_str("../../machines/methodology/tests/cycle-flow-codes-implementation.alula.test.json") },
-    NamedText { name: "cycle-flow-codes-plan.alula.test.json", text: embed_str("../../machines/methodology/tests/cycle-flow-codes-plan.alula.test.json") },
-    NamedText { name: "cycle-flow-criterion-resets.alula.test.json", text: embed_str("../../machines/methodology/tests/cycle-flow-criterion-resets.alula.test.json") },
-    NamedText { name: "cycle-flow-death-between.alula.test.json", text: embed_str("../../machines/methodology/tests/cycle-flow-death-between.alula.test.json") },
-    NamedText { name: "cycle-flow-death-start.alula.test.json", text: embed_str("../../machines/methodology/tests/cycle-flow-death-start.alula.test.json") },
-    NamedText { name: "cycle-flow-halt-in-pause.alula.test.json", text: embed_str("../../machines/methodology/tests/cycle-flow-halt-in-pause.alula.test.json") },
-    NamedText { name: "cycle-flow-implementation-stop.alula.test.json", text: embed_str("../../machines/methodology/tests/cycle-flow-implementation-stop.alula.test.json") },
-    NamedText { name: "cycle-flow-input-below-minimum.alula.test.json", text: embed_str("../../machines/methodology/tests/cycle-flow-input-below-minimum.alula.test.json") },
-    NamedText { name: "cycle-flow-meeting-restart.alula.test.json", text: embed_str("../../machines/methodology/tests/cycle-flow-meeting-restart.alula.test.json") },
-    NamedText { name: "cycle-flow-meeting-stopped.alula.test.json", text: embed_str("../../machines/methodology/tests/cycle-flow-meeting-stopped.alula.test.json") },
-    NamedText { name: "cycle-flow-narrowing-clean.alula.test.json", text: embed_str("../../machines/methodology/tests/cycle-flow-narrowing-clean.alula.test.json") },
-    NamedText { name: "cycle-flow-no-probes-repeat.alula.test.json", text: embed_str("../../machines/methodology/tests/cycle-flow-no-probes-repeat.alula.test.json") },
-    NamedText { name: "cycle-flow-not-counted.alula.test.json", text: embed_str("../../machines/methodology/tests/cycle-flow-not-counted.alula.test.json") },
-    NamedText { name: "cycle-flow-pause-answer-held.alula.test.json", text: embed_str("../../machines/methodology/tests/cycle-flow-pause-answer-held.alula.test.json") },
-    NamedText { name: "cycle-flow-pause-at-gate.alula.test.json", text: embed_str("../../machines/methodology/tests/cycle-flow-pause-at-gate.alula.test.json") },
-    NamedText { name: "cycle-flow-plan-verdict.alula.test.json", text: embed_str("../../machines/methodology/tests/cycle-flow-plan-verdict.alula.test.json") },
-    NamedText { name: "cycle-flow-refusal-no-result.alula.test.json", text: embed_str("../../machines/methodology/tests/cycle-flow-refusal-no-result.alula.test.json") },
-    NamedText { name: "cycle-flow-refusal-stopped.alula.test.json", text: embed_str("../../machines/methodology/tests/cycle-flow-refusal-stopped.alula.test.json") },
-    NamedText { name: "cycle-flow-requirements-verdict.alula.test.json", text: embed_str("../../machines/methodology/tests/cycle-flow-requirements-verdict.alula.test.json") },
-    NamedText { name: "cycle-flow-restart-end.alula.test.json", text: embed_str("../../machines/methodology/tests/cycle-flow-restart-end.alula.test.json") },
-    NamedText { name: "cycle-flow-restart-gate.alula.test.json", text: embed_str("../../machines/methodology/tests/cycle-flow-restart-gate.alula.test.json") },
-    NamedText { name: "cycle-flow-restart-launch.alula.test.json", text: embed_str("../../machines/methodology/tests/cycle-flow-restart-launch.alula.test.json") },
-    NamedText { name: "cycle-flow-rework.alula.test.json", text: embed_str("../../machines/methodology/tests/cycle-flow-rework.alula.test.json") },
-    NamedText { name: "cycle-gate15-1.alula.test.json", text: embed_str("../../machines/methodology/tests/cycle-gate15-1.alula.test.json") },
-    NamedText { name: "cycle-gate15-2.alula.test.json", text: embed_str("../../machines/methodology/tests/cycle-gate15-2.alula.test.json") },
-    NamedText { name: "cycle-gate15-3.alula.test.json", text: embed_str("../../machines/methodology/tests/cycle-gate15-3.alula.test.json") },
-    NamedText { name: "cycle-gate3-1.alula.test.json", text: embed_str("../../machines/methodology/tests/cycle-gate3-1.alula.test.json") },
-    NamedText { name: "cycle-gate3-2.alula.test.json", text: embed_str("../../machines/methodology/tests/cycle-gate3-2.alula.test.json") },
-    NamedText { name: "cycle-gate9-1.alula.test.json", text: embed_str("../../machines/methodology/tests/cycle-gate9-1.alula.test.json") },
-    NamedText { name: "cycle-gate9-2.alula.test.json", text: embed_str("../../machines/methodology/tests/cycle-gate9-2.alula.test.json") },
-    NamedText { name: "cycle-gate9-3.alula.test.json", text: embed_str("../../machines/methodology/tests/cycle-gate9-3.alula.test.json") },
-    NamedText { name: "cycle-gate9-4.alula.test.json", text: embed_str("../../machines/methodology/tests/cycle-gate9-4.alula.test.json") },
-    NamedText { name: "cycle-gate9-5.alula.test.json", text: embed_str("../../machines/methodology/tests/cycle-gate9-5.alula.test.json") },
-    NamedText { name: "cycle-launch-1.alula.test.json", text: embed_str("../../machines/methodology/tests/cycle-launch-1.alula.test.json") },
-    NamedText { name: "cycle-launch-2.alula.test.json", text: embed_str("../../machines/methodology/tests/cycle-launch-2.alula.test.json") },
-    NamedText { name: "cycle-levels-1.alula.test.json", text: embed_str("../../machines/methodology/tests/cycle-levels-1.alula.test.json") },
-    NamedText { name: "cycle-levels-2.alula.test.json", text: embed_str("../../machines/methodology/tests/cycle-levels-2.alula.test.json") },
-    NamedText { name: "cycle-levels-3.alula.test.json", text: embed_str("../../machines/methodology/tests/cycle-levels-3.alula.test.json") },
-    NamedText { name: "cycle-levels-4.alula.test.json", text: embed_str("../../machines/methodology/tests/cycle-levels-4.alula.test.json") },
-    NamedText { name: "cycle-levels-5.alula.test.json", text: embed_str("../../machines/methodology/tests/cycle-levels-5.alula.test.json") },
-    NamedText { name: "cycle-levels-6.alula.test.json", text: embed_str("../../machines/methodology/tests/cycle-levels-6.alula.test.json") },
-    NamedText { name: "cycle-meeting-1.alula.test.json", text: embed_str("../../machines/methodology/tests/cycle-meeting-1.alula.test.json") },
-    NamedText { name: "cycle-meeting-2.alula.test.json", text: embed_str("../../machines/methodology/tests/cycle-meeting-2.alula.test.json") },
-    NamedText { name: "cycle-narrowed-1.alula.test.json", text: embed_str("../../machines/methodology/tests/cycle-narrowed-1.alula.test.json") },
-    NamedText { name: "cycle-narrowing-1.alula.test.json", text: embed_str("../../machines/methodology/tests/cycle-narrowing-1.alula.test.json") },
-    NamedText { name: "cycle-narrowing-2.alula.test.json", text: embed_str("../../machines/methodology/tests/cycle-narrowing-2.alula.test.json") },
-    NamedText { name: "cycle-no-probes-1.alula.test.json", text: embed_str("../../machines/methodology/tests/cycle-no-probes-1.alula.test.json") },
-    NamedText { name: "cycle-no-probes-2.alula.test.json", text: embed_str("../../machines/methodology/tests/cycle-no-probes-2.alula.test.json") },
-    NamedText { name: "cycle-outcome-1.alula.test.json", text: embed_str("../../machines/methodology/tests/cycle-outcome-1.alula.test.json") },
-    NamedText { name: "cycle-outcome-2.alula.test.json", text: embed_str("../../machines/methodology/tests/cycle-outcome-2.alula.test.json") },
-    NamedText { name: "cycle-pass-1.alula.test.json", text: embed_str("../../machines/methodology/tests/cycle-pass-1.alula.test.json") },
-    NamedText { name: "cycle-pass-2.alula.test.json", text: embed_str("../../machines/methodology/tests/cycle-pass-2.alula.test.json") },
-    NamedText { name: "cycle-pass-3.alula.test.json", text: embed_str("../../machines/methodology/tests/cycle-pass-3.alula.test.json") },
-    NamedText { name: "cycle-pause-1.alula.test.json", text: embed_str("../../machines/methodology/tests/cycle-pause-1.alula.test.json") },
-    NamedText { name: "cycle-pause-2.alula.test.json", text: embed_str("../../machines/methodology/tests/cycle-pause-2.alula.test.json") },
-    NamedText { name: "cycle-pause-3.alula.test.json", text: embed_str("../../machines/methodology/tests/cycle-pause-3.alula.test.json") },
-    NamedText { name: "cycle-pause-4.alula.test.json", text: embed_str("../../machines/methodology/tests/cycle-pause-4.alula.test.json") },
-    NamedText { name: "cycle-retry-1.alula.test.json", text: embed_str("../../machines/methodology/tests/cycle-retry-1.alula.test.json") },
-    NamedText { name: "cycle-retry-2.alula.test.json", text: embed_str("../../machines/methodology/tests/cycle-retry-2.alula.test.json") },
-    NamedText { name: "cycle-review-entry-1.alula.test.json", text: embed_str("../../machines/methodology/tests/cycle-review-entry-1.alula.test.json") },
-    NamedText { name: "cycle-review-entry-2.alula.test.json", text: embed_str("../../machines/methodology/tests/cycle-review-entry-2.alula.test.json") },
-    NamedText { name: "cycle-review-entry-3.alula.test.json", text: embed_str("../../machines/methodology/tests/cycle-review-entry-3.alula.test.json") },
-    NamedText { name: "cycle-review-entry-4.alula.test.json", text: embed_str("../../machines/methodology/tests/cycle-review-entry-4.alula.test.json") },
-    NamedText { name: "cycle-stop-stage-1.alula.test.json", text: embed_str("../../machines/methodology/tests/cycle-stop-stage-1.alula.test.json") },
-    NamedText { name: "cycle-stop-stage-2.alula.test.json", text: embed_str("../../machines/methodology/tests/cycle-stop-stage-2.alula.test.json") },
-    NamedText { name: "cycle-stop-stage-3.alula.test.json", text: embed_str("../../machines/methodology/tests/cycle-stop-stage-3.alula.test.json") },
-    NamedText { name: "cycle-stop-stage-4.alula.test.json", text: embed_str("../../machines/methodology/tests/cycle-stop-stage-4.alula.test.json") },
-    NamedText { name: "cycle-summary-1.alula.test.json", text: embed_str("../../machines/methodology/tests/cycle-summary-1.alula.test.json") },
-    NamedText { name: "cycle-summary-2.alula.test.json", text: embed_str("../../machines/methodology/tests/cycle-summary-2.alula.test.json") },
-    NamedText { name: "cycle-summary-3.alula.test.json", text: embed_str("../../machines/methodology/tests/cycle-summary-3.alula.test.json") },
-    NamedText { name: "cycle-summary-4.alula.test.json", text: embed_str("../../machines/methodology/tests/cycle-summary-4.alula.test.json") },
     NamedText { name: "dialog-answer-while-dead.alula.test.json", text: embed_str("../../machines/product/tests/dialog-answer-while-dead.alula.test.json") },
     NamedText { name: "dialog-cancel-before-send.alula.test.json", text: embed_str("../../machines/product/tests/dialog-cancel-before-send.alula.test.json") },
     NamedText { name: "dialog-cancel-idle.alula.test.json", text: embed_str("../../machines/product/tests/dialog-cancel-idle.alula.test.json") },
@@ -295,352 +99,18 @@ export fn test_files() -> []NamedText => [
     NamedText { name: "free-input-counter-stays.alula.test.json", text: embed_str("../../machines/product/tests/free-input-counter-stays.alula.test.json") },
     NamedText { name: "free-input-dialog-close.alula.test.json", text: embed_str("../../machines/product/tests/free-input-dialog-close.alula.test.json") },
     NamedText { name: "free-input-no-gate-record.alula.test.json", text: embed_str("../../machines/product/tests/free-input-no-gate-record.alula.test.json") },
-    NamedText { name: "free-input-signal-without-row.alula.test.json", text: embed_str("../../machines/product/tests/free-input-signal-without-row.alula.test.json") },
-    NamedText { name: "nested-steps-cancel.alula.test.json", text: embed_str("../../machines/methodology/tests/nested-steps-cancel.alula.test.json") },
-    NamedText { name: "nested-steps-continue.alula.test.json", text: embed_str("../../machines/methodology/tests/nested-steps-continue.alula.test.json") },
-    NamedText { name: "nested-steps-refused.alula.test.json", text: embed_str("../../machines/methodology/tests/nested-steps-refused.alula.test.json") },
-    NamedText { name: "nested-steps-stop.alula.test.json", text: embed_str("../../machines/methodology/tests/nested-steps-stop.alula.test.json") },
-    NamedText { name: "nested-steps-turn.alula.test.json", text: embed_str("../../machines/methodology/tests/nested-steps-turn.alula.test.json") },
-    NamedText { name: "nested-steps-two-turns.alula.test.json", text: embed_str("../../machines/methodology/tests/nested-steps-two-turns.alula.test.json") },
-    NamedText { name: "runner-after-approval-1.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-after-approval-1.alula.test.json") },
-    NamedText { name: "runner-after-approval-2.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-after-approval-2.alula.test.json") },
-    NamedText { name: "runner-after-session-1.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-after-session-1.alula.test.json") },
-    NamedText { name: "runner-after-session-10.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-after-session-10.alula.test.json") },
-    NamedText { name: "runner-after-session-11.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-after-session-11.alula.test.json") },
-    NamedText { name: "runner-after-session-12.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-after-session-12.alula.test.json") },
-    NamedText { name: "runner-after-session-13.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-after-session-13.alula.test.json") },
-    NamedText { name: "runner-after-session-14.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-after-session-14.alula.test.json") },
-    NamedText { name: "runner-after-session-15.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-after-session-15.alula.test.json") },
-    NamedText { name: "runner-after-session-16.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-after-session-16.alula.test.json") },
-    NamedText { name: "runner-after-session-17.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-after-session-17.alula.test.json") },
-    NamedText { name: "runner-after-session-18.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-after-session-18.alula.test.json") },
-    NamedText { name: "runner-after-session-19.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-after-session-19.alula.test.json") },
-    NamedText { name: "runner-after-session-2.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-after-session-2.alula.test.json") },
-    NamedText { name: "runner-after-session-3.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-after-session-3.alula.test.json") },
-    NamedText { name: "runner-after-session-4.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-after-session-4.alula.test.json") },
-    NamedText { name: "runner-after-session-5.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-after-session-5.alula.test.json") },
-    NamedText { name: "runner-after-session-6.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-after-session-6.alula.test.json") },
-    NamedText { name: "runner-after-session-7.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-after-session-7.alula.test.json") },
-    NamedText { name: "runner-after-session-8.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-after-session-8.alula.test.json") },
-    NamedText { name: "runner-after-session-9.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-after-session-9.alula.test.json") },
-    NamedText { name: "runner-analysis-review-1.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-analysis-review-1.alula.test.json") },
-    NamedText { name: "runner-analysis-review-2.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-analysis-review-2.alula.test.json") },
-    NamedText { name: "runner-answers-recording-1.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-answers-recording-1.alula.test.json") },
-    NamedText { name: "runner-approval-check-1.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-approval-check-1.alula.test.json") },
-    NamedText { name: "runner-approval-check-2.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-approval-check-2.alula.test.json") },
-    NamedText { name: "runner-approval-recording-1.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-approval-recording-1.alula.test.json") },
-    NamedText { name: "runner-brief-check-1.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-brief-check-1.alula.test.json") },
-    NamedText { name: "runner-brief-check-2.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-brief-check-2.alula.test.json") },
-    NamedText { name: "runner-brief-copy-1.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-brief-copy-1.alula.test.json") },
-    NamedText { name: "runner-common-1.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-common-1.alula.test.json") },
-    NamedText { name: "runner-common-2.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-common-2.alula.test.json") },
-    NamedText { name: "runner-common-3.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-common-3.alula.test.json") },
-    NamedText { name: "runner-common-4.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-common-4.alula.test.json") },
-    NamedText { name: "runner-common-5.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-common-5.alula.test.json") },
-    NamedText { name: "runner-copy-snapshot-1.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-copy-snapshot-1.alula.test.json") },
-    NamedText { name: "runner-decisions-outcome-1.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-decisions-outcome-1.alula.test.json") },
-    NamedText { name: "runner-decisions-outcome-2.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-decisions-outcome-2.alula.test.json") },
-    NamedText { name: "runner-decisions-recording-1.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-decisions-recording-1.alula.test.json") },
-    NamedText { name: "runner-delivery-diff-1.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-delivery-diff-1.alula.test.json") },
-    NamedText { name: "runner-delivery-diff-2.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-delivery-diff-2.alula.test.json") },
-    NamedText { name: "runner-delivery-letter-1.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-delivery-letter-1.alula.test.json") },
-    NamedText { name: "runner-delivery-letter-2.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-delivery-letter-2.alula.test.json") },
-    NamedText { name: "runner-delivery-letter-3.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-delivery-letter-3.alula.test.json") },
-    NamedText { name: "runner-delivery-letter-4.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-delivery-letter-4.alula.test.json") },
-    NamedText { name: "runner-delivery-message-1.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-delivery-message-1.alula.test.json") },
-    NamedText { name: "runner-delivery-message-2.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-delivery-message-2.alula.test.json") },
-    NamedText { name: "runner-delivery-phase-1.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-delivery-phase-1.alula.test.json") },
-    NamedText { name: "runner-delivery-phase-2.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-delivery-phase-2.alula.test.json") },
-    NamedText { name: "runner-delivery-review-1.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-delivery-review-1.alula.test.json") },
-    NamedText { name: "runner-delivery-review-2.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-delivery-review-2.alula.test.json") },
-    NamedText { name: "runner-delivery-secrets-1.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-delivery-secrets-1.alula.test.json") },
-    NamedText { name: "runner-delivery-secrets-2.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-delivery-secrets-2.alula.test.json") },
-    NamedText { name: "runner-end-1.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-end-1.alula.test.json") },
-    NamedText { name: "runner-errored-1.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-errored-1.alula.test.json") },
-    NamedText { name: "runner-factory-word-1.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-factory-word-1.alula.test.json") },
-    NamedText { name: "runner-factory-word-2.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-factory-word-2.alula.test.json") },
-    NamedText { name: "runner-factory-word-3.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-factory-word-3.alula.test.json") },
-    NamedText { name: "runner-feedback-route-1.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-feedback-route-1.alula.test.json") },
-    NamedText { name: "runner-feedback-route-2.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-feedback-route-2.alula.test.json") },
-    NamedText { name: "runner-feedback-route-3.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-feedback-route-3.alula.test.json") },
-    NamedText { name: "runner-feedback-route-4.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-feedback-route-4.alula.test.json") },
-    NamedText { name: "runner-feedback-route-5.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-feedback-route-5.alula.test.json") },
-    NamedText { name: "runner-feedback-saving-1.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-feedback-saving-1.alula.test.json") },
-    NamedText { name: "runner-flow-cancel-in-gate.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-flow-cancel-in-gate.alula.test.json") },
-    NamedText { name: "runner-flow-death-between.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-flow-death-between.alula.test.json") },
-    NamedText { name: "runner-flow-death-start.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-flow-death-start.alula.test.json") },
-    NamedText { name: "runner-flow-fast-ceiling.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-flow-fast-ceiling.alula.test.json") },
-    NamedText { name: "runner-flow-fast-clean.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-flow-fast-clean.alula.test.json") },
-    NamedText { name: "runner-flow-fast-gate14.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-flow-fast-gate14.alula.test.json") },
-    NamedText { name: "runner-flow-fast-refused.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-flow-fast-refused.alula.test.json") },
-    NamedText { name: "runner-flow-fast-rework.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-flow-fast-rework.alula.test.json") },
-    NamedText { name: "runner-flow-full-clean.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-flow-full-clean.alula.test.json") },
-    NamedText { name: "runner-flow-full-commit-edited.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-flow-full-commit-edited.alula.test.json") },
-    NamedText { name: "runner-flow-full-edit-after-approval.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-flow-full-edit-after-approval.alula.test.json") },
-    NamedText { name: "runner-flow-full-feedback-round.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-flow-full-feedback-round.alula.test.json") },
-    NamedText { name: "runner-flow-full-no-code.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-flow-full-no-code.alula.test.json") },
-    NamedText { name: "runner-flow-full-plan-question.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-flow-full-plan-question.alula.test.json") },
-    NamedText { name: "runner-flow-full-secrets-gate.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-flow-full-secrets-gate.alula.test.json") },
-    NamedText { name: "runner-flow-nested-cancel.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-flow-nested-cancel.alula.test.json") },
-    NamedText { name: "runner-flow-nested-held.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-flow-nested-held.alula.test.json") },
-    NamedText { name: "runner-flow-nested-launch.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-flow-nested-launch.alula.test.json") },
-    NamedText { name: "runner-flow-nested-pause.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-flow-nested-pause.alula.test.json") },
-    NamedText { name: "runner-flow-nested-review.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-flow-nested-review.alula.test.json") },
-    NamedText { name: "runner-flow-pause-answer-held.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-flow-pause-answer-held.alula.test.json") },
-    NamedText { name: "runner-flow-pause-failure-held.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-flow-pause-failure-held.alula.test.json") },
-    NamedText { name: "runner-flow-restart-end.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-flow-restart-end.alula.test.json") },
-    NamedText { name: "runner-flow-restart-gate.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-flow-restart-gate.alula.test.json") },
-    NamedText { name: "runner-flow-restart-gate14.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-flow-restart-gate14.alula.test.json") },
-    NamedText { name: "runner-flow-restart-launch.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-flow-restart-launch.alula.test.json") },
-    NamedText { name: "runner-flow-stop-at-gate.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-flow-stop-at-gate.alula.test.json") },
-    NamedText { name: "runner-flow-stranger-in-window.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-flow-stranger-in-window.alula.test.json") },
-    NamedText { name: "runner-foreign-approval-1.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-foreign-approval-1.alula.test.json") },
-    NamedText { name: "runner-foreign-approval-2.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-foreign-approval-2.alula.test.json") },
-    NamedText { name: "runner-foreign-snapshot-1.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-foreign-snapshot-1.alula.test.json") },
-    NamedText { name: "runner-full-path-return-1.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-full-path-return-1.alula.test.json") },
-    NamedText { name: "runner-gate10a-1.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-gate10a-1.alula.test.json") },
-    NamedText { name: "runner-gate10a-2.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-gate10a-2.alula.test.json") },
-    NamedText { name: "runner-gate10b-1.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-gate10b-1.alula.test.json") },
-    NamedText { name: "runner-gate10c-1.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-gate10c-1.alula.test.json") },
-    NamedText { name: "runner-gate10d-1.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-gate10d-1.alula.test.json") },
-    NamedText { name: "runner-gate11-1.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-gate11-1.alula.test.json") },
-    NamedText { name: "runner-gate11-2.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-gate11-2.alula.test.json") },
-    NamedText { name: "runner-gate12-1.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-gate12-1.alula.test.json") },
-    NamedText { name: "runner-gate13-preparation-1.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-gate13-preparation-1.alula.test.json") },
-    NamedText { name: "runner-gate13-preparation-2.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-gate13-preparation-2.alula.test.json") },
-    NamedText { name: "runner-gate13-status-1.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-gate13-status-1.alula.test.json") },
-    NamedText { name: "runner-gate13-status-2.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-gate13-status-2.alula.test.json") },
-    NamedText { name: "runner-gate14-1.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-gate14-1.alula.test.json") },
-    NamedText { name: "runner-gate14-2.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-gate14-2.alula.test.json") },
-    NamedText { name: "runner-gate14-refusal-1.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-gate14-refusal-1.alula.test.json") },
-    NamedText { name: "runner-gate4-1.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-gate4-1.alula.test.json") },
-    NamedText { name: "runner-gate4-2.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-gate4-2.alula.test.json") },
-    NamedText { name: "runner-gate4-3.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-gate4-3.alula.test.json") },
-    NamedText { name: "runner-gate4-question-1.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-gate4-question-1.alula.test.json") },
-    NamedText { name: "runner-gate4-question-2.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-gate4-question-2.alula.test.json") },
-    NamedText { name: "runner-gate4-question-3.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-gate4-question-3.alula.test.json") },
-    NamedText { name: "runner-gate5-1.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-gate5-1.alula.test.json") },
-    NamedText { name: "runner-gate5-2.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-gate5-2.alula.test.json") },
-    NamedText { name: "runner-gate6-1.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-gate6-1.alula.test.json") },
-    NamedText { name: "runner-gate6-2.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-gate6-2.alula.test.json") },
-    NamedText { name: "runner-gate7-delivery-1.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-gate7-delivery-1.alula.test.json") },
-    NamedText { name: "runner-gate7-delivery-2.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-gate7-delivery-2.alula.test.json") },
-    NamedText { name: "runner-gate7-delivery-3.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-gate7-delivery-3.alula.test.json") },
-    NamedText { name: "runner-gate7-implementation-1.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-gate7-implementation-1.alula.test.json") },
-    NamedText { name: "runner-gate7-implementation-2.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-gate7-implementation-2.alula.test.json") },
-    NamedText { name: "runner-gate7-implementation-3.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-gate7-implementation-3.alula.test.json") },
-    NamedText { name: "runner-gate7-implementation-step-1.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-gate7-implementation-step-1.alula.test.json") },
-    NamedText { name: "runner-gate7-implementation-step-2.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-gate7-implementation-step-2.alula.test.json") },
-    NamedText { name: "runner-gate7-implementation-step-3.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-gate7-implementation-step-3.alula.test.json") },
-    NamedText { name: "runner-gate7-plan-1.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-gate7-plan-1.alula.test.json") },
-    NamedText { name: "runner-gate7-plan-2.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-gate7-plan-2.alula.test.json") },
-    NamedText { name: "runner-gate7-plan-3.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-gate7-plan-3.alula.test.json") },
-    NamedText { name: "runner-gate7-plan-queue-1.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-gate7-plan-queue-1.alula.test.json") },
-    NamedText { name: "runner-gate7-plan-queue-2.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-gate7-plan-queue-2.alula.test.json") },
-    NamedText { name: "runner-gate7-plan-queue-3.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-gate7-plan-queue-3.alula.test.json") },
-    NamedText { name: "runner-gate8-1.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-gate8-1.alula.test.json") },
-    NamedText { name: "runner-gate8-2.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-gate8-2.alula.test.json") },
-    NamedText { name: "runner-gate8-3.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-gate8-3.alula.test.json") },
-    NamedText { name: "runner-gate8-4.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-gate8-4.alula.test.json") },
-    NamedText { name: "runner-gate8-confirmation-1.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-gate8-confirmation-1.alula.test.json") },
-    NamedText { name: "runner-gate8-delivery-1.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-gate8-delivery-1.alula.test.json") },
-    NamedText { name: "runner-gate8-outcome-1.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-gate8-outcome-1.alula.test.json") },
-    NamedText { name: "runner-gate8-outcome-2.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-gate8-outcome-2.alula.test.json") },
-    NamedText { name: "runner-gate8-outcome-3.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-gate8-outcome-3.alula.test.json") },
-    NamedText { name: "runner-halted-1.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-halted-1.alula.test.json") },
-    NamedText { name: "runner-halted-2.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-halted-2.alula.test.json") },
-    NamedText { name: "runner-halted-3.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-halted-3.alula.test.json") },
-    NamedText { name: "runner-halted-4.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-halted-4.alula.test.json") },
-    NamedText { name: "runner-halted-5.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-halted-5.alula.test.json") },
-    NamedText { name: "runner-halted-6.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-halted-6.alula.test.json") },
-    NamedText { name: "runner-implementation-outcome-1.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-implementation-outcome-1.alula.test.json") },
-    NamedText { name: "runner-implementation-outcome-2.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-implementation-outcome-2.alula.test.json") },
-    NamedText { name: "runner-implementation-outcome-3.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-implementation-outcome-3.alula.test.json") },
-    NamedText { name: "runner-implementation-outcome-4.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-implementation-outcome-4.alula.test.json") },
-    NamedText { name: "runner-implementation-outcome-5.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-implementation-outcome-5.alula.test.json") },
-    NamedText { name: "runner-implementation-phase-1.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-implementation-phase-1.alula.test.json") },
-    NamedText { name: "runner-implementation-phase-2.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-implementation-phase-2.alula.test.json") },
-    NamedText { name: "runner-implementation-phase-3.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-implementation-phase-3.alula.test.json") },
-    NamedText { name: "runner-implementation-phase-4.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-implementation-phase-4.alula.test.json") },
-    NamedText { name: "runner-implementation-phase-5.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-implementation-phase-5.alula.test.json") },
-    NamedText { name: "runner-implementation-phase-6.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-implementation-phase-6.alula.test.json") },
-    NamedText { name: "runner-implementation-review-1.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-implementation-review-1.alula.test.json") },
-    NamedText { name: "runner-implementation-review-2.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-implementation-review-2.alula.test.json") },
-    NamedText { name: "runner-letter-renaming-1.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-letter-renaming-1.alula.test.json") },
-    NamedText { name: "runner-owner-decisions-recording-1.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-owner-decisions-recording-1.alula.test.json") },
-    NamedText { name: "runner-pause-1.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-pause-1.alula.test.json") },
-    NamedText { name: "runner-pause-2.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-pause-2.alula.test.json") },
-    NamedText { name: "runner-pause-3.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-pause-3.alula.test.json") },
-    NamedText { name: "runner-pause-4.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-pause-4.alula.test.json") },
-    NamedText { name: "runner-phase-switch-1.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-phase-switch-1.alula.test.json") },
-    NamedText { name: "runner-phase-switch-2.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-phase-switch-2.alula.test.json") },
-    NamedText { name: "runner-phase-switch-3.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-phase-switch-3.alula.test.json") },
-    NamedText { name: "runner-phase-switch-4.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-phase-switch-4.alula.test.json") },
-    NamedText { name: "runner-phase-switch-5.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-phase-switch-5.alula.test.json") },
-    NamedText { name: "runner-plan-phase-1.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-plan-phase-1.alula.test.json") },
-    NamedText { name: "runner-plan-phase-2.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-plan-phase-2.alula.test.json") },
-    NamedText { name: "runner-plan-phase-3.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-plan-phase-3.alula.test.json") },
-    NamedText { name: "runner-plan-phase-4.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-plan-phase-4.alula.test.json") },
-    NamedText { name: "runner-plan-phase-5.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-plan-phase-5.alula.test.json") },
-    NamedText { name: "runner-plan-reconciliation-1.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-plan-reconciliation-1.alula.test.json") },
-    NamedText { name: "runner-plan-reconciliation-2.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-plan-reconciliation-2.alula.test.json") },
-    NamedText { name: "runner-plan-reconciliation-3.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-plan-reconciliation-3.alula.test.json") },
-    NamedText { name: "runner-plan-reconciliation-4.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-plan-reconciliation-4.alula.test.json") },
-    NamedText { name: "runner-plan-reconciliation-5.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-plan-reconciliation-5.alula.test.json") },
-    NamedText { name: "runner-plan-reconciliation-6.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-plan-reconciliation-6.alula.test.json") },
-    NamedText { name: "runner-plan-review-1.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-plan-review-1.alula.test.json") },
-    NamedText { name: "runner-plan-review-2.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-plan-review-2.alula.test.json") },
-    NamedText { name: "runner-plan-snapshot-1.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-plan-snapshot-1.alula.test.json") },
-    NamedText { name: "runner-plan-stop-word-1.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-plan-stop-word-1.alula.test.json") },
-    NamedText { name: "runner-plan-stop-word-2.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-plan-stop-word-2.alula.test.json") },
-    NamedText { name: "runner-plan-stop-word-3.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-plan-stop-word-3.alula.test.json") },
-    NamedText { name: "runner-preparation-1.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-preparation-1.alula.test.json") },
-    NamedText { name: "runner-preparation-outcome-1.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-preparation-outcome-1.alula.test.json") },
-    NamedText { name: "runner-preparation-outcome-3.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-preparation-outcome-3.alula.test.json") },
-    NamedText { name: "runner-preparation-outcome-4.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-preparation-outcome-4.alula.test.json") },
-    NamedText { name: "runner-preparation-outcome-5.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-preparation-outcome-5.alula.test.json") },
-    NamedText { name: "runner-review-failure-1.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-review-failure-1.alula.test.json") },
-    NamedText { name: "runner-review-failure-2.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-review-failure-2.alula.test.json") },
-    NamedText { name: "runner-review-failure-3.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-review-failure-3.alula.test.json") },
-    NamedText { name: "runner-review-narrowed-1.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-review-narrowed-1.alula.test.json") },
-    NamedText { name: "runner-review-parsing-1.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-review-parsing-1.alula.test.json") },
-    NamedText { name: "runner-review-parsing-2.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-review-parsing-2.alula.test.json") },
-    NamedText { name: "runner-review-parsing-3.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-review-parsing-3.alula.test.json") },
-    NamedText { name: "runner-review-parsing-4.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-review-parsing-4.alula.test.json") },
-    NamedText { name: "runner-review-parsing-5.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-review-parsing-5.alula.test.json") },
-    NamedText { name: "runner-review-parsing-6.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-review-parsing-6.alula.test.json") },
-    NamedText { name: "runner-review-parsing-7.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-review-parsing-7.alula.test.json") },
-    NamedText { name: "runner-review-parsing-8.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-review-parsing-8.alula.test.json") },
-    NamedText { name: "runner-review-parsing-9.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-review-parsing-9.alula.test.json") },
-    NamedText { name: "runner-review-verdict-1.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-review-verdict-1.alula.test.json") },
-    NamedText { name: "runner-review-verdict-10.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-review-verdict-10.alula.test.json") },
-    NamedText { name: "runner-review-verdict-11.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-review-verdict-11.alula.test.json") },
-    NamedText { name: "runner-review-verdict-12.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-review-verdict-12.alula.test.json") },
-    NamedText { name: "runner-review-verdict-13.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-review-verdict-13.alula.test.json") },
-    NamedText { name: "runner-review-verdict-14.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-review-verdict-14.alula.test.json") },
-    NamedText { name: "runner-review-verdict-15.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-review-verdict-15.alula.test.json") },
-    NamedText { name: "runner-review-verdict-16.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-review-verdict-16.alula.test.json") },
-    NamedText { name: "runner-review-verdict-17.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-review-verdict-17.alula.test.json") },
-    NamedText { name: "runner-review-verdict-18.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-review-verdict-18.alula.test.json") },
-    NamedText { name: "runner-review-verdict-19.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-review-verdict-19.alula.test.json") },
-    NamedText { name: "runner-review-verdict-2.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-review-verdict-2.alula.test.json") },
-    NamedText { name: "runner-review-verdict-3.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-review-verdict-3.alula.test.json") },
-    NamedText { name: "runner-review-verdict-4.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-review-verdict-4.alula.test.json") },
-    NamedText { name: "runner-review-verdict-5.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-review-verdict-5.alula.test.json") },
-    NamedText { name: "runner-review-verdict-6.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-review-verdict-6.alula.test.json") },
-    NamedText { name: "runner-review-verdict-7.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-review-verdict-7.alula.test.json") },
-    NamedText { name: "runner-review-verdict-8.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-review-verdict-8.alula.test.json") },
-    NamedText { name: "runner-review-verdict-9.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-review-verdict-9.alula.test.json") },
-    NamedText { name: "runner-route-check-1.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-route-check-1.alula.test.json") },
-    NamedText { name: "runner-route-check-2.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-route-check-2.alula.test.json") },
-    NamedText { name: "runner-route-check-3.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-route-check-3.alula.test.json") },
-    NamedText { name: "runner-route-check-4.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-route-check-4.alula.test.json") },
-    NamedText { name: "runner-route-classification-1.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-route-classification-1.alula.test.json") },
-    NamedText { name: "runner-route-classification-2.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-route-classification-2.alula.test.json") },
-    NamedText { name: "runner-route-classification-3.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-route-classification-3.alula.test.json") },
-    NamedText { name: "runner-route-classification-4.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-route-classification-4.alula.test.json") },
-    NamedText { name: "runner-route-classification-5.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-route-classification-5.alula.test.json") },
-    NamedText { name: "runner-route-recording-1.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-route-recording-1.alula.test.json") },
-    NamedText { name: "runner-route-recording-2.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-route-recording-2.alula.test.json") },
-    NamedText { name: "runner-session-failure-1.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-session-failure-1.alula.test.json") },
-    NamedText { name: "runner-session-failure-2.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-session-failure-2.alula.test.json") },
-    NamedText { name: "runner-session-failure-3.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-session-failure-3.alula.test.json") },
-    NamedText { name: "runner-session-launch-1.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-session-launch-1.alula.test.json") },
-    NamedText { name: "runner-session-launch-2.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-session-launch-2.alula.test.json") },
-    NamedText { name: "runner-settings-once-1.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-settings-once-1.alula.test.json") },
-    NamedText { name: "runner-settings-once-2.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-settings-once-2.alula.test.json") },
-    NamedText { name: "runner-specification-reconciliation-1.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-specification-reconciliation-1.alula.test.json") },
-    NamedText { name: "runner-specification-reconciliation-2.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-specification-reconciliation-2.alula.test.json") },
-    NamedText { name: "runner-specification-reconciliation-3.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-specification-reconciliation-3.alula.test.json") },
-    NamedText { name: "runner-specification-reconciliation-4.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-specification-reconciliation-4.alula.test.json") },
-    NamedText { name: "runner-specification-reconciliation-5.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-specification-reconciliation-5.alula.test.json") },
-    NamedText { name: "runner-specification-reconciliation-6.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-specification-reconciliation-6.alula.test.json") },
-    NamedText { name: "runner-specification-reconciliation-7.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-specification-reconciliation-7.alula.test.json") },
-    NamedText { name: "runner-specification-reconciliation-8.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-specification-reconciliation-8.alula.test.json") },
-    NamedText { name: "runner-specification-snapshot-1.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-specification-snapshot-1.alula.test.json") },
-    NamedText { name: "runner-to-plan-1.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-to-plan-1.alula.test.json") },
-    NamedText { name: "runner-to-requirements-1.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-to-requirements-1.alula.test.json") },
-    NamedText { name: "runner-tree-busy-1.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-tree-busy-1.alula.test.json") },
-    NamedText { name: "runner-tree-busy-2.alula.test.json", text: embed_str("../../machines/methodology/tests/runner-tree-busy-2.alula.test.json") },
-    NamedText { name: "session-common-1.alula.test.json", text: embed_str("../../machines/methodology/tests/session-common-1.alula.test.json") },
-    NamedText { name: "session-common-2.alula.test.json", text: embed_str("../../machines/methodology/tests/session-common-2.alula.test.json") },
-    NamedText { name: "session-common-3.alula.test.json", text: embed_str("../../machines/methodology/tests/session-common-3.alula.test.json") },
-    NamedText { name: "session-common-4.alula.test.json", text: embed_str("../../machines/methodology/tests/session-common-4.alula.test.json") },
-    NamedText { name: "session-common-5.alula.test.json", text: embed_str("../../machines/methodology/tests/session-common-5.alula.test.json") },
-    NamedText { name: "session-end-end-1.alula.test.json", text: embed_str("../../machines/methodology/tests/session-end-end-1.alula.test.json") },
-    NamedText { name: "session-end-halted-1.alula.test.json", text: embed_str("../../machines/methodology/tests/session-end-halted-1.alula.test.json") },
-    NamedText { name: "session-end-halted-2.alula.test.json", text: embed_str("../../machines/methodology/tests/session-end-halted-2.alula.test.json") },
-    NamedText { name: "session-end-halted-3.alula.test.json", text: embed_str("../../machines/methodology/tests/session-end-halted-3.alula.test.json") },
-    NamedText { name: "session-flow-cancel-answered.alula.test.json", text: embed_str("../../machines/methodology/tests/session-flow-cancel-answered.alula.test.json") },
-    NamedText { name: "session-flow-cancel-in-gate.alula.test.json", text: embed_str("../../machines/methodology/tests/session-flow-cancel-in-gate.alula.test.json") },
-    NamedText { name: "session-flow-cancel-midcall.alula.test.json", text: embed_str("../../machines/methodology/tests/session-flow-cancel-midcall.alula.test.json") },
-    NamedText { name: "session-flow-death-between.alula.test.json", text: embed_str("../../machines/methodology/tests/session-flow-death-between.alula.test.json") },
-    NamedText { name: "session-flow-delivery-kind.alula.test.json", text: embed_str("../../machines/methodology/tests/session-flow-delivery-kind.alula.test.json") },
-    NamedText { name: "session-flow-fail-connection.alula.test.json", text: embed_str("../../machines/methodology/tests/session-flow-fail-connection.alula.test.json") },
-    NamedText { name: "session-flow-fail-model-refused.alula.test.json", text: embed_str("../../machines/methodology/tests/session-flow-fail-model-refused.alula.test.json") },
-    NamedText { name: "session-flow-fail-no-result.alula.test.json", text: embed_str("../../machines/methodology/tests/session-flow-fail-no-result.alula.test.json") },
-    NamedText { name: "session-flow-input-absent.alula.test.json", text: embed_str("../../machines/methodology/tests/session-flow-input-absent.alula.test.json") },
-    NamedText { name: "session-flow-input-full.alula.test.json", text: embed_str("../../machines/methodology/tests/session-flow-input-full.alula.test.json") },
-    NamedText { name: "session-flow-input-missing.alula.test.json", text: embed_str("../../machines/methodology/tests/session-flow-input-missing.alula.test.json") },
-    NamedText { name: "session-flow-input-type.alula.test.json", text: embed_str("../../machines/methodology/tests/session-flow-input-type.alula.test.json") },
-    NamedText { name: "session-flow-late-answer.alula.test.json", text: embed_str("../../machines/methodology/tests/session-flow-late-answer.alula.test.json") },
-    NamedText { name: "session-flow-parent-stop.alula.test.json", text: embed_str("../../machines/methodology/tests/session-flow-parent-stop.alula.test.json") },
-    NamedText { name: "session-flow-pause-halt.alula.test.json", text: embed_str("../../machines/methodology/tests/session-flow-pause-halt.alula.test.json") },
-    NamedText { name: "session-flow-request-fields.alula.test.json", text: embed_str("../../machines/methodology/tests/session-flow-request-fields.alula.test.json") },
-    NamedText { name: "session-flow-restart-after-answer.alula.test.json", text: embed_str("../../machines/methodology/tests/session-flow-restart-after-answer.alula.test.json") },
-    NamedText { name: "session-flow-restart-gate2.alula.test.json", text: embed_str("../../machines/methodology/tests/session-flow-restart-gate2.alula.test.json") },
-    NamedText { name: "session-flow-restart-kid.alula.test.json", text: embed_str("../../machines/methodology/tests/session-flow-restart-kid.alula.test.json") },
-    NamedText { name: "session-flow-restart-midcall.alula.test.json", text: embed_str("../../machines/methodology/tests/session-flow-restart-midcall.alula.test.json") },
-    NamedText { name: "session-flow-result-plan.alula.test.json", text: embed_str("../../machines/methodology/tests/session-flow-result-plan.alula.test.json") },
-    NamedText { name: "session-flow-result-question.alula.test.json", text: embed_str("../../machines/methodology/tests/session-flow-result-question.alula.test.json") },
-    NamedText { name: "session-flow-result-requirements.alula.test.json", text: embed_str("../../machines/methodology/tests/session-flow-result-requirements.alula.test.json") },
-    NamedText { name: "session-flow-result-revision.alula.test.json", text: embed_str("../../machines/methodology/tests/session-flow-result-revision.alula.test.json") },
-    NamedText { name: "session-flow-retry-twice.alula.test.json", text: embed_str("../../machines/methodology/tests/session-flow-retry-twice.alula.test.json") },
-    NamedText { name: "session-flow-review-pass.alula.test.json", text: embed_str("../../machines/methodology/tests/session-flow-review-pass.alula.test.json") },
-    NamedText { name: "session-flow-runner-done.alula.test.json", text: embed_str("../../machines/methodology/tests/session-flow-runner-done.alula.test.json") },
-    NamedText { name: "session-flow-scope-retry.alula.test.json", text: embed_str("../../machines/methodology/tests/session-flow-scope-retry.alula.test.json") },
-    NamedText { name: "session-flow-session-retry.alula.test.json", text: embed_str("../../machines/methodology/tests/session-flow-session-retry.alula.test.json") },
-    NamedText { name: "session-flow-stop-in-gate13.alula.test.json", text: embed_str("../../machines/methodology/tests/session-flow-stop-in-gate13.alula.test.json") },
-    NamedText { name: "session-flow-stop-in-gate2.alula.test.json", text: embed_str("../../machines/methodology/tests/session-flow-stop-in-gate2.alula.test.json") },
-    NamedText { name: "session-flow-unknown-word.alula.test.json", text: embed_str("../../machines/methodology/tests/session-flow-unknown-word.alula.test.json") },
-    NamedText { name: "session-gate1-1.alula.test.json", text: embed_str("../../machines/methodology/tests/session-gate1-1.alula.test.json") },
-    NamedText { name: "session-gate1-2.alula.test.json", text: embed_str("../../machines/methodology/tests/session-gate1-2.alula.test.json") },
-    NamedText { name: "session-gate13-1.alula.test.json", text: embed_str("../../machines/methodology/tests/session-gate13-1.alula.test.json") },
-    NamedText { name: "session-gate13-2.alula.test.json", text: embed_str("../../machines/methodology/tests/session-gate13-2.alula.test.json") },
-    NamedText { name: "session-gate2-1.alula.test.json", text: embed_str("../../machines/methodology/tests/session-gate2-1.alula.test.json") },
-    NamedText { name: "session-launch-1.alula.test.json", text: embed_str("../../machines/methodology/tests/session-launch-1.alula.test.json") },
-    NamedText { name: "session-launch-2.alula.test.json", text: embed_str("../../machines/methodology/tests/session-launch-2.alula.test.json") },
-    NamedText { name: "session-launch-3.alula.test.json", text: embed_str("../../machines/methodology/tests/session-launch-3.alula.test.json") },
-    NamedText { name: "session-launch-4.alula.test.json", text: embed_str("../../machines/methodology/tests/session-launch-4.alula.test.json") },
-    NamedText { name: "session-launch-5.alula.test.json", text: embed_str("../../machines/methodology/tests/session-launch-5.alula.test.json") },
-    NamedText { name: "session-launch-6.alula.test.json", text: embed_str("../../machines/methodology/tests/session-launch-6.alula.test.json") },
-    NamedText { name: "session-launch-7.alula.test.json", text: embed_str("../../machines/methodology/tests/session-launch-7.alula.test.json") },
-    NamedText { name: "session-launch-8.alula.test.json", text: embed_str("../../machines/methodology/tests/session-launch-8.alula.test.json") },
-    NamedText { name: "session-pause-1.alula.test.json", text: embed_str("../../machines/methodology/tests/session-pause-1.alula.test.json") },
-    NamedText { name: "session-pause-2.alula.test.json", text: embed_str("../../machines/methodology/tests/session-pause-2.alula.test.json") },
-    NamedText { name: "session-pause-3.alula.test.json", text: embed_str("../../machines/methodology/tests/session-pause-3.alula.test.json") },
-    NamedText { name: "session-pause-4.alula.test.json", text: embed_str("../../machines/methodology/tests/session-pause-4.alula.test.json") },
-    NamedText { name: "session-result-parsing-1.alula.test.json", text: embed_str("../../machines/methodology/tests/session-result-parsing-1.alula.test.json") },
-    NamedText { name: "session-scope-1.alula.test.json", text: embed_str("../../machines/methodology/tests/session-scope-1.alula.test.json") },
-    NamedText { name: "session-scope-2.alula.test.json", text: embed_str("../../machines/methodology/tests/session-scope-2.alula.test.json") },
-    NamedText { name: "session-session-1.alula.test.json", text: embed_str("../../machines/methodology/tests/session-session-1.alula.test.json") },
-    NamedText { name: "session-session-2.alula.test.json", text: embed_str("../../machines/methodology/tests/session-session-2.alula.test.json") }
+    NamedText { name: "free-input-signal-without-row.alula.test.json", text: embed_str("../../machines/product/tests/free-input-signal-without-row.alula.test.json") }
 ]
 
-/// The names of the files that the folders hold (read at compile time with `embed_dir`): `product_machines`, `methodology_machines`, `product_tables`, `methodology_tables` (the files of the folder itself),
-/// `product_libraries` and `methodology_libraries` (`libs/…`), `product_scenarios`, `methodology_scenarios`; a test compares them with the lists above, so a file that is added to a folder and not to its list is found. `product_files` and `methodology_files` are every file of the folder
+/// The names of the files that the folder of the product holds (read at compile time with `embed_dir`): `product_machines`, `product_tables` (the files of the folder itself), `product_libraries`
+/// (`libs/…`), `product_scenarios`; a test compares them with the lists above, so a file that is added to the folder and not to its list is found. `product_files` is every file of the folder
 /// (a test proves there is no `*.alula.txt` among them: the one extension of a table is `.alula.md`, task 169).
 export fn data_dir_names(dir str) -> []str {
     if dir == "product_machines" { return only_ending(embed_dir("../../machines/product").paths(), [".alula.json"]) }
-    if dir == "methodology_machines" { return only_ending(embed_dir("../../machines/methodology").paths(), [".alula.json"]) }
     if dir == "product_tables" { return only_top(only_ending(embed_dir("../../machines/product").paths(), [".alula.md"])) }
-    if dir == "methodology_tables" { return only_top(only_ending(embed_dir("../../machines/methodology").paths(), [".alula.md"])) }
     if dir == "product_libraries" { return only_libs(only_ending(embed_dir("../../machines/product").paths(), [".alula.md"])) }
-    if dir == "methodology_libraries" { return only_libs(only_ending(embed_dir("../../machines/methodology").paths(), [".alula.md"])) }
     if dir == "product_files" { return embed_dir("../../machines/product").paths() }
-    if dir == "methodology_files" { return embed_dir("../../machines/methodology").paths() }
     if dir == "product_scenarios" { return embed_dir("../../machines/product/tests").paths() }
-    if dir == "methodology_scenarios" { return embed_dir("../../machines/methodology/tests").paths() }
     []str.new()
 }
 
@@ -672,63 +142,19 @@ fn only_ending(names []str, suffixes []str) -> []str {
     out
 }
 
-/// The libraries that the tables connect (Alula 2.26, section 9; task 240), by the path beside a machine (`libs/pause.alula.md`, as the line `- Файл:` of a connection names it): of the
-/// methodology «Пауза» and the arithmetic of the cycle with their English twins (the files of `libs/` of the package 0.9.0: the script of the migration put the Russian ones beside the machines,
-/// the English ones are for the English sample of the agent step), of the product «Отмена запроса» (`machines/product/libs/`: the signal of the protocol of the cancel). A test that translates
-/// a table passes them to the translator (with the called machines: `translation_files`).
+/// The library that the tables connect (Alula 2.26, section 9; task 240), by the path beside a machine (`libs/call_cancel.alula.md`, as the line `- Файл:` of a connection names it): «Отмена запроса»
+/// of the product (`machines/product/libs/`: the signal of the protocol of the cancel). A test that translates a table passes it to the translator (`translation_files`).
 export fn library_files() -> []NamedText => [
-    NamedText { name: "libs/cycle_arithmetic.alula.md", text: embed_str("../../machines/methodology/libs/cycle_arithmetic.alula.md") },
-    NamedText { name: "libs/cycle_arithmetic.en.alula.md", text: embed_str("../../machines/methodology/libs/cycle_arithmetic.en.alula.md") },
-    NamedText { name: "libs/pause.alula.md", text: embed_str("../../machines/methodology/libs/pause.alula.md") },
-    NamedText { name: "libs/pause.en.alula.md", text: embed_str("../../machines/methodology/libs/pause.en.alula.md") },
     NamedText { name: "libs/call_cancel.alula.md", text: embed_str("../../machines/product/libs/call_cancel.alula.md") }
 ]
 
-/// The called machines of the methodology (Alula 0.27, AL-146): a party `machine <имя>` names no types, the translator takes the input and the result from the file of the called machine
-/// beside the caller (`machine: <имя>` in its header). `agent_step` is called by `session_start`, `session_start` by `cycle_check` and `task_runner`, `cycle_check` by `task_runner`,
-/// `meeting` by `cycle_check`: the file of the methodology as it is (its commit 1db4005, task 247), a called machine only: it has no tree, the program does not build it alone.
-export fn callee_files() -> []NamedText => [
-    NamedText { name: "agent_step.alula.md", text: embed_str("../../machines/methodology/agent_step.alula.md") },
-    NamedText { name: "session_start.alula.md", text: embed_str("../../machines/methodology/session_start.alula.md") },
-    NamedText { name: "cycle_check.alula.md", text: embed_str("../../machines/methodology/cycle_check.alula.md") },
-    NamedText { name: "meeting.alula.md", text: embed_str("../../machines/methodology/meeting.alula.md") }
-]
+/// The files that a translation of a table is given: the libraries (the machines of the product call no other machine, so there is no called machine beside them).
+export fn translation_files() -> []NamedText => library_files()
 
-/// The files that a translation of a table is given: the libraries and the called machines.
-export fn translation_files() -> []NamedText {
-    mut out = library_files()
-    for f in callee_files() { out.push(f) }
-    out
-}
-
-/// The libraries put into the folder `dir` (`/m` -> `/m/libs/pause.alula.md`): for the program `alula` that a test runs on a folder of files.
+/// The libraries put into the folder `dir` (`/m` -> `/m/libs/call_cancel.alula.md`): for the program `alula` that a test runs on a folder of files.
 export fn library_files_in(dir str) -> []NamedText {
     mut out = []NamedText.new()
     for f in library_files() { out.push(NamedText { name: "${dir}/${f.name}", text: f.text }) }
-    out
-}
-
-/// Does a table call the machine of the file `callee` (`agent_step.alula.md`)? `session_start` calls the agent step by its Russian name `шаг_агента`.
-fn calls_machine(text str, callee str) -> bool {
-    ro name = callee.replace(".alula.md", "")
-    if name == "agent_step" && text.contains("| machine шаг_агента") { return true }
-    text.contains("| machine ${name}")
-}
-
-/// The called machines put into the folder `dir`: those that a table of the folder among `files` calls by a party `machine <имя>` (as the program `alula` reads the machine files beside
-/// it), but for the files already there: a test that writes its own (changed) table keeps it. A machine that no table there calls is not put (the program would read it too).
-export fn callee_files_in(dir str, files []NamedText) -> []NamedText {
-    mut out = []NamedText.new()
-    for c in callee_files() {
-        ro name = "${dir}/${c.name}"
-        mut there = false
-        mut called = false
-        for f in files {
-            if f.name == name { there = true }
-            if f.name.starts_with("${dir}/") && f.name.ends_with(".alula.md") && calls_machine(f.text, c.name) { called = true }
-        }
-        if called && !there { out.push(NamedText { name, text: c.text }) }
-    }
     out
 }
 
@@ -763,67 +189,14 @@ export fn chat_machine_text() -> str => text_of_file(machine_files(), "chat.alul
 /// The text of the machine of the many-turn chat session (`machines/product/dialog.alula.json`), the translation of `dialog.alula.md`: the machine that the session server runs.
 export fn dialog_machine_text() -> str => text_of_file(machine_files(), "dialog.alula.json")
 
-/// The text of the machine of the agent step (`machines/methodology/agent_step.alula.json`), the translation of its table.
-export fn agent_step_machine_text() -> str => text_of_file(machine_files(), "agent_step.alula.json")
-
-/// The text of the agent step written as tables (`machines/methodology/agent_step.alula.md`).
-export fn agent_step_table_text() -> str => text_of_file(table_files(), "agent_step.alula.md")
-
-/// The text of the machine of the cycle check (`machines/methodology/cycle_check.alula.json`), the translation of `cycle_check.alula.md` (task 122).
-export fn cycle_check_machine_text() -> str => text_of_file(machine_files(), "cycle_check.alula.json")
-
-/// The text of the machine "Task runner" (`machines/methodology/task_runner.alula.json`), the translation of its table (task 123).
-export fn task_runner_machine_text() -> str => text_of_file(machine_files(), "task_runner.alula.json")
-
-/// The text of the task runner written as tables (`machines/methodology/task_runner.alula.md`).
-export fn task_runner_table_text() -> str => text_of_file(table_files(), "task_runner.alula.md")
-
-/// The text of the cycle check written as tables (`machines/methodology/cycle_check.alula.md`).
-export fn cycle_check_table_text() -> str => text_of_file(table_files(), "cycle_check.alula.md")
-
 /// The text of the chat machine written as tables (`machines/product/chat.alula.md`).
 export fn chat_table_text() -> str => text_of_file(table_files(), "chat.alula.md")
 
 /// The text of the many-turn chat machine written as tables (`machines/product/dialog.alula.md`).
 export fn dialog_table_text() -> str => text_of_file(table_files(), "dialog.alula.md")
 
-/// The text of the machine "Session start" (`machines/methodology/session_start.alula.json`), the translation of its table (task 121): the machine the runner calls for every session.
-export fn session_start_machine_text() -> str => text_of_file(machine_files(), "session_start.alula.json")
-
-/// The text of the machine "Session start" written as tables (`machines/methodology/session_start.alula.md`).
-export fn session_start_table_text() -> str => text_of_file(table_files(), "session_start.alula.md")
-
-/// The copy of the sample of the agent step of the specification (`machines/methodology/agent-step-sample.txt`, the same text as `spec/samples/agent-step.alula.md` of the package, links aside).
-export fn agent_step_sample_text() -> str => embed_str("../../machines/methodology/agent-step-sample.txt")
-
-/// The copy of the English twin of the sample of the agent step (`machines/methodology/agent-step-sample.en.txt`, the text of `spec/samples/agent-step.en.alula.md` of the package 0.9.0 as it is, task 240):
-/// the package keeps for its own tests the sample at 2.25, the product needs the one of 2.26.
-export fn agent_step_sample_en_text() -> str => embed_str("../../machines/methodology/agent-step-sample.en.txt")
-
-/// The registry of the methodology as text (`machines/methodology/registry.md`): the 58 primitives (the parse of a reply is three functions, one per role), the sets of the types of the signatures.
-export fn methodology_registry_text() -> str => embed_str("../../machines/methodology/registry.md")
-
-/// The table of the journal codes of the methodology (`machines/methodology/journal.md`).
-export fn methodology_journal_text() -> str => embed_str("../../machines/methodology/journal.md")
-
 /// The table of the journal codes of the product (`machines/product/journal.md`).
 export fn product_journal_text() -> str => embed_str("../../machines/product/journal.md")
-
-/// The registry of the methodology as data: the primitives and the sets of the types (`host_types(data, "session")`, `host_types(data, "runner")`).
-export fn methodology_registry_data() -> HostRegistryData {
-    match parse_registry_table(methodology_registry_text()) {
-        Ok(data) => data
-        Err(errors) => panic("the registry of the methodology is wrong: ${errors.join(" | ")}")
-    }
-}
-
-/// The registry of the host "methodology": the language, the 58 primitives of the methodology and the codes of its journal.
-export fn methodology_registry() -> Registry {
-    match load_host(methodology_registry_text(), methodology_journal_text()) {
-        Ok(reg) => reg
-        Err(errors) => panic("the registry of the methodology is wrong: ${errors.join(" | ")}")
-    }
-}
 
 /// The registry of the host "product": the language (the machines of the product call no primitive of their own) and the codes of the journal of the product.
 export fn product_registry() -> Registry {
@@ -831,46 +204,4 @@ export fn product_registry() -> Registry {
         Ok(reg) => reg
         Err(errors) => panic("the registry of the product is wrong: ${errors.join(" | ")}")
     }
-}
-
-/// The table of the journal codes of both owners as one file (`journal.md` beside machines of both): the table of the methodology and the rows of the table of the product that it does not hold.
-export fn all_journal_text() -> str {
-    ro have = parse_journal(methodology_journal_text())
-    mut text = methodology_journal_text().trim_ascii()
-    for line in product_journal_text().split("\n") {
-        ro cells = line.split("|")
-        mut codes = []str.new()
-        for c in cells { codes.push(c.trim_ascii()) }
-        if codes.len() < 3 { continue }
-        ro code = codes[2].replace("`", "")
-        if line.starts_with("| ") && code != "Код события" && !code.starts_with("---") && journal_find(have, code).is_none() { text = "${text}\n${line}" }
-    }
-    "${text}\n"
-}
-
-/// The registry of the methodology and of the product together: the primitives of the methodology and the codes of both journals (a code that both tables hold - the four codes of the pair `dialog_steps` - once).
-/// For the tests that run machines of both owners with one registry.
-export fn all_registry() -> Registry {
-    mut rows = parse_journal(methodology_journal_text())
-    for row in parse_journal(product_journal_text()) {
-        if journal_find(rows, row.code).is_none() { rows.push(row) }
-    }
-    match host_registry(methodology_registry_data(), rows) {
-        Ok(reg) => reg
-        Err(errors) => panic("the registry of both owners is wrong: ${errors.join(" | ")}")
-    }
-}
-
-/// The machines of the methodology that a caller may call, each under the name of its machine: "Шаг агента" (`agent_step`), "Запуск сессии" (`session_start`, task 121) and "Проверка цикла"
-/// (`cycle_check`, task 122), loaded from the JSON files compiled into the program. The runner of tasks (`task_runner`, task 123) calls the last two; the second calls the first and the third the
-/// second, so the runner of the pairs runs several levels (task 123: the runner is recursive).
-export fn methodology_nested() -> NestedRegistry {
-    mut reg = NestedRegistry.empty()
-    for name in ["agent_step", "session_start", "cycle_check"] {
-        match load_alula_machine(text_of_file(machine_files(), "${name}.alula.json"), methodology_registry()) {
-            Ok(m) => { reg = reg.add(m.def.name, m) }
-            Err(e) => panic("the machine ${name} of the registry of the methodology does not load: ${e}")
-        }
-    }
-    reg
 }

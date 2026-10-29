@@ -15,7 +15,6 @@ fn machine_named(name str) -> AlulaMachine {
     if name == "Gate" { return build("gate.alula.json") }
     if name == "Lenses" { return build("lenses.alula.json") }
     if name == "Variants" { return build("variants.alula.json") }
-    if name == "agent_step" { return agent_step() }
     panic("no machine ${name}")
 }
 
@@ -49,11 +48,8 @@ fn one_step(step str) -> str => `{"kind":"test","machine":"ChatSession","name":"
 
 test "every scenario" {
     ro files = test_files()
-    assert(files.len() >= 56)
+    assert(files.len() == 81)
     for f in files {
-        // the scenarios of a parent with its nested machines run in the unit `machine_nested_run`, those of the cycle check (standalone) in the unit `machine_cycle`, those of the session start
-        // together with the agent step it calls in the unit `machine_session` (task 121)
-        if f.name.starts_with("nested-") || f.name.starts_with("cycle-") || f.name.starts_with("session-") || f.name.starts_with("runner-") { continue }
         ro sc = scenario_of(f.name)
         ro run = run_test(machine_named(sc.machine), sc)
         if !run_ok(run) { panic(report_text(run)) }
@@ -177,16 +173,4 @@ test "standalone key default" {
         Ok(x) => assert(!x.standalone)
         Err(e) => assert(false)
     }
-}
-
-test "cycle scenarios are standalone" {
-    mut n = 0
-    for f in test_files() {
-        if !f.name.starts_with("cycle-") { continue }
-        ro sc = scenario_of(f.name)
-        assert(sc.standalone)
-        assert(sc.machine == "cycle_check")
-        n += 1
-    }
-    assert(n == 102)
 }

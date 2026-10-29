@@ -3,9 +3,9 @@ module crew_harness.machine_text_machines
 
 import std.text
 import alula.machine.{NamedText}
-import crew_harness.machines.{all_registry, translation_files}
+import crew_harness.machines.{product_registry, translation_files}
 import alula.machine_text.{TranslateReport, translate_checked_with, translate_expression}
 
 // The report of a translation of a text with the checks of the table.
-fn checked(text str) -> TranslateReport => translate_checked_with(text, all_registry(), translation_files())
+fn checked(text str) -> TranslateReport => translate_checked_with(text, product_registry(), translation_files())
 

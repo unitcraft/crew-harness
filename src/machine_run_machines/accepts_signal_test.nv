@@ -2,11 +2,11 @@
 module crew_harness.machine_run_machines
 
 import alula.machine.{text_of_file}
-import crew_harness.machines.{machine_files, all_registry}
+import crew_harness.machines.{machine_files, product_registry}
 import alula.machine_run.{AlulaMachine, load_alula_machine}
 
 test "as the dialog in Idle takes the signal of a message and not an unknown one" {
-    match load_alula_machine(text_of_file(machine_files(), "dialog.alula.json"), all_registry()) {
+    match load_alula_machine(text_of_file(machine_files(), "dialog.alula.json"), product_registry()) {
         Ok(m) => {
             assert(m.accepts_signal(m.initial(), "user_message"))
             assert(!m.accepts_signal(m.initial(), "no_such_signal"))

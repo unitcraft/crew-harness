@@ -4,13 +4,13 @@ module crew_harness.machine_run_machines
 import std.text
 import alula.machine.{Value, PrimitiveHost, EvalError, Null, enum_value, text_of_file, record_get, value_json}
 import alula.engine.{Incoming, EventKind, Order, StepEnvironment, JournalEvent, SignalOrder}
-import crew_harness.machines.{machine_files, all_registry}
+import crew_harness.machines.{machine_files, product_registry}
 import alula.machine_run.{AlulaMachine, AlulaState, ScriptedHost, ScriptedReply, alula_step, load_alula_machine, with_replies}
 
 fn machine_text(name str) -> str => text_of_file(machine_files(), name)
 
 fn build_from(text str) -> AlulaMachine {
-    match load_alula_machine(text, all_registry()) {
+    match load_alula_machine(text, product_registry()) {
         Ok(m) => m
         Err(e) => panic("the machine does not load: ${e}")
     }
@@ -25,12 +25,6 @@ fn calc() -> AlulaMachine => build("calc.alula.json")
 fn dialog() -> AlulaMachine => build("dialog.alula.json")
 
 fn actions() -> AlulaMachine => build("actions.alula.json")
-
-// The agent step with the answers of its primitives: the reply is valid, closing the turn answers nothing.
-fn agent_step() -> AlulaMachine => with_replies(build("agent_step.alula.json"), [
-    ScriptedReply { name: "reply_validation", value: enum_value("ReplyCheck", "Valid") },
-    ScriptedReply { name: "close_agent_turn", value: Null }
-])
 
 // An event as the engine hands it to a machine: the envelope is stamped.
 fn stamped(kind EventKind, name str, request Option[str], input str) -> Incoming => {

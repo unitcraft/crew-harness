@@ -4,7 +4,7 @@
 
 Every place of the product that goes round a defect or a limit of Oracle carries a comment `// ORACLE-WORKAROUND(N): what is gone round; how to simplify when item N is fixed`, where N is an item of [README.md](README.md) ("Known problems"). `git grep ORACLE-WORKAROUND` finds them, `python scripts/oracle-workarounds.py --list` prints them by item with the line. When Nova fixes an item, open its places below, simplify the code as the mark says and remove the mark; then rerun `python scripts/oracle-workarounds.py --index`.
 
-Marks: 68 in 42 files. Items with marks: 29. Items without marks: 32 (no workaround in the code).
+Marks: 66 in 40 files. Items with marks: 28. Items without marks: 33 (no workaround in the code).
 
 | Item | What | Places (files; marks in a file if more than one) | Marks |
 |---|---|---|---|
@@ -39,7 +39,7 @@ Marks: 68 in 42 files. Items with marks: 29. Items without marks: 32 (no workaro
 | 29 | `user_request_vs_http`, `user_session_vs_postgres`: the table of type names is one for the whole program, dependencies included.... | `src/server/hub.nv` | 1 |
 | 30 | `pg_polaris_message`: the driver nova-postgres and Polaris cannot be in one program. The driver has a variant... | `src/server/front/front.nv`, `src/server/front/front_settings.nv`, `src/server/stdio.nv` | 3 |
 | 31 | `repro_stdin_read` (a program): (a) `Stdin.read(buf)` is `fread` and returns only when `buf` is FULL or at the end of the stream... | `src/server/stdio.nv` (2) | 2 |
-| 32 | `repro_text_import` (a program): `import std.text` in one module makes a variable named `text`, bound by a record pattern... | `src/acp/client.nv`, `src/chat/chat_test.nv`, `src/machine_agent/sample_test.nv`, `src/machine_chat/equal_test.nv`, `src/machine_dialog_eq/equal_test.nv`, `src/machine_dialog_eq/inject_test.nv`, `src/server/dialog_test.nv`, `src/server/settings.nv` | 8 |
+| 32 | `repro_text_import` (a program): `import std.text` in one module makes a variable named `text`, bound by a record pattern... | `src/acp/client.nv`, `src/chat/chat_test.nv`, `src/machine_chat/equal_test.nv`, `src/machine_dialog_eq/equal_test.nv`, `src/machine_dialog_eq/inject_test.nv`, `src/server/dialog_test.nv`, `src/server/settings.nv` | 7 |
 | 33 | `for_in_enum_literal`: `for c in [Pure, Writing]`, an array literal whose items are variants of a user enum without payload, does... | `src/chat/chat_test.nv` | 1 |
 | 34 | `option_enum_named_variants`: an enum with a variant with named fields (`FieldOf { target, name }`) and another variant that... | no workaround in the code | 0 |
 | 35 | `result_display`: a `Result` in an interpolation (`"${r}"`, `r = "5".to_int()`) passes the checker and fails at link time with | no workaround in the code | 0 |
@@ -59,7 +59,7 @@ Marks: 68 in 42 files. Items with marks: 29. Items without marks: 32 (no workaro
 | 49 | `fn_name_two_modules`: a PRIVATE generic function `begin[T]` of one module and a function `begin(n int)` of another module of the... | `src/server/hub.nv` | 1 |
 | 50 | test helper `ev` next to the function `ev` (no small reproduction; the reproduction is the unit): the test file... | no workaround in the code | 0 |
 | 51 | `match_record_literal_arg`: a record literal inside a list literal (or directly) in the argument of the call that is the... | `src/machine_dialog/table_test.nv`, `src/machine_dialog_eq/equal_test.nv`, `src/machine_dialog_eq/inject_test.nv` | 3 |
-| 52 | `for_in_list_of_lists`: `for item in [["a"], ["b", "c"]]`, an array literal whose items are arrays, does not compile... | `src/machine_session/flow_test.nv` | 1 |
+| 52 | `for_in_list_of_lists`: `for item in [["a"], ["b", "c"]]`, an array literal whose items are arrays, does not compile... | no workaround in the code | 0 |
 | 53 | `same_fn_name_two_modules` (with the helper module `same_fn_name_def`): two modules of one program that each declare a PRIVATE... | no workaround in the code | 0 |
 | 54 | `generic_literal_args`: a record literal of a generic record with its type arguments written, `Holder[str] { id: "a", input: "b"... | no workaround in the code | 0 |
 | 55 | `mock_fs_create_dir_all`: `create_dir_all("/a/b/c")` on the memory file system (`mock_fs`) makes only the LAST folder... | `src/alula_cli_machines/support_test.nv`, `src/alula_eq_machines/support_test.nv`, `src/alula_tests_machines/support_test.nv` | 3 |

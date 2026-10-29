@@ -7,7 +7,7 @@ import alula.machine.{NamedText, text_of_file}
 import crew_harness.machines.{table_files}
 
 test "c222 the machines of the folder are read" {
-    for name in ["chat.alula.md", "dialog.alula.md", "cycle_check.alula.md"] {
+    for name in ["chat.alula.md", "dialog.alula.md"] {
         ro ran = run_with(["check", "/m/${name}"], one("/m/${name}", text_of_file(table_files(), name)))
         if ran.code != 0 { panic("check ${name}: ${ran.err}") }
         assert(ran.code == 0)

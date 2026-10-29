@@ -1,8 +1,8 @@
-// data_test.nv - the data of the machines of the product and of the methodology (task 158): the lists of the files in `data.nv` hold every file of the folders `machines/product/` and `machines/methodology/`,
-// the names follow the Alula rule, the registries of the owners load, and every machine loads with the registry of its owner.
+// data_test.nv - the data of the machines of the product (task 158): the lists of the files in `data.nv` hold every file of the folder `machines/product/`, the names follow the Alula rule, the registry
+// of the product loads, and every machine loads with it. The machines of the methodology left the product with task 249.
 module crew_harness.machines
 
-import alula.machine.{NamedText, text_of_file, find_primitive, journal_find, is_machine_json_name, is_table_name, class_word}
+import alula.machine.{NamedText, text_of_file, find_primitive, journal_find, is_machine_json_name, is_table_name}
 import alula.machine_run.{load_alula_machine}
 
 fn dt_names(files []NamedText) -> []str {
@@ -27,27 +27,11 @@ fn dt_with_prefix(files []NamedText, prefix str) -> []NamedText {
 }
 
 test "dt the lists of the files hold every file of the folders" {
-    ro machines = dt_names(machine_files())
-    mut in_folders = data_dir_names("product_machines")
-    for n in data_dir_names("methodology_machines") { in_folders.push(n) }
-    assert(dt_same(machines, in_folders))
-    ro tables = dt_names(table_files())
-    mut tables_in_folders = data_dir_names("product_tables")
-    for n in data_dir_names("methodology_tables") {
-        // `meeting` is the called machine of the methodology (task 247): no tree, it is in the list of the called machines, not of the tables
-        if n == "meeting.alula.md" { continue }
-        tables_in_folders.push(n)
-    }
-    assert(dt_same(tables, tables_in_folders))
-    assert(dt_names(callee_files()).contains("meeting.alula.md"))
-    assert(!dt_names(machine_files()).contains("meeting.alula.json"))
-    ro scenarios = dt_names(test_files())
-    mut scenarios_in_folders = data_dir_names("product_scenarios")
-    for n in data_dir_names("methodology_scenarios") { scenarios_in_folders.push(n) }
-    assert(dt_same(scenarios, scenarios_in_folders))
-    mut libraries_in_folders = data_dir_names("product_libraries")
-    for n in data_dir_names("methodology_libraries") { libraries_in_folders.push(n) }
-    assert(dt_same(dt_names(library_files()), libraries_in_folders))
+    assert(dt_same(dt_names(machine_files()), data_dir_names("product_machines")))
+    assert(dt_same(dt_names(table_files()), data_dir_names("product_tables")))
+    assert(dt_same(dt_names(test_files()), data_dir_names("product_scenarios")))
+    assert(dt_same(dt_names(library_files()), data_dir_names("product_libraries")))
+    assert(dt_same(dt_names(translation_files()), dt_names(library_files())))
     assert(data_dir_names("elsewhere").len() == 0)
 }
 
@@ -58,32 +42,24 @@ fn dt_count_ending(names []str, suffix str) -> int {
 }
 
 test "dt the one extension of a table is alula md" {
-    // task 169: the old extension `.alula.txt` (the work-around of the guard of the links) is gone from the folders of the machines and from the lists of the tables
+    // task 169: the old extension `.alula.txt` (the work-around of the guard of the links) is gone from the folder of the machines and from the list of the tables
     assert(dt_count_ending(data_dir_names("product_files"), ".alula.txt") == 0)
-    assert(dt_count_ending(data_dir_names("methodology_files"), ".alula.txt") == 0)
     ro tables = dt_names(table_files())
     assert(dt_count_ending(tables, ".alula.txt") == 0)
     assert(dt_count_ending(tables, ".alula.md") == tables.len())
     assert(dt_count_ending(data_dir_names("product_tables"), ".alula.md") == data_dir_names("product_tables").len())
-    assert(dt_count_ending(data_dir_names("methodology_tables"), ".alula.md") == data_dir_names("methodology_tables").len())
-    assert(data_dir_names("methodology_tables").contains("agent_step.alula.md"))
-    assert(tables.contains("agent_step.alula.md"))
-    assert(agent_step_table_text().byte_len() > 0)
-    // the copy of the sample of the specification is a text for the tests, not a table of a machine: it is in the folder, not in the lists of the tables
-    assert(data_dir_names("methodology_files").contains("agent-step-sample.txt"))
-    assert(!tables.contains("agent-step-sample.txt"))
+    assert(tables.contains("chat.alula.md"))
+    assert(chat_table_text().byte_len() > 0)
 }
 
 test "dt the numbers of the files" {
-    assert(machine_files().len() == 7)
-    assert(table_files().len() == 7)
-    assert(test_files().len() == 595)
+    assert(machine_files().len() == 2)
+    assert(table_files().len() == 2)
+    assert(library_files().len() == 1)
+    assert(test_files().len() == 81)
     assert(dt_with_prefix(test_files(), "chat-").len() + dt_with_prefix(test_files(), "dialog-").len() + dt_with_prefix(test_files(), "free-input-").len() == 81)
-    assert(dt_with_prefix(test_files(), "agent-step-").len() == 83)
-    assert(dt_with_prefix(test_files(), "cycle-").len() == 102)
-    assert(dt_with_prefix(test_files(), "session-").len() == 63)
-    assert(dt_with_prefix(test_files(), "runner-").len() == 260)
-    assert(dt_with_prefix(test_files(), "nested-steps-").len() == 6)
+    assert(dt_with_prefix(test_files(), "agent-step-").len() == 0)
+    assert(dt_with_prefix(test_files(), "nested-steps-").len() == 0)
 }
 
 test "dt the names are the names of Alula" {
@@ -101,47 +77,11 @@ test "dt the machines of the product load with the registry of the product" {
     }
 }
 
-test "dt the machines of the methodology load with the registry of the methodology" {
-    for name in ["agent_step.alula.json", "cycle_check.alula.json", "session_start.alula.json", "task_runner.alula.json", "dialog_steps.alula.json"] {
-        match load_alula_machine(text_of_file(machine_files(), name), methodology_registry()) {
-            Ok(m) => assert(m.def.states.len() >= 3)
-            Err(e) => panic("${name}: ${e}")
-        }
-    }
-}
-
-test "dt a machine of the methodology does not load with the registry of the product" {
-    // the data of an owner are the owner's: the registry of the product has neither the primitives nor the codes of the methodology
-    match load_alula_machine(text_of_file(machine_files(), "agent_step.alula.json"), product_registry()) {
-        Ok(m) => assert(false)
-        Err(e) => assert(e.contains("not registered") || e.contains("journal tables"))
-    }
-}
-
-test "dt the registry of the methodology has 58 primitives and the language has one" {
-    ro reg = methodology_registry()
-    assert(reg.primitives.len() == 59)
-    mut volatile = 0
-    mut acting = 0
-    mut pure = 0
-    for p in reg.primitives {
-        if class_word(p.class) == "volatile" { volatile += 1 }
-        if class_word(p.class) == "acting" { acting += 1 }
-        if class_word(p.class) == "pure" { pure += 1 }
-    }
-    assert(volatile == 36 && acting == 23 && pure == 0)
+test "dt the registry of the product is the language and the journal of the product" {
+    ro reg = product_registry()
+    assert(reg.primitives.len() == 1)
     assert(find_primitive(reg, "new_id").is_some())
     assert(find_primitive(reg, "time_now").is_none())
-    assert(find_primitive(reg, "stop_agent_group").is_some())
-    assert(product_registry().primitives.len() == 1)
-    assert(all_registry().primitives.len() == 59)
-    assert(journal_find(all_registry().journal, "user_message").is_some())
-    assert(journal_find(all_registry().journal, "turn_failed").is_some())
-}
-
-test "dt the sample of the specification is the sample" {
-    assert(agent_step_sample_text().contains("Шаг агента"))
-    assert(agent_step_sample_text().contains("- alula_version: 0.27"))
-    assert(all_journal_text().contains("agent_chunk"))
-    assert(all_journal_text().contains("turn_failed"))
+    assert(journal_find(reg.journal, "user_message").is_some())
+    assert(journal_find(reg.journal, "turn_failed").is_none())
 }
