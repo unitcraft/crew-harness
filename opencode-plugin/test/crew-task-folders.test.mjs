@@ -215,16 +215,13 @@ cell("AC-10: crew_task list all shows the old record", all.includes("стара�
 const a14 = await call("crew_spawn", "sesINTEG1", { task: 14, session: "С1", goal: "g" })
 cell("AC-10: an open old record with the number refuses with its title", a14.includes("живая старая") && hash(path.join(store, "14.json")) === hash14 && !existsSync(path.join(store, "legacy", "14.json")), a14)
 
-// REQ-03: assign in a project with folders makes the folder on the task branch too; the tab is the session «исп»
+// 256 supersedes the old REQ-03 assign path: no folder or task is allocated for a user's conversation.
 await hooks.context({ sessionID: "sesTAB2", system: [], model: { id: "x", providerID: "y" } })
 await events["session.idle"]({ properties: { sessionID: "sesTAB2" } })
-const as = await call("crew_task", "sesINTEG1", { action: "assign", session: "sesTAB2", title: "Ручная задача", goal: "сделать руками", criteria: "готово", owner_words: "- «сделай» (владелец, 2026-10-15, чат)", result: "нет: результат — код: proj/" })
+await call("crew_role", "sesTAB2", { role: "worker" }) // стоячая worker-вкладка: вошла в crew сама (задача 256)
+const as = await call("crew_task", "sesINTEG1", { action: "assign", session: "sesTAB2", title: "Ручная задача", goal: "сделать руками", criteria: "готово", owner_words: "- «вкладку sesTAB2 бери под задачу» (владелец, 2026-10-29, чат)", result: "нет: результат — код: proj/" })
 const ta = tasks.listTasks("proj").find((x) => x.kind === "assign")
-let msgA = ""
-try {
-  msgA = ta?.folder ? execFileSync("git", ["-C", proj, "show", `${ta.branch}:${ta.folder}/task/message.md`], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }) : ""
-} catch {}
-cell("REQ-03: assign makes the folder with the next number on the task branch (template from the fields)", !!ta?.folder && /^doc\/tasks\/061-/.test(ta.folder) && msgA.startsWith("# Задание: Ручная задача") && ta.sessions?.[0]?.code === "исп" && as.includes(ta.folder), JSON.stringify({ as, f: ta?.folder }))
+cell("256: assign refuses before allocating a task folder even with forged permission", !ta && /assign запрещён/.test(as), JSON.stringify({ as, task: ta }))
 cell("REQ-03: the main copy is still clean after assign", git(proj, "status", "--porcelain") === "", git(proj, "status", "--porcelain"))
 
 // REQ-10: reassign of a task with sessions — the same code with the next ordinal and a new launch number, the old one handed

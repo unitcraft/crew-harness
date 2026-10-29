@@ -296,6 +296,8 @@ const openTab = async (sid, role, model, dir = proj) => {
   beat()
   await hooks["model.request"]({ sessionID: sid, kind: "primary", model })
   await call("crew_role", sid, { role })
+  // This pool contains program-created sessions, not conversations of the owner (256).
+  core.saveCard({ ...core.readJson(core.cardFile(sid)), spawned: { by: "sesINTEG", task: "review pool", tier: "medium", status: "running", at: Date.now(), qid: `pool-${sid}` } })
 }
 const closeTab = (sid) => {
   const i = tabsNow.findIndex((t) => t.sessionID === sid)

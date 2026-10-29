@@ -832,7 +832,7 @@ refuses them) — [ADR-0010](../doc/canon/decisions/ADR-0010-question-answering-
   question closes it). The type `gate` is not accepted in the map, and the mode `agent` (another agent answers) is moved to a
   separate future task. The value that fits most projects: `{"implementation": "recommendations"}` — for `requirements` and `plan` the owner stays
   (для `requirements` и `plan` — `owner`: there the method leaves the decision to a person).
-- `allow_self_assign` (default `false`, set by a human) — the integrator is never the executor of its own task: `assign` to its own session is refused (`crew_spawn` makes a separate executor); `true` only by the owner's word.
+- `allow_self_assign` (legacy setting, default `false`) does not bypass the user-session guard: `assign` is refused without a trusted owner receipt, which the API does not currently provide. Use `crew_spawn` for a separate executor.
 - `answer_max` — how many answers in a row one session may get (3); the owner's word in the tab resets the count.
 
 **The form of a question.** A session asks in text: a block `В-01 …?` with the lines `Тип: requirements|plan|implementation|gate`,
@@ -991,7 +991,7 @@ task by its number; a session's title is `045 исп title`. The journal is
   (`doc/canon/process.md`, «Задание task/message.md»): `# Задание: <title>`, a header (customer, repository and branch,
   date, source), then the second-level sections «Чего хочет владелец», «Что нужно», «Критерии приёмки», «Результат и куда
   он попадает», «Связи», «Границы» in this order; an empty section is written `нет: <why>`, not dropped. Without `message`,
-  `crew_spawn` (a new task or a sub-task) and `crew_task assign` in a project with folders build the text from the fields:
+  `crew_spawn` (a new task or a sub-task) in a project with folders builds the text from the fields:
   `owner_words` — the owner's words word for word with date and source (`- «сделай X» (владелец, 2026-10-17, чат
   оркестратора)`), required and must carry a date `ГГГГ-ММ-ДД`; `goal` — its paragraphs and `- ` lines become the numbered
   points of «Что нужно» (an already numbered goal stays as it is); `criteria`; `result` — where the result lands, or `нет:
@@ -1020,15 +1020,18 @@ task by its number; a session's title is `045 исп title`. The journal is
   plugin creates the task's worktree and branch (from the target branch) and starts the session in it, so the
   project's hooks see the task's branch, not the main copy ([plan 002.3](../doc/archive/plans/002.3-task-worktree.md)).
   The place has to lie inside the `worktrees` folder (the rule of the trees folder): a place that escapes it through
-  the `worktree_name` template is refused before the task record is made (`crew_spawn`, `crew_task {action: "assign"}`),
+  the `worktree_name` template is refused before the task record is made (`crew_spawn`),
   and a tree made by hand outside the folder on the task's branch is not adopted — the start is refused with how to
   fix (`git worktree move` into the folder, or remove the tree).
 - The start is repeatable: the session id is chosen and written to the journal **before**
   `session.create` (OpenCode accepts an own id starting with `ses` and returns the existing session
   on a repeat), the task letter's id comes from the number — a start cut off at any step is
   finished by the next pass without a second session or letter.
-- `crew_task {action}`: `list`, `show {n}`; for the integrator `assign {session, goal, criteria…}`
-  (an owner's tab takes the task; it is woken while the task is open, even when closed), `push
+- `crew_task {action}`: `list`, `show {n}`; `assign {session, ...}` refuses user conversations (task 256).
+  Neither a free worker role, `crew_role`, `allow_self_assign`, nor agent-supplied `owner_words` is proof of owner consent.
+  No trusted receipt for session + assignment exists yet, so use `crew_spawn` or safe `reassign` to a new session.
+  Automatic review selection only considers program-created sessions (`spawned`); it never takes a user's tab just because it is idle.
+  Historical `assign` records remain readable and can still be submitted, cancelled or reassigned. For the integrator, `push
   {n, text?}` (wake a stalled executor now), `reassign {n, text?}` (a new session, the same number, a
   summary of what was done; `text` refines the goal: it goes into the new session's first letter as a
   block «УТОЧНЕНИЕ ПРИ ПЕРЕДАЧЕ» before the old goal, wins where they differ and stays in the task
@@ -1241,7 +1244,7 @@ The integrator stays free for the owner and does not re-check accepted work:
   another. If the tip cannot be read (network, 20 s term, no such branch on `origin`) `merge` is refused with the cause and
   the lock is not issued; a repeat of `merge` by the holder keeps the lock in that case. Without `origin` the tip of the
   local branch is used;
-- `task_extra_fields` (default empty): up to 8 project fields `{id, label, hint?}`; `crew_spawn` and `crew_task assign`
+- `task_extra_fields` (default empty): up to 8 project fields `{id, label, hint?}`; `crew_spawn`
   take `extra {id: one line up to 300 characters}`, the values go into the executor letter, the reviewer letter (with the path
   of the task record, field `extra`) and `show` under "ДОПОЛНИТЕЛЬНО (поля проекта)". An unknown id is refused naming the
   declared ones; `order` takes no `extra`.

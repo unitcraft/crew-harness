@@ -1640,9 +1640,10 @@ acceptor — роль приёмщика (разделяемая) при нас�
     проекта tier_min и tier_max, если они заданы); лимит работающих на роль —
     spawn_limits (3). Если в настройках проекта задан worktrees — письмо с задачей называет папку worktree и ветку.
   priority: P0 авария (всё остальное ждёт), P1 первая очередь, P2 обычная работа (по умолчанию), P3 когда освободятся руки.
-  crew_task {action: "assign", session, goal, criteria, ...} — отдать задачу открытой вкладке владельца, а не новой
-    сессии; пока задача открыта, такую вкладку будят, даже закрытую. Интегратор исполнителем своей задачи не бывает: assign на
-    собственную сессию отказывает (исключение по слову владельца — allow_self_assign: true в настройках проекта).
+  crew_task {action: "assign", session, ...} — запрещён для пользовательских вкладок: доверенного подтверждения владельца
+    на конкретную сессию и назначение пока нет. owner_words, crew_role, простой и allow_self_assign его не заменяют.
+    Новый исполнитель — crew_spawn; передача существующей задачи новой выделенной сессии — reassign.
+    Прежние записи assign остаются читаемыми: их можно сдать, отменить или передать без захвата другой беседы.
   crew_task {action: "push", n, text?, to?} — подтолкнуть остановившуюся вкладку сейчас: to "executor" (по умолчанию) — исполнителя, "reviewer" — приёмщика (счётчик напоминаний — с нуля).
   crew_task {action: "reassign", n, text?} — передать задачу новой сессии под тем же номером со сводкой сделанного; text —
     уточнение цели: идёт в первое письмо новой сессии перед прежней целью (уточнять тем же вызовом, не вторым письмом).
@@ -2646,7 +2647,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
         "Tasks of the caller's project, by number (three digits, 045 or 094, with a folder or without). One line per action: action - who may - parameters - what it does. Roles: integrator = the tab that plans and starts the project's tasks; executor = the session doing the task; reviewer = the tab that checks and lands a submitted task (a free worker tab, a session started for it, the acceptor role when the project says reviewer: acceptor, or the integrator). Texts that go to another tab (submit report, rework remarks, order, push and cancel texts) are read by the owner too: write them in the owner's language named in your system block.",
         "list - anyone - all? - open tasks by priority; all=true adds finished and cancelled ones.",
         "show - anyone - n - details and history of a task, with its steps, side branches and worktrees.",
-        "assign - integrator - session, goal, criteria, title?, boundaries?, open_questions?, priority?, extra? - give a task to an existing open tab instead of a new session; the tab is woken while the task is open. Refused for the integrator's own session (unless the project sets allow_self_assign) and for a session that already runs a task. extra {id: one line} fills the project's extra task fields (task_extra_fields, see crew_config show). In a project with task folders the task text follows the template of crew_spawn: owner_words and result required, links? boundaries? message?",
+        "assign - integrator - session - refused: user conversations have no trusted owner receipt for session+assignment. owner_words, crew_role, idle and allow_self_assign cannot authorize capture. Use crew_spawn for a new executor, reassign for safe handoff to a new session. Existing assign records remain supported.",
         "order - integrator - to \"project.integrator\", goal, criteria, ... - order work from another project: its integrator does it with its own tasks; when its task is accepted the order is done (a quiet summary to you), when cancelled you get a call.",
         "push - integrator - n, text?, to? - nudge a stalled tab now (the reminder counter starts over): to \"executor\" (default) wakes the executor, to \"reviewer\" wakes the reviewer of the task.",
         "deliver - integrator - n, text - a task led by method sessions (status idle: the last session submitted to you) goes to the plugin's review once: text is the report for the reviewer (what is ready to land). A task with a single executor session goes to review on its submit, as before.",
@@ -2729,48 +2730,9 @@ export function makeTools(host: CrewHost): CrewTool[] {
         const target = readJson<Card>(cardFile(String(input.session ?? "")))
         if (!target || projOf(target) !== project) return { content: `Вкладки ${input.session} в проекте ${project} нет.` }
         if (target.spawned) return { content: "Это сессия задачи — у неё уже своя задача." }
-        if (target.session === me.session && !configFor(me).allowSelfAssign) return { content: "Задача не назначается на собственную сессию: отдельный исполнитель создаётся crew_spawn (ступень light или medium); исключение — по слову владельца, настройка проекта allow_self_assign: true." }
-        const busyWith = target.task && loadTask(target.task.project, target.task.n)
-        if (busyWith && isOpen(busyWith) && busyWith.executor === target.session) return { content: `У вкладки уже открыта задача ${taskRef(busyWith)}.` }
-        const cfg = configFor(me)
-        const missing = missingFields(input, cfg)
-        if (missing.length) return { content: `Задача не поставлена: нет полей ${missing.map((f) => FIELD_RU[f] ?? f).join(", ")}.` }
-        if (hasRouteInput(input)) return { content: "Задача не поставлена: маршрут (route и его поля) выбирается при постановке crew_spawn; задачу, отданную вкладке, ведут полным путём, а маршрут открытой задачи меняют записью crew_task {action: \"route\"}." }
-        const extra = parseExtra(input.extra, cfg)
-        if ("error" in extra) return { content: `Задача не поставлена: ${extra.error}` }
-        const title = String(input.title ?? "").trim() || String(input.goal).split(/\r?\n/)[0].slice(0, 60)
-        // проект с папками задач (задача 058): номер — номер новой папки, папка коммитится на ветке задачи, вкладка — сессия «исп»
-        const fm = folderInfo(target.directory, cfg)
-        // задание по образцу Канона (задача 065) — те же поля и отказы, что у crew_spawn
-        const refusal = fm ? messageRefusal(input) : undefined
-        if (refusal) return { content: refusal }
-        let t: Task
-        try {
-          t = createTask({
-            project, title, goal: String(input.goal).trim(), criteria: input.criteria?.trim(), boundaries: input.boundaries?.trim(), open_questions: input.open_questions?.trim(), ...messageFieldsOf(input),
-            ...(extra.value ? { extra: extra.value } : {}),
-            priority: isPriority(input.priority) ? input.priority : cfg.defaultPriority, tier: "medium", role: target.role, model: target.model,
-            author: me.session, author_role: keyOf(me), qid: newQid(), status: "running", kind: "assign", executor: target.session, directory: target.directory,
-          }, (n, slug) => checkedPlace(target.directory, cfg, fm ? pad3(n) : n, slug, project), fm ? { used: usedNumbers(fm.top, fm.rel), fill: (n, slug) => ({ folder: `${fm.rel}/${folderName(n, slug)}`, sessions: [{ code: EXECUTOR_CODE, k: 1, launch: 1, session: target.session, status: "running", goal: String(input.goal).trim(), place: "task", started: Date.now() }] }) } : {})
-        } catch (e: any) {
-          if (e?.placeRefusal) return { content: `Задача не поставлена: ${e.message}` }
-          throw e
-        }
-        if (fm && t.folder && t.branch) {
-          const own = String(input.message ?? "")
-          const base = baseRef(fm.top, cfg.targetBranch)
-          const c = commitFiles(fm.top, t.branch, base, { [`${t.folder}/task/message.md`]: own.trim() ? own : templateMessage(t, new Date(), { target: cfg.targetBranch, via: "crew_task assign" }), [`${t.folder}/log.md`]: firstLogLine(t, own.trim() ? "текст интегратора (поле message)" : "шаблон из полей задачи", cfg.targetBranch) }, `Add task ${pad3(t.n)}: ${t.slug}`)
-          if (!c.ok) {
-            taskEvent(t, me.session, "cancelled", `папка не заведена: ${c.error}`)
-            return { content: `Задача ${taskRef(t)} не заведена: папку ${t.folder}/ не удалось записать на ветку ${t.branch} (${c.error}). Номер ${pad3(t.n)} остаётся пропуском.` }
-          }
-          taskEvent(t, me.session, undefined, `папка ${t.folder}/ заведена на ветке ${t.branch} (коммит ${c.commit.slice(0, 8)})`)
-        }
-        target.task = { project, n: t.n }
-        saveCard(target)
-        postLetter(target.session, { id: taskLetterId(t), from_role: keyOf(me), from_session: me.session, to: target.session, time: Date.now(), qid: t.qid, text: formatTaskLetter(t) })
-        host.posted([target.session])
-        return { content: `Задача ${taskNo(t)} «${t.title}» отдана вкладке ${target.session} (${tabStatus(target)})${t.folder ? `; папка ${t.folder}/ на ветке ${t.branch}` : ""}. Пока задача открыта, вкладку будят, даже если её закроют. Сдача — crew_task {action: "submit", n: ${t.n}, text}.` }
+        // В API нет доверенного receipt владельца. owner_words задаёт сам агент;
+        // роль, auto и простой тоже не доказывают разрешения на захват беседы (256).
+        return { content: `Задача не поставлена: ${target.session} — пользовательская вкладка. assign запрещён: подтверждённого владельцем разрешения на эту сессию и назначение нет; owner_words, crew_role и allow_self_assign его не заменяют. Создай отдельного исполнителя: crew_spawn {...}; существующую задачу передай новой выделенной сессии через reassign.` }
       }
       if (action === "order") {
         if (!isIntegrator(me)) return notIntegrator(me)

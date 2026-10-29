@@ -101,6 +101,8 @@ beat()
 const heart = setInterval(beat, 300)
 for (const t of tabs) await turnEnds(t.sessionID)
 await call("crew_role", "sesINTEG1", { role: "integrator" })
+await call("crew_role", "sesREVIEW1", { role: "worker" })
+core.saveCard({ ...core.readJson(core.cardFile("sesREVIEW1")), spawned: { by: "sesINTEG1", task: "review pool", tier: "medium", status: "running", at: Date.now(), qid: "pool" } })
 
 // 1. task 001: the executor works in its worktree and reports
 const sp1 = await call("crew_spawn", "sesINTEG1", { title: "фича", goal: "сделать фичу", ...FIELDS })
@@ -274,7 +276,7 @@ cell("after the release the lock is free; a commit not in the target is refused"
 tabs.push({ sessionID: "sesOWNTAB", active: false, busy: false })
 beat()
 await turnEnds("sesOWNTAB")
-await call("crew_task", "sesINTEG1", { action: "assign", session: "sesOWNTAB", title: "своя", goal: "g4", ...FIELDS })
+await (await import("./legacy-assignment.mjs")).legacyAssignment({ project: "proj", session: "sesOWNTAB", author: "sesINTEG1", directory: proj, title: "своя", goal: "g4" })
 tabs[1].busy = true // the only other worker tab is busy; review sessions are at the limit (task 002's)
 beat()
 await wait(300)

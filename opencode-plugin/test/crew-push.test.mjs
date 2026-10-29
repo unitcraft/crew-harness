@@ -111,6 +111,7 @@ for (const s of ["sesINTEG1", "sesWORK01"]) {
   await events["session.idle"]({ properties: { sessionID: s } })
 }
 await call("crew_role", "sesINTEG1", { role: "integrator" })
+await call("crew_role", "sesWORK01", { role: "worker" }) // стоячая worker-вкладка: вошла в crew сама (задача 256)
 
 // 0. the turn cut off by a restart is resumed by one letter
 await until(() => got("sesINTER1", "прервана перезапуском").length >= 1)
@@ -136,9 +137,9 @@ cell("the resume letter says how to report", got("sesINTER1", 'reply_to: "qOLD"'
 const toPlugin = await call("crew_send", "sesINTER1", { to: "crew-harness", text: "принял, продолжаю" })
 cell("a letter to the plugin itself is refused with a hint", /это сам плагин/.test(toPlugin) && /reply_to/.test(toPlugin), toPlugin)
 
-// the integrator gives sesWORK01 a task
-await call("crew_task", "sesINTEG1", { action: "assign", session: "sesWORK01", title: "парсер", goal: "дописать парсер", criteria: "тесты зелёные" })
-await until(() => got("sesWORK01", "ЗАДАЧА #1").length >= 1)
+// A historical assignment fixture keeps push coverage without permitting a new user-tab capture.
+await (await import("./legacy-assignment.mjs")).legacyAssignment({ project: "proj", session: "sesWORK01", author: "sesINTEG1", directory: proj, title: "парсер", goal: "дописать парсер", criteria: "тесты зелёные" })
+await until(() => got("sesWORK01", "ЗАДАЧА 001").length >= 1)
 const task = tasks.loadTask("proj", 1)
 cell("the task reached the tab", got("sesWORK01", "ЗАДАЧА 001").length === 1, JSON.stringify(delivered.map((d) => d.sessionID)))
 const obl = () => core.obligationsOf("sesWORK01").find((o) => o.qid === task.qid)

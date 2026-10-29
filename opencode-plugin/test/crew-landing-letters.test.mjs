@@ -135,7 +135,7 @@ review.releaseMergeLock("proj", REV)
 {
   const d = H.tools.crew_task.description
   const props = H.tools.crew_task.input.properties
-  cell("AC-26 описание: the English description of crew_task names precheck, unlock, merge_precheck, extra; the input has candidate and extra", /precheck \{n\}/.test(d) && /unlock \{n\}/.test(d) && /merge_precheck: required/.test(d) && /extra/.test(d) && !!props.candidate && !!props.extra && props.action.enum.includes("precheck") && props.action.enum.includes("unlock"), d.slice(0, 200))
+  cell("AC-26 описание: the description names precheck, unlock, merge_precheck and the assign guard; extra stays on spawn and in the legacy input", /precheck \{n\}/.test(d) && /unlock \{n\}/.test(d) && /merge_precheck: required/.test(d) && /trusted owner receipt/.test(d) && /extra/.test(H.tools.crew_spawn.description) && !!props.candidate && !!props.extra && props.action.enum.includes("precheck") && props.action.enum.includes("unlock"), d.slice(0, 200))
   const sd = H.tools.crew_spawn.description
   cell("AC-26 описание crew_spawn: the description of crew_spawn names extra and the flags", /extra \{id/.test(sd) && /accepted_slot: free/.test(sd) && !!H.tools.crew_spawn.input.properties.extra, sd.slice(0, 120))
   const help = core.HELP

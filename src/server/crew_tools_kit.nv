@@ -167,6 +167,8 @@ export fn scenario_crew_tools(settings ServerSettings) Proc Detach Time Net Fs O
     c.expect(ts.contains("дочерняя") && ts.contains("Часть главной"), "crew_task show lists the children: ${cut_text(ts, 200)}")
     ro r_refused = ctl_ask(rig, p1, "crew_task", "{\"action\":\"merge\",\"n\":${n1}}")
     c.expect(r_refused.contains("ERR") && r_refused.contains("владелец"), "an action of the owner is refused with the reason: ${cut_text(r_refused, 120)}")
+    ro r_assign = ctl_ask(rig, p1, "crew_task", "{\"action\":\"assign\",\"session\":\"${p1}\",\"goal\":\"захват\",\"criteria\":[\"x\"]}")
+    c.expect(r_assign.contains("ERR") && r_assign.contains("в продукте этого действия нет"), "assign by a call is refused in the product: a task never lands on an existing session (256): ${cut_text(r_assign, 160)}")
     ro r_push = ctl_ask(rig, p1, "crew_task", "{\"action\":\"push\",\"n\":${nki},\"text\":\"проверь\"}")
     c.expect(r_push.contains("разбудит"), "crew_task push: ${cut_text(r_push, 120)}")
 

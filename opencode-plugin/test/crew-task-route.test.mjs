@@ -459,8 +459,9 @@ cell("T92-21 a full task becomes fast only with the conditions of the fast path 
 // ---- other doors: assign takes no route; the texts name the route; the README has the section ----
 await hooks.context({ sessionID: "sesTAB2", system: [], model: { id: "x", providerID: "y" } })
 await events["session.idle"]({ properties: { sessionID: "sesTAB2" } })
+await call("crew_role", "sesTAB2", { role: "worker" }) // стоячая worker-вкладка: вошла в crew сама (задача 256)
 const nAs = recs()
-const rAssign = await call("crew_task", "sesINTEG1", { action: "assign", session: "sesTAB2", title: "Ручная", goal: "сделать", criteria: "готово", owner_words: owner, result: "нет: результат — код: proj/", route: "fast" })
+const rAssign = await call("crew_task", "sesINTEG1", { action: "assign", session: "sesTAB2", title: "Ручная", goal: "сделать", criteria: "готово", owner_words: "«вкладку sesTAB2 бери под задачу» (владелец, 2026-10-29, чат)", result: "нет: результат — код: proj/", route: "fast" })
 cell("T92-22 assign takes no route: refused with the way (crew_spawn), no record", /не поставлена/.test(rAssign) && /crew_spawn/.test(rAssign) && recs() === nAs, rAssign)
 const rOpen = await call("crew_spawn", "sesINTEG1", { task: String(tf.n), session: "С4", goal: "проверка", route: "fast" })
 cell("T92-22 a session of an open task takes no route: refused, the way is crew_task route", /не запущена/.test(rOpen) && /crew_task/.test(rOpen) && /route/.test(rOpen), rOpen)

@@ -106,6 +106,7 @@ const accRole = await call("crew_role", "sesACC1", { role: "acceptor" })
 const acc2 = await call("crew_role", "sesWORKER1", { role: "acceptor" })
 cell("acceptor is a shared role: a second tab joins it", /теперь «acceptor»/.test(acc2) && !/занята/.test(acc2), `${accRole} | ${acc2}`)
 await call("crew_role", "sesWORKER1", { role: "worker" })
+core.saveCard({ ...core.readJson(core.cardFile("sesACC1")), spawned: { by: "sesINTEG1", task: "review pool", tier: "medium", status: "running", at: Date.now(), qid: "pool-acc" } })
 cell("the default reviewer stays worker without the key", core.loadConfig(path.join(tmp)).reviewer === "worker" && core.loadConfig(proj).reviewer === "acceptor", JSON.stringify(core.loadConfig(proj).reviewer))
 
 // 1. 001 submitted while the acceptor tab is busy: a free WORKER tab is not taken -- a new session with role acceptor

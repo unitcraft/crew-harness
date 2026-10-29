@@ -108,7 +108,7 @@ card("sesOWN7", "pw", { task: { project: "pw", n: T.m07.n } })
 // M08 submitted, a free worker tab exists; M09 two plan tasks...
 T.m08 = mk("pt", { status: "submitted", executor: "sesEX08", report: "сделал" })
 when(T.m08, "submitted", 1000)
-card("sesFT", "pt")
+card("sesFT", "pt", { spawned: { by: AUTH.pt, task: "review pool", tier: "medium", status: "running", at: Date.now(), qid: "pool-ft" } })
 // M09 submitted, no tabs, one review session allowed
 T.m09 = mk("ps", { status: "submitted", executor: "sesEX09", report: "сделал" })
 when(T.m09, "submitted", 1000)
@@ -126,13 +126,13 @@ T.m12 = mk("pa", { status: "submitted", executor: "sesEX12", report: "сдела
 when(T.m12, "submitted", 3000)
 T.m13 = mk("pa", { status: "submitted", executor: "sesEX13", report: "сделал" })
 when(T.m13, "submitted", 1000)
-card("sesFAA", "pa", { role: "acceptor" })
+card("sesFAA", "pa", { role: "acceptor", spawned: { by: AUTH.pa, task: "review pool", tier: "medium", status: "running", at: Date.now(), qid: "pool-faa" } })
 card("sesFAW", "pa")
 // M14 plan task submitted again: the tab that checked before is not taken
 T.m14 = mk("pq", { status: "submitted", executor: "sesEX14", report: "план", reviewers: ["sesFQ1"], rework: 1, plan: { n: "1", file: "docs/plans/p.md", source: "s", rounds: [], clean: 0 } })
 when(T.m14, "submitted", 1000)
-card("sesFQ1", "pq")
-card("sesFQ2", "pq")
+card("sesFQ1", "pq", { spawned: { by: AUTH.pq, task: "review pool", tier: "medium", status: "running", at: Date.now(), qid: "pool-fq1" } })
+card("sesFQ2", "pq", { spawned: { by: AUTH.pq, task: "review pool", tier: "medium", status: "running", at: Date.now(), qid: "pool-fq2" } })
 // M15 submitted after rework: the reviewer is known, its obligation is gone
 T.m15 = mk("pw", { status: "submitted", executor: "sesEX15", report: "поправил", reviewer: "sesRV15", review_kind: "tab", review_qid: "rq15x", review_letter: "review-pw-15-1", rework: 1, reviewer_role: "pw.worker" })
 spawnedCard("sesEX15", T.m15)

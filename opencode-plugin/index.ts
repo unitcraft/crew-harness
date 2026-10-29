@@ -732,6 +732,8 @@ export default {
         for (const sid of new Set(sessions)) {
           const c = readJson<Card>(cardFile(sid))
           if (!c?.spawned || c.spawned.status === "closed" || c.busy) continue
+          // Выделенный приёмщик мог перейти на следующую задачу: старая его уже не закрывает (256).
+          if ([c.task, c.review].some((r) => r && (r.project !== t.project || r.n !== t.n) && isOpen(loadTask(r.project, r.n) ?? ({ status: "cancelled" } as Task)))) continue
           if (c.pid !== process.pid && pidAlive(c.pid)) continue
           c.spawned.status = "closed"
           saveCard(c)
@@ -925,7 +927,7 @@ export default {
         const rprofiles = pstate.usable?.data.profiles
         const tab = allCards().find(
           (c) =>
-            !c.spawned &&
+            !!c.spawned && // только выделенная программой сессия; роль и auto не доказывают согласие владельца (256)
             tabFitsCell(rcell, c.model, rprofiles) && // явная ступень клетки — только вкладка семьи клетки (REQ-07)
             (c.project ?? projectOf(c.directory, projects)) === t.project &&
             normalizeRole(c.role) === reviewerRole(cfg) &&
@@ -941,6 +943,7 @@ export default {
           t.review_kind = "tab"
           taskEvent(t, PLUGIN_SENDER, undefined, `приёмщик — открытая вкладка ${tab.session}`)
           tab.review = { project: t.project, n: t.n }
+          if (tab.spawned) tab.spawned.status = "running"
           saveCard(tab)
           await reviewerAssigned(t, tab)
           continue

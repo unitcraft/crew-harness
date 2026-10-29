@@ -75,6 +75,7 @@ beat()
 const heart = setInterval(beat, 300)
 for (const t of tabs) await turnEnds(t.sessionID)
 await call("crew_role", "sesINTEG1", { role: "integrator" })
+core.saveCard({ ...core.readJson(core.cardFile("sesREVIEW1")), spawned: { by: "sesINTEG1", task: "review pool", tier: "medium", status: "running", at: Date.now(), qid: "pool-review" } })
 
 // 1. a task that is running: push to the executor (the default) and to a reviewer that is not assigned yet
 await call("crew_spawn", "sesINTEG1", { title: "фича", goal: "сделать фичу", criteria: "тест зелёный" })
