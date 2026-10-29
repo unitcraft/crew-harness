@@ -84,6 +84,67 @@ export function releaseMergeLock(project: string, session: string, n?: number) {
   }
 }
 
+// ЗАМОК ПУБЛИКАЦИИ В ЦЕЛЬ (задача 257): у задачи с привязкой репозитория результата (landing) вливание идёт в ЧУЖОЙ для проекта
+// репозиторий — замок проекта его не закрывает. В одну цель (url#branch) не вливают две задачи одновременно, даже из разных
+// проектов-владельцев: замок лежит в общем на машине ящике roles/ и ключуется целью, а не проектом. roles/pub_<ключ>.json
+// {project, session, n, at}; правила взятия и перехвата брошенного — как у замка вливания проекта.
+export type PubLock = { project: string; session: string; n: number; at: number }
+/** Ключ цели публикации из привязки задачи; без привязки — undefined (замок публикации не нужен, хватает замка проекта). */
+export const pubKeyOf = (t: Task): string | undefined => (t.landing ? `${t.landing.url}#${t.landing.branch}` : undefined)
+const pubFile = (key: string) => path.join(ROLES, `pub_${safeKey(key)}.json`)
+export const pubHolder = (key: string): PubLock | undefined => readJson<PubLock>(pubFile(key))
+
+export function pubLockAbandoned(lock: PubLock): boolean {
+  if (Date.now() - lock.at > MERGE_STALE_MS) return true
+  const t = loadTask(lock.project, lock.n)
+  if (!t || !isOpen(t) || t.reviewer !== lock.session) return true
+  const holder = readJson<Card>(cardFile(lock.session))
+  return !holder || !mayWakeCard(holder)
+}
+
+export function takePubLock(key: string, project: string, session: string, n: number): { ok: true } | { ok: false; holder: PubLock } {
+  mkdirSync(ROLES, { recursive: true })
+  const file = pubFile(key)
+  const mine = JSON.stringify({ project, session, n, at: Date.now() })
+  try {
+    writeFileSync(file, mine, { flag: "wx" })
+    return { ok: true }
+  } catch {}
+  const cur = readJson<PubLock>(file)
+  if (cur?.project === project && cur?.session === session) {
+    writeFileSync(file, mine) // тот же держатель — обновить время и номер
+    return { ok: true }
+  }
+  if (cur && !pubLockAbandoned(cur)) return { ok: false, holder: cur }
+  const tomb = `${file}.${process.pid}.${Date.now()}.old`
+  try {
+    renameSync(file, tomb)
+  } catch {
+    const now = readJson<PubLock>(file)
+    return now ? { ok: false, holder: now } : takePubLock(key, project, session, n)
+  }
+  rmSync(tomb, { force: true })
+  try {
+    writeFileSync(file, mine, { flag: "wx" })
+    return { ok: true }
+  } catch {
+    return { ok: false, holder: readJson<PubLock>(file)! }
+  }
+}
+
+/** Отпустить замок публикации, только если его держит именно эта задача этой сессии (чужой и другой задачи — не трогаем). */
+export function releasePubLock(key: string, project: string, session: string, n: number) {
+  const cur = pubHolder(key)
+  if (cur?.project === project && cur.session === session && cur.n === n) rmSync(pubFile(key), { force: true })
+}
+
+/** Отпустить оба замка задачи — вливания проекта и публикации в цель привязки (задача 257), — если их держит эта сессия. */
+export function releaseTaskLocks(t: Task, session: string, n?: number) {
+  releaseMergeLock(t.project, session, n)
+  const key = pubKeyOf(t)
+  if (key) releasePubLock(key, t.project, session, n ?? t.n)
+}
+
 // ЖДУЩИЕ ЗАМОК (задача 011): приёмщик, получивший отказ «замок занят», записан в своей карточке (lock_wait) — отдельного хранилища и
 // очереди нет, запись живёт, пока жива вкладка (карточка закрытой вкладки не будится и в списке не числится). Замок освободился —
 // будятся ВСЕ ждущие проекта (не один): замок выдаётся атомарно, проигравший снова встанет в ждущие; резервирования места нет.
@@ -128,9 +189,17 @@ export const holdsMergeLock = (project: string, session: string, n?: number) => 
 /** Каталог репозитория задачи: worktree (если ещё есть) или каталог, где задачу ставили. */
 export const repoDir = (t: Task) => (t.worktree && existsSync(t.worktree) ? t.worktree : t.directory)
 
-/** Влито ли: коммит (squash-слияние) или ветка задачи — предок целевой ветки (локальной или origin/). */
+/** Репозиторий результата задачи (задача 257): явная привязка (landing) или репозиторий постановки. */
+export const landingDir = (t: Task) => t.landing?.dir ?? repoDir(t)
+/** Целевая ветка результата: из привязки или target_branch проекта. */
+export const landingTarget = (t: Task, target: string) => t.landing?.branch ?? target
+/** Remote репозитория результата: из привязки или origin. */
+export const landingRemote = (t: Task) => t.landing?.remote ?? "origin"
+
+/** Влито ли: коммит (squash-слияние) или ветка задачи — предок целевой ветки (локальной или origin/) репозитория результата. */
 export function isMerged(t: Task, target: string, commit?: string): { ok: boolean; how?: string; head?: string } {
-  const dir = repoDir(t)
+  const dir = landingDir(t)
+  target = landingTarget(t, target)
   const targets = [target, `origin/${target}`].filter((x) => gitOk(dir, ["rev-parse", "--verify", "--quiet", x]))
   if (!targets.length) return { ok: false, how: `целевой ветки ${target} в ${dir} нет` }
   const heads = commit ? [commit] : [t.branch, t.branch && `origin/${t.branch}`].filter(Boolean) as string[]
@@ -300,6 +369,7 @@ export function reviewLetter(t: Task, cfg: CrewConfig): string {
     extraBlock(t),
     extraBlock(t) ? `ЗАПИСЬ ЗАДАЧИ: ${taskFile(t.project, t.n)}, поле extra ({id: значение}) — скрипт проекта читает значения оттуда.` : "",
     t.worktree ? `WORKTREE ИСПОЛНИТЕЛЯ: ${t.worktree}, ветка ${t.branch}; целевая ветка ${cfg.targetBranch}.` : t.branch ? `ВЕТКА: ${t.branch}; целевая ${cfg.targetBranch}.` : `Целевая ветка ${cfg.targetBranch}.`,
+    t.landing ? `РЕПОЗИТОРИЙ РЕЗУЛЬТАТА (привязка, задача 257): ${t.landing.dir} (${t.landing.remote}/${t.landing.branch}) — весь контур (precheck, merge, accept) идёт по нему, а не по репозиторию постановки; вливание и push — в нём. Основание: ${t.landing.word}` : "",
     t.report ? `ОТЧЁТ ИСПОЛНИТЕЛЯ:\n${t.report.slice(0, 3000)}` : "",
     `ШАГИ ПРИЁМКИ:\n${steps}`,
     `ПОРЯДОК:`,

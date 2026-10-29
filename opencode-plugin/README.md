@@ -1256,6 +1256,29 @@ After the lock is lost the landing is confirmed by a new precheck as well. Betwe
 a few milliseconds remain in which another process may take it; the consequence is that `accept` refuses ("lock first"), the
 reply issues nothing.
 
+**The result lives in another repository (task 257).** When the task's result lands (or is already published) not in the
+repository the task was posted in, the integrator binds the explicit result repository:
+`crew_task {action: "target", n, dir, remote?, branch?, word}` — `dir` is its local clone (checked on binding: a git
+repository, not the task's own one, the remote exists and its URL is recorded as evidence, the branch exists on the
+remote), `word` is the owner's word with its date and source. From then on the whole loop — `precheck`, the base freshness,
+the merge gate, `accept` — works against the bound repository and branch, and `show` names the binding; an arbitrary commit
+of a third repository satisfies nothing, because every check runs inside the bound clone. A candidate that is already
+published there (an ancestor of the remote branch tip) finishes the precheck as `published` — no merge is needed, `merge`
+re-verifies the publication fact under the lock and `accept {n, commit}` fixes the record. Binding or lifting it
+(`dir: ""`) makes a live precheck record stale; a task holding the merge lock cannot be (un)bound. Without a binding
+everything works on the task's own repository, as before.
+
+The precheck record is bound to the exact target explicitly (task 257): it carries a snapshot of the binding
+(`landing {dir, remote, branch, url}`) beside the base and the candidate SHA, and the merge gate compares the snapshot with
+the task's binding and the LIVE address of the remote before anything else — a record made for another repository, remote
+or ref is not honoured, however green, and a `git remote set-url` in the bound clone after the precheck invalidates the
+record (a new `precheck` refuses to start until the integrator confirms the binding again). For a bound task `merge` additionally takes the **publication lock of the target**: `roles/pub_<url#branch>.json`
+holds `{project, session, n, at}`, so two tasks never publish into the same target at once, even when their owning
+projects differ; the lock follows the rules of the project's merge lock (a stale or abandoned one is taken over) and is
+released together with it by `accept`, `rework`, `cancel`, `unlock` and by the service when the checked candidate has
+landed. The remote tip is read with `ls-remote` (no fetch, no cache): the publication fact is the candidate being an
+ancestor of the target ref on the server, not the SHA merely existing somewhere on it.
+
 **If something goes wrong.** The lock may be lost at any time (`cancel` or `rework` of another task by the same reviewer,
 a takeover of a stale lock, a restart); `accept` always checks it again. A stuck or unwanted lock: `unlock {n}`; a moved tip:
 a new `precheck`; the work is returned: `rework`. The state lives in the task record and the lock file only (no timers): a

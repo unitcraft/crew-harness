@@ -28,8 +28,8 @@ import { baseRef, branchExists, commitFiles, ensureBranch, findFolder, folderNam
 import { firstLogLine, folderInfo, messageRefusal, nextLaunch, readFolderFile, readTaskMessage, refreshRouteStale, routeLogLine, smallMessage, taskLog, templateMessage, titleOfMessage } from "./task-folders.ts"
 import { STALE_WARNING, SMALL_NORM_MIN, applyRouteChange, contourMarkText, exactMessageHash, hasRouteInput, legacyTaskLetterFaults, planRoute, routeLogText, routeSettingsOf, routeView, ROUTE_RU, wordDateOf, type RouteSettings } from "./route.ts"
 import { acceptanceFromFile } from "./acceptance-file.ts"
-import { acceptWarning, acceptedTip, beginPrecheck, finishPrecheck, gateMerge, landedFresh, landingLine, markPrecheckStale, neighbourHints, precheckLines, unlockMerge } from "./precheck.ts"
-import { addSide, autoTrack, cleanupDone, removeSide, sideItems, cleanupSteps, fileAt, holdsMergeLock, isMerged, keptOnBranch, keptPaths, mergeHolder, releaseMergeLock, resolveKeep, reworkLetter, sameFs, takeMergeLock } from "./review.ts"
+import { acceptWarning, acceptedTip, beginPrecheck, finishPrecheck, gateMerge, landedFresh, landingLine, markPrecheckStale, neighbourHints, originTip, precheckLines, runGit, unlockMerge } from "./precheck.ts"
+import { addSide, autoTrack, cleanupDone, removeSide, sideItems, cleanupSteps, fileAt, holdsMergeLock, isMerged, keptOnBranch, keptPaths, mergeHolder, pubKeyOf, releaseMergeLock, releaseTaskLocks, repoDir, resolveKeep, reworkLetter, sameFs, takeMergeLock, takePubLock } from "./review.ts"
 import { WATCH_DEFAULT_MIN, WATCH_MAX_MIN, cancelWatch, machineQueue, requestWatch, timerSpec, watchesOf } from "./watch.ts"
 import { watchRefusal } from "./deny.ts"
 import { linkErrorsOfWrite, profileProblems, profileState, profilesShow } from "./profile-layer.ts"
@@ -1548,7 +1548,10 @@ export const HELP = `crew-harness — письма между вкладками
                                 (распознаёт оркестратор, плагин их не разбирает; route_word — дословно, с датой) и estimate
                                 (T одной строкой); папка — три строки, приёмщика нет, приёмка — слово владельца на тестовом контуре.
     crew_task {action, n?}      — задачи по номеру: list, show; интегратору ещё push, reassign, cancel, backlog, resume,
-                                 priority, route (маршрут задачи записью), order, plan_decide, deliver (задачу с сессиями — на приёмку); приёмщику — review, check, round (план), precheck, merge, unlock, rework
+                                 priority, route (маршрут задачи записью), target (привязка целевого репозитория результата, задача 257:
+                                 {n, dir, remote?, branch?, word} — слово владельца с датой; весь контур precheck/merge/accept идёт по
+                                 привязанному репозиторию, уже опубликованный кандидат-предок вершины завершает предпроверку без
+                                 вливания; dir: "" снимает привязку), order, plan_decide, deliver (задачу с сессиями — на приёмку); приёмщику — review, check, round (план), precheck, merge, unlock, rework
                                  (sync: true — только влить свежую целевую ветку, не круг доработки), accept, cleanup (cleaned — старое имя). assign запрещён;
                                 сессия задачи ведёт одну задачу и закрывается после cleanup: продолжение работы того же
                                 исполнителя — новой задачей (crew_spawn), передача — reassign в новую выделенную сессию.
@@ -2655,6 +2658,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
         "cancel - integrator - n, text? - cancel the task; text goes to the executor. Releases the merge lock if the task held it.",
         "priority - integrator - n, priority P0..P3 - change the priority.",
         "route - integrator - n, route full|fast|small, text (the reason, required for full), route_word and route_word_date (fast: «заводи N»; small: the owner's entry phrase word for word — the plugin does not parse it) - change the route of an open task BY A RECORD (tasks 092, 191). To full: the reason becomes the basis, the word of the owner is emptied, the series of clean runs is zeroed, the trace stays. A new word (fast) renews a word marked route_word_stale and re-reads the brief. To small: the same conditions as the small crew_spawn. A line «маршрут: …» goes to log.md of the task.",
+        "target - integrator - n, dir, remote?, branch?, word - bind the explicit RESULT repository of the task (task 257): the result lands or is already published not in the repository the task was posted in. dir is its local clone (checked: a git repository, not the task's own one, the remote and the branch on it exist); word is the owner's word with its date. The landing loop (precheck, base freshness, the merge gate, accept) then works against the bound repository; an already published candidate (an ancestor of the remote branch tip) finishes the precheck as published - no merge, accept with commit fixes the record. dir: \"\" lifts the binding.",
         "contour - executor of a small-route task - n, link - record the mark «ссылка на контур выдана» (task 191): the test contour URL given to the owner goes to log.md of the task with the relation to the 10 minute norm from the owner's word (route_word_ts). The acceptance of a small task: the integrator calls accept with text = the owner's word word for word with its date — no reviewer, no merge lock, no check steps; the landing in the target branch is still required.",
         "migrate - integrator - n, message (exact saved sent-letter text), source_id, source_session, source_to, source_qid, source_sha256, route_word, route_word_date - migrate an open folderless legacy record in place. Accepts only a strictly matched historical task-letter envelope; archive identity and exact UTF-8 text digest are required, never reconstruct the letter. Requires matching project/number/title/branch and the owner's explicit «заводи <number>» word. Edits no archive or external project files; preserves sessions, rounds, branch/worktree, history, precheck and evidence. A second migration is refused.",
         "submit - executor - n, text - submit the task's work with the report (what was done, how it was checked, what is left); no qid is needed. The first submission, one after rework or after a sync (the reviewer is woken), a plan task (the plan file and its form are checked). Already submitted: refused. Small route: after the submit raise the test contour (scripts/test-contour), give the owner the link and record the mark with contour.",
@@ -2674,14 +2678,17 @@ export function makeTools(host: CrewHost): CrewTool[] {
     input: {
       type: "object",
       properties: {
-        action: { type: "string", enum: ["list", "show", "assign", "order", "push", "reassign", "cancel", "backlog", "resume", "priority", "track", "plan_decide", "submit", "deliver", "review", "check", "round", "merge", "unlock", "precheck", "rework", "accept", "cleanup", "cleaned", "route", "migrate", "contour"] },
+        action: { type: "string", enum: ["list", "show", "assign", "order", "push", "reassign", "cancel", "backlog", "resume", "priority", "track", "plan_decide", "submit", "deliver", "review", "check", "round", "merge", "unlock", "precheck", "rework", "accept", "cleanup", "cleaned", "route", "migrate", "contour", "target"] },
         to: str("order: the other project's integrator, \"project.integrator\"; push: \"executor\" (default) or \"reviewer\""),
         keep: { type: "array", maxItems: 8, items: { type: "string" }, description: "cleanup: up to 8 worktree paths to keep as evidence" },
         checks: { type: "object", description: "accept: report per acceptance step {step id: what proves it}", additionalProperties: { type: "string" } },
         step: str("check: the acceptance step id"),
         result: str("check: what proves the step (omit when starting the step)"),
         commit: str("accept: the commit in the target branch (squash merge); without it the task branch must be merged"),
-        branch: str("track: side branch to record"),
+        branch: str("track: side branch to record; target: the target branch in the result repository (default: the project's target_branch)"),
+        dir: str("target: the local clone of the result repository (absolute or from the caller's directory); empty string lifts the binding"),
+        remote: str("target: the remote name in the result repository (default: origin)"),
+        word: str("target: the owner's word word for word with its date and source — the basis of the result-repository binding"),
         worktree: str("track: side worktree path to record"),
         candidate: str("precheck: the checked candidate (branch or hash); with result it finishes the precheck"),
         n: { type: "number", description: "Task number" },
@@ -2819,6 +2826,54 @@ export function makeTools(host: CrewHost): CrewTool[] {
         const why = t.folder ? taskLog(t, "документ", res.line) : "у задачи нет папки"
         host.posted([])
         return { content: `Маршрут задачи ${taskRef(t)} записан: ${res.line}.${why ? ` (В log.md задачи не записано: ${why}; запиши строку сам: log_line {kind: "документ", text: "${res.line.replace(/"/g, "'")}"}.)` : ""}` }
+      }
+      // ПРИВЯЗКА ЦЕЛЕВОГО РЕПОЗИТОРИЯ РЕЗУЛЬТАТА (задача 257): результат вливается/опубликован не в репозитории постановки.
+      // Только интегратор, по слову владельца с датой; каталог/remote/ветка проверяются в момент привязки (url — свидетельство);
+      // живая предпроверка устаревает. Без привязки контур работает по репозиторию постановки, как прежде.
+      if (action === "target") {
+        if (!isIntegrator(me)) return notIntegrator(me)
+        if (!isOpen(t)) return { content: `Задача ${taskRef(t)} ${statusRu(t.status)}: целевой репозиторий результата закрытой задачи не меняют.` }
+        const word = String(input.word ?? "").trim().replace(/\s+/g, " ")
+        if (!word) return { content: `Нужен word: слово владельца дословно с датой и источником — основание привязки репозитория результата.` }
+        if (!wordDateOf(word, undefined)) return { content: "В word нет даты ГГГГ-ММ-ДД: слово владельца записывается с датой и источником." }
+        const held = mergeHolder(t.project)
+        if (held && held.n === t.n) return { content: `Замок вливания проекта ${t.project} держат для задачи ${taskNo(t)} (сессия ${held.session}): привязку меняют до замка — сначала accept, rework или unlock по задаче.` }
+        const dirRaw = String(input.dir ?? "").trim()
+        if (!dirRaw) {
+          if (!t.landing) return { content: `У задачи ${taskRef(t)} привязки репозитория результата нет — снимать нечего.` }
+          const prev = t.landing
+          delete t.landing
+          if (t.precheck && t.precheck.state !== "stale") markPrecheckStale(t, "снята привязка репозитория результата")
+          const line = `привязка репозитория результата снята (была ${prev.dir} ${prev.remote}/${prev.branch}): ${word}`
+          taskEvent(t, me.session, undefined, line)
+          const why = t.folder ? taskLog(t, "документ", line) : "у задачи нет папки"
+          host.posted([])
+          return { content: `Привязка репозитория результата задачи ${taskRef(t)} снята (была ${prev.dir} ${prev.remote}/${prev.branch}); контур precheck/merge/accept снова работает по репозиторию постановки.${why ? ` (В log.md задачи не записано: ${why}; запиши строку сам: log_line {kind: "документ", text: "${line.replace(/"/g, "'")}"}.)` : ""}` }
+        }
+        const refuseT = (why: string) => ({ content: `Привязка не записана: ${why}. Запись задачи не изменена.` })
+        const dir = path.resolve(me.directory, dirRaw)
+        if (!existsSync(dir)) return refuseT(`каталога ${dir} нет`)
+        const gd = runGit(dir, ["rev-parse", "--absolute-git-dir"], 10_000)
+        if (!gd.ok) return refuseT(`${dir} — не git-репозиторий (${gd.err || "rev-parse: сбой"})`)
+        const own = runGit(repoDir(t), ["rev-parse", "--absolute-git-dir"], 10_000)
+        if (own.ok && sameFs(gd.out.trim(), own.out.trim())) return refuseT(`${dir} — тот же репозиторий, что у задачи: привязка не нужна, результат вливается в репозиторий постановки`)
+        const remote = String(input.remote ?? "").trim() || "origin"
+        const url = runGit(dir, ["remote", "get-url", remote], 10_000)
+        if (!url.ok) return refuseT(`remote «${remote}» в ${dir} нет (${url.err || `код ${url.code ?? "?"}`})`)
+        const branch = String(input.branch ?? "").trim() || loadConfig(t.directory).targetBranch
+        const tip = await originTip(dir, branch, { remote })
+        if (!tip.ok) return refuseT(`ветку ${branch} на ${remote} (${url.out.trim()}) подтвердить не удалось: ${tip.error}`)
+        const cur = loadTask(t.project, t.n)
+        if (!cur || !isOpen(cur)) return refuseT(`за время проверки ветки задача изменилась; повтори`)
+        const h2 = mergeHolder(t.project)
+        if (h2 && h2.n === t.n) return refuseT(`за время проверки ветки взят замок вливания этой задачи; повтори после accept, rework или unlock`)
+        cur.landing = { dir, remote, branch, url: url.out.trim(), word, by: me.session, at: Date.now() }
+        if (cur.precheck && cur.precheck.state !== "stale") markPrecheckStale(cur, "смена целевого репозитория результата")
+        const line = `репозиторий результата: ${dir} (${remote}/${branch}, ${url.out.trim()}), вершина ${tip.tip.slice(0, 7)} — ${word}`
+        taskEvent(cur, me.session, undefined, line)
+        const why = cur.folder ? taskLog(cur, "документ", line) : "у задачи нет папки"
+        host.posted([])
+        return { content: `Репозиторий результата задачи ${taskRef(t)} привязан: ${dir} (${remote}/${branch}, ${url.out.trim()}), вершина ${tip.tip.slice(0, 7)}. Дальше контур идёт по нему: precheck назовёт вершину ${branch} этого репозитория; уже опубликованный результат (кандидат — предок вершины) заверши: crew_task {action: "precheck", n: ${t.n}, candidate: "<хеш>", result: "<факт публикации>"} — вливание не нужно, merge зафиксирует учёт, затем accept с commit.${why ? ` (В log.md задачи не записано: ${why}; запиши строку сам: log_line {kind: "документ", text: "${line.replace(/"/g, "'")}"}.)` : ""}` }
       }
       if (action === "migrate") {
         if (!isIntegrator(me)) return notIntegrator(me)
@@ -3105,6 +3160,14 @@ export function makeTools(host: CrewHost): CrewTool[] {
           const r = takeMergeLock(project, me.session, t.n, tcfg.mergeLockPerTask)
           if (!r.ok && r.holder.session === me.session) return { content: `Замок вливания проекта ${project} у тебя уже для задачи ${taskNo({ project, n: r.holder.n })}: сначала accept, rework или unlock по ней (в проекте merge_lock_per_task: on).` }
           if (!r.ok) return { content: `Замок вливания проекта ${project} у приёмщика задачи ${taskNo({ project, n: r.holder.n })} (сессия ${r.holder.session}) с ${hhmm(r.holder.at)}. Дождись (спроси позже ещё раз) — вливать одновременно нельзя.` }
+          const pubKey = pubKeyOf(t)
+          if (pubKey) {
+            const pg = takePubLock(pubKey, project, me.session, t.n)
+            if (!pg.ok) {
+              releaseMergeLock(project, me.session, t.n)
+              return { content: `Цель публикации ${t.landing!.url}#${t.landing!.branch} занята: вливает приёмщик задачи ${pg.holder.project} ${taskNo({ project: pg.holder.project, n: pg.holder.n })} (сессия ${pg.holder.session}) с ${hhmm(pg.holder.at)}. Замок не взят; дождись освобождения цели и повтори merge.` }
+            }
+          }
           taskEvent(t, me.session, undefined, "замок вливания взят")
           return { content: `Замок вливания проекта ${project} твой. Влей ${t.branch ? `ветку ${t.branch}` : "работу"} в ${tcfg.targetBranch}, запушь и вызови crew_task {action: "accept", n: ${t.n}, checks: {...}${t.branch ? "" : ', commit: "<хэш>"'}}. ${LOCK_RULE}` }
         }
@@ -3122,7 +3185,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
           t.rework_note = text
           t.reviewer_role = keyOf(me)
           const lockHeld = holdsMergeLock(project, me.session, t.n)
-          releaseMergeLock(project, me.session, t.n)
+          releaseTaskLocks(t, me.session, t.n)
           const lockNote = lockHeld ? ` ${LOCK_FREED}` : ""
           if (t.review_qid) settleObligation(me.session, t.review_qid)
           markPrecheckStale(t, sync ? "возвращена исполнителю (синхронизация)" : "возвращена исполнителю (доработка)")
@@ -3176,7 +3239,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
           t.commit = commit
           t.merged_head = m.head
           const lockFreed = !viaLanded && holdsMergeLock(project, me.session, t.n)
-          if (!viaLanded) releaseMergeLock(project, me.session, t.n) // замок другой задачи этой сессии при accept по «отпущено службой» не трогаем
+          if (!viaLanded) releaseTaskLocks(t, me.session, t.n) // замок другой задачи этой сессии при accept по «отпущено службой» не трогаем
           taskEvent(t, me.session, "accepted", `принята: ${m.how}`)
           if (t.precheck) {
             // запись предпроверки остаётся историей: на какой вершине целевой ветки принята задача
@@ -3292,7 +3355,7 @@ ${lockStillYours(stillHeld.n)}` : "") }
         host.posted(propagateToParent(t))
         const lockHeld = !!t.reviewer && holdsMergeLock(project, t.reviewer, t.n)
         if (t.reviewer) {
-          releaseMergeLock(project, t.reviewer, t.n)
+          releaseTaskLocks(t, t.reviewer, t.n)
           if (t.review_qid) settleObligation(t.reviewer, t.review_qid)
         }
         if (t.executor) {

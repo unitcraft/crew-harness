@@ -9,7 +9,7 @@
 // не убивается ничего.
 
 import { spawn, execFileSync } from "node:child_process"
-import { isMerged, mergeHolder, releaseMergeLock, repoDir, takeMergeLock } from "./review.ts"
+import { isMerged, landingDir, landingRemote, landingTarget, mergeHolder, pubHolder, pubKeyOf, releaseMergeLock, releasePubLock, releaseTaskLocks, repoDir, takeMergeLock, takePubLock } from "./review.ts"
 import { type PrecheckRecord, type Task, acceptedAt, isOpen, listTasks, loadTask, rounds, taskEvent, taskNo, taskRef } from "./tasks.ts"
 
 /** срок чтения вершины на origin, мс */
@@ -47,12 +47,12 @@ export function killTree(child: { pid?: number; exitCode: number | null; signalC
 /** Вершина целевой ветки: из origin (ls-remote) или, если origin не настроен, из локальной ветки. */
 export type Tip = { ok: true; tip: string; source: "origin" | "local" } | { ok: false; kind: "fail" | "missing"; error: string }
 
-/** `origin` настроен? `git remote get-url origin`: код 0 — да, код 2 («No such remote») — нет, любой другой — сбой чтения настроек. */
-export function hasOrigin(dir: string): { origin: true } | { origin: false } | { error: string } {
-  const r = runGit(dir, ["remote", "get-url", "origin"], 10_000)
+/** `remote` настроен? `git remote get-url <remote>`: код 0 — да, код 2 («No such remote») — нет, любой другой — сбой чтения настроек. */
+export function hasOrigin(dir: string, remote = "origin"): { origin: true } | { origin: false } | { error: string } {
+  const r = runGit(dir, ["remote", "get-url", remote], 10_000)
   if (r.ok) return { origin: true }
   if (r.code === 2) return { origin: false }
-  return { error: `git remote get-url origin: ${r.err || `код ${r.code ?? "?"}`}` }
+  return { error: `git remote get-url ${remote}: ${r.err || `код ${r.code ?? "?"}`}` }
 }
 
 const HASH = /^[0-9a-f]{40}([0-9a-f]{24})?$/
@@ -61,15 +61,16 @@ const HASH = /^[0-9a-f]{40}([0-9a-f]{24})?$/
  * Прочитать вершину ветки `target` (REQ-09). Только чтение: ни fetch, ни записи ссылок и объектов. Без кеша. Сбой, срок, пустой
  * вывод — отказ с текстом (kind "fail" — сбой чтения, "missing" — на origin ветки нет); «не сдвинулась» из него не выводится.
  */
-export function originTip(dir: string, target: string, opts: { timeoutMs?: number } = {}): Promise<Tip> {
+export function originTip(dir: string, target: string, opts: { timeoutMs?: number; remote?: string } = {}): Promise<Tip> {
   const timeoutMs = opts.timeoutMs ?? TIP_TIMEOUT_MS
-  const o = hasOrigin(dir)
+  const remote = opts.remote ?? "origin"
+  const o = hasOrigin(dir, remote)
   if ("error" in o) return Promise.resolve({ ok: false, kind: "fail", error: o.error })
   if (!o.origin) {
-    // origin не настроен: вершина — локальная ветка (прежнее поведение проекта без удалённого репозитория)
+    // remote не настроен: вершина — локальная ветка (прежнее поведение проекта без удалённого репозитория)
     const l = runGit(dir, ["rev-parse", "--verify", "--quiet", `refs/heads/${target}^{commit}`], 10_000)
     const tip = l.out.trim()
-    return Promise.resolve(l.ok && HASH.test(tip) ? { ok: true, tip, source: "local" } : { ok: false, kind: "missing", error: `origin не настроен, а локальной ветки ${target} в ${dir} нет` })
+    return Promise.resolve(l.ok && HASH.test(tip) ? { ok: true, tip, source: "local" } : { ok: false, kind: "missing", error: `${remote} не настроен, а локальной ветки ${target} в ${dir} нет` })
   }
   return new Promise<Tip>((resolve) => {
     let done = false
@@ -83,7 +84,7 @@ export function originTip(dir: string, target: string, opts: { timeoutMs?: numbe
     }
     let child: ReturnType<typeof spawn>
     try {
-      child = spawn("git", ["-c", "http.lowSpeedLimit=1000", "-c", "http.lowSpeedTime=15", "ls-remote", "origin", `refs/heads/${target}`], {
+      child = spawn("git", ["-c", "http.lowSpeedLimit=1000", "-c", "http.lowSpeedTime=15", "ls-remote", remote, `refs/heads/${target}`], {
         cwd: dir,
         windowsHide: true,
         detached: process.platform !== "win32", // своя группа процессов: по сроку снимается вся
@@ -95,26 +96,26 @@ export function originTip(dir: string, target: string, opts: { timeoutMs?: numbe
     }
     const timer = setTimeout(() => {
       killTree(child)
-      finish({ ok: false, kind: "fail", error: `git ls-remote origin: срок ${Math.round(timeoutMs / 1000)} с истёк (ответа нет; процессы запуска сняты)` })
+      finish({ ok: false, kind: "fail", error: `git ls-remote ${remote}: срок ${Math.round(timeoutMs / 1000)} с истёк (ответа нет; процессы запуска сняты)` })
     }, timeoutMs)
     child.stdout?.on("data", (d) => (out += d))
     child.stderr?.on("data", (d) => (err += d))
     child.on("error", (e: any) => finish({ ok: false, kind: "fail", error: `git ls-remote не запущен: ${e?.message ?? e}` }))
     child.on("close", (code) => {
       if (done) return
-      if (code !== 0) return finish({ ok: false, kind: "fail", error: `git ls-remote origin: ${err.trim().split(/\r?\n/).filter(Boolean).slice(-1)[0] ?? `код ${code}`}` })
+      if (code !== 0) return finish({ ok: false, kind: "fail", error: `git ls-remote ${remote}: ${err.trim().split(/\r?\n/).filter(Boolean).slice(-1)[0] ?? `код ${code}`}` })
       for (const line of out.split(/\r?\n/)) {
         const [hash, ref] = line.split(/\s+/)
         if (ref === `refs/heads/${target}` && HASH.test(hash ?? "")) return finish({ ok: true, tip: hash, source: "origin" })
       }
-      finish({ ok: false, kind: "missing", error: `ветки ${target} на origin нет` })
+      finish({ ok: false, kind: "missing", error: `ветки ${target} на ${remote} нет` })
     })
   })
 }
 
 // ---- швы для тестов (РП-02): по умолчанию пусты, производственный путь их нигде не заполняет
-export const seams: { readTip?: typeof originTip; afterTip?: () => void | Promise<void>; afterMerged?: () => void; betweenLandedSteps?: () => void } = {}
-const readTip = (dir: string, target: string) => (seams.readTip ?? originTip)(dir, target)
+export const seams: { readTip?: (dir: string, target: string, remote?: string) => Promise<Tip>; afterTip?: () => void | Promise<void>; afterMerged?: () => void; betweenLandedSteps?: () => void } = {}
+const readTip = (dir: string, target: string, remote?: string) => (seams.readTip ?? originTip)(dir, target, remote !== undefined ? { remote } : {})
 
 const short = (h: string) => h.slice(0, 7)
 const hm = (at: number) => {
@@ -125,6 +126,13 @@ const hm = (at: number) => {
 export const roundOf = (t: Task) => rounds(t) + t.attempt
 /** Запись действует (не устарела). */
 export const isLive = (rec?: PrecheckRecord): rec is PrecheckRecord => !!rec && rec.state !== "stale"
+/** Снимок привязки с ЖИВЫМ адресом remote из клона результата (задача 257); без привязки — undefined. Смена привязки или `git remote set-url` после предпроверки инвалидирует запись. */
+const liveSnap = (t: Task): PrecheckRecord["landing"] => {
+  if (!t.landing) return undefined
+  const u = runGit(t.landing.dir, ["remote", "get-url", t.landing.remote], 10_000)
+  return { dir: t.landing.dir, remote: t.landing.remote, branch: t.landing.branch, url: u.ok ? u.out.trim() : "" }
+}
+const sameSnap = (a: PrecheckRecord["landing"], b: PrecheckRecord["landing"]): boolean => JSON.stringify(a ?? null) === JSON.stringify(b ?? null)
 /**
  * Подсказки о соседних задачах проекта; только чтение журнала задач, ничего не хранится и не резервируется.
  * running — какие другие открытые задачи сейчас с записью «идёт» или «зелёная» (номер, на какой вершине, с какого времени);
@@ -156,7 +164,8 @@ export function neighbourHints(t: Task, kind: "running" | "moved"): string {
 export function acceptWarning(t: Task, target: string, head?: string): string {
   const rec = t.precheck
   if (!rec || rec.state !== "green" || !rec.candidate) return ""
-  const dir = repoDir(t)
+  const dir = landingDir(t)
+  target = landingTarget(t, target)
   const tip = acceptedTip(t, target, head)
   if (!tip) return ""
   if (!resolveCommit(dir, rec.candidate)) return ` Внимание: кандидата предпроверки ${short(rec.candidate)} в локальном репозитории нет — сверить, что влито именно проверенное, нельзя.`
@@ -171,8 +180,9 @@ export function acceptWarning(t: Task, target: string, head?: string): string {
  */
 export function precheckLines(t: Task, session: string): string[] {
   const rec = t.precheck
-  if (!rec) return []
   const out: string[] = []
+  if (t.landing) out.push(`репозиторий результата: ${t.landing.dir} (${t.landing.remote}/${t.landing.branch}, ${t.landing.url}) — ${t.landing.word}`)
+  if (!rec) return out
   if (rec.state === "running") out.push(`предпроверка: идёт с ${hm(rec.at)} на ${short(rec.base)}`)
   else if (rec.state === "green") out.push(`предпроверка: зелёная на ${short(rec.base)} (кандидат ${short(rec.candidate ?? "")}, ${hm(rec.green_at ?? rec.at)})`)
   else out.push(`предпроверка: устарела (${rec.stale?.reason ?? "причина не записана"}), была на ${short(rec.base)}`)
@@ -221,23 +231,27 @@ const REREAD = "за время чтения вершины задача изм�
 
 /** Начало предпроверки: прочитать вершину целевой ветки и записать «идёт» на ней (REQ-06). Замок не берётся. */
 export async function beginPrecheck(t: Task, session: string, target: string): Promise<string> {
-  const tip = await readTip(repoDir(t), target)
+  const dir = landingDir(t)
+  target = landingTarget(t, target)
+  const tip = await readTip(dir, target, landingRemote(t))
   await seams.afterTip?.()
   if (!tip.ok) return `Предпроверка не начата: вершину ${target} узнать не удалось (${tip.error}). Запись задачи не менялась; повтори позже.`
   const cur = fresh(t, session)
   if (!cur) return `Предпроверка не начата: ${REREAD}.`
+  const snap = liveSnap(cur)
+  if (snap && snap.url !== cur.landing!.url) return `Предпроверка не начата: адрес remote ${cur.landing!.remote} в клоне результата сменился после привязки (был ${cur.landing!.url}, стал ${snap.url || "не прочитан"}). Привязку подтверждает интегратор заново: crew_task {action: "target", n: ${t.n}, dir, remote, branch, word}. Запись задачи не менялась.`
   const rec = cur.precheck
-  if (isLive(rec) && rec.base === tip.tip && rec.round === roundOf(cur)) {
+  if (isLive(rec) && rec.base === tip.tip && rec.round === roundOf(cur) && sameSnap(rec.landing, snap)) {
     if (rec.state === "green") return `Предпроверка уже зелёная на ${short(rec.base)} (кандидат ${short(rec.candidate ?? "")}, ${hm(rec.green_at ?? rec.at)}); ${target} пока на той же вершине. Дальше — crew_task {action: "merge", n: ${t.n}}: замок выдастся на эту вершину.${neighbourHints(cur, "running")}`
     return `Предпроверка уже идёт с ${hm(rec.at)} на вершине ${rec.base} (${target}). Влей эту вершину в кандидата, прогони CI и заверши: crew_task {action: "precheck", n: ${t.n}, candidate: "<ветка или хеш>", result: "<чем подтверждено>"}.${neighbourHints(cur, "running")}`
   }
   const now = Date.now()
-  cur.precheck = { state: "running", base: tip.tip, at: now, by: session, round: roundOf(cur) }
+  cur.precheck = { state: "running", base: tip.tip, at: now, by: session, round: roundOf(cur), ...(snap ? { landing: snap } : {}) }
   const held = mergeHolder(cur.project)
   const note = isLive(rec) ? `предпроверка начата заново на ${short(tip.tip)} (прежняя на ${short(rec.base)}: ${rec.state === "green" ? "зелёная" : "шла"}, ${target} сдвинулась)` : `предпроверка начата на ${short(tip.tip)}`
   taskEvent(cur, session, undefined, note)
   const lockNote = held && held.session === session && held.n === cur.n ? ` Замок вливания у тебя уже есть для этой задачи и остаётся; если он не нужен — crew_task {action: "unlock", n: ${t.n}}.` : ""
-  return `Предпроверка начата: ${target} на origin сейчас ${tip.tip}. Влей эту вершину в кандидата (например, в ветку integrate/t${t.n}; имя плагин не навязывает), прогони CI и заверши: crew_task {action: "precheck", n: ${t.n}, candidate: "<ветка или хеш>", result: "<чем подтверждено: строка CI>"}. Замок вливания этим действием не берётся: merge выдаст его только на эту же вершину.${lockNote}${neighbourHints(cur, "running")}`
+  return `Предпроверка начата: ${target} на ${landingRemote(t)} сейчас ${tip.tip}${t.landing ? ` (репозиторий результата ${t.landing.dir})` : ""}. Влей эту вершину в кандидата (например, в ветку integrate/t${t.n}; имя плагин не навязывает), прогони CI и заверши: crew_task {action: "precheck", n: ${t.n}, candidate: "<ветка или хеш>", result: "<чем подтверждено: строка CI>"}. Замок вливания этим действием не берётся: merge выдаст его только на эту же вершину.${lockNote}${neighbourHints(cur, "running")}`
 }
 
 /** Коммит по имени или хешу из локального репозитория задачи: полный хеш или undefined. */
@@ -254,20 +268,35 @@ export async function finishPrecheck(t: Task, session: string, target: string, i
   const refuse = (why: string) => `Предпроверка не завершена: ${why}. Запись задачи не изменена${isLive(rec0) ? ` (остаётся ${rec0.state === "green" ? "зелёной" : "«идёт»"} на ${short(rec0.base)})` : ""}.`
   if (!isLive(rec0)) return `Предпроверка не завершена: записи «идёт» или «зелёная» нет${rec0 ? ` (прежняя устарела: ${rec0.stale?.reason ?? "?"})` : ""}. Начни: crew_task {action: "precheck", n: ${t.n}} (без candidate и result).`
   if (rec0.round !== roundOf(t)) return refuse(`запись прежнего круга, а задачу с тех пор возвращали; начни заново: crew_task {action: "precheck", n: ${t.n}}`)
+  if (!sameSnap(rec0.landing, liveSnap(t))) return refuse(`запись начата для другой привязки репозитория результата — иной dir/remote/ref или адрес remote сменился (предпроверка привязана к repo/remote/ref/url явно); начни заново: crew_task {action: "precheck", n: ${t.n}}`)
   const result = String(input.result ?? "").trim()
   const candidate = String(input.candidate ?? "").trim()
   if (!result) return refuse("нужен result — чем подтверждено (строка CI), непустой")
   if (!candidate) return refuse("нужен candidate — ветка или хеш собранного кандидата")
   const held = mergeHolder(t.project)
   if (held && held.session === session && held.n === t.n) return refuse(`замок вливания уже у тебя для этой задачи; сначала crew_task {action: "unlock", n: ${t.n}}`)
-  const dir = repoDir(t)
-  if (!resolveCommit(dir, rec0.base)) return refuse(`основы ${short(rec0.base)} нет в локальном репозитории задачи (${dir}); ${FETCH_HINT}`)
+  const dir = landingDir(t)
+  target = landingTarget(t, target)
+  if (!resolveCommit(dir, rec0.base)) return refuse(`основы ${short(rec0.base)} нет в локальном репозитории результата (${dir}); ${FETCH_HINT}`)
   const cand = resolveCommit(dir, candidate)
-  if (!cand) return refuse(`кандидата «${candidate}» нет в локальном репозитории задачи (${dir}); ${FETCH_HINT}`)
+  if (!cand) return refuse(`кандидата «${candidate}» нет в локальном репозитории результата (${dir}); ${FETCH_HINT}`)
   const anc = runGit(dir, ["merge-base", "--is-ancestor", rec0.base, cand], 10_000)
-  if (!anc.ok) return refuse(anc.code === 1 ? `кандидат ${short(cand)} не содержит основу ${short(rec0.base)}: влей ${target} на этой вершине (${rec0.base}) в кандидата и прогони CI заново` : `не удалось сверить кандидата с основой (git merge-base: ${anc.err || `код ${anc.code}`})`)
-  const tip = await readTip(dir, target)
-  await seams.afterTip?.()
+  let tip: Tip | undefined
+  // задача 257: кандидат не содержит основу — допустимо, когда результат УЖЕ опубликован (кандидат — предок вершины целевой
+  // ветки на remote): факт публикации проверяется по remote, вливание не нужно, merge/accept зафиксируют учёт
+  let published = false
+  if (!anc.ok && anc.code === 1) {
+    const t0 = await readTip(dir, target, landingRemote(t))
+    await seams.afterTip?.()
+    if (!t0.ok) return refuse(`кандидат ${short(cand)} не содержит основу ${short(rec0.base)} и вершину ${target} узнать не удалось (${t0.error})`)
+    if (runGit(dir, ["merge-base", "--is-ancestor", cand, t0.tip], 10_000).code !== 0) return refuse(`кандидат ${short(cand)} не содержит основу ${short(rec0.base)}: влей ${target} на этой вершине (${rec0.base}) в кандидата и прогони CI заново`)
+    published = true
+    tip = t0
+  } else if (!anc.ok) return refuse(`не удалось сверить кандидата с основой (git merge-base: ${anc.err || `код ${anc.code}`})`)
+  if (!tip) {
+    tip = await readTip(dir, target, landingRemote(t))
+    await seams.afterTip?.()
+  }
   if (!tip.ok) return refuse(`вершину ${target} узнать не удалось (${tip.error})`)
   const cur = fresh(t, session)
   const rec = cur?.precheck
@@ -282,12 +311,13 @@ export async function finishPrecheck(t: Task, session: string, target: string, i
   }
   const now = Date.now()
   const replaced = rec.state === "green"
-  cur.precheck = { state: "green", base: rec.base, at: rec.at, by: rec.by, round: rec.round, candidate: cand, ...(branchTip ? { branch_tip: branchTip } : {}), result: result.slice(0, 500), green_at: now }
-  taskEvent(cur, session, undefined, replaced ? `предпроверка: запись заменена на ${short(rec.base)} (кандидат ${short(rec.candidate ?? "")} → ${short(cand)}): ${result.slice(0, 200)}` : `предпроверка зелёная на ${short(rec.base)} (кандидат ${short(cand)}): ${result.slice(0, 200)}`)
+  cur.precheck = { state: "green", base: rec.base, at: rec.at, by: rec.by, round: rec.round, candidate: cand, ...(branchTip ? { branch_tip: branchTip } : {}), result: result.slice(0, 500), green_at: now, ...(published ? { published: true } : {}), ...(rec.landing ? { landing: rec.landing } : {}) }
+  taskEvent(cur, session, undefined, replaced ? `предпроверка: запись заменена на ${short(rec.base)} (кандидат ${short(rec.candidate ?? "")} → ${short(cand)}): ${result.slice(0, 200)}` : `предпроверка зелёная на ${short(rec.base)} (кандидат ${short(cand)}${published ? ", уже опубликован" : ""}): ${result.slice(0, 200)}`)
   const moved = tip.tip !== rec.base
+  const pubNote = published ? ` Кандидат уже опубликован: он предок вершины ${target} (${short(tip.tip)}) на ${landingRemote(t)} — вливание не нужно, merge зафиксирует учёт, затем accept {n, commit: "${cand}"}.` : ""
   return `Предпроверка зелёная на ${short(rec.base)} (кандидат ${short(cand)}, результат: ${result.slice(0, 200)}). ${
     moved ? `Но ${target} уже сдвинулась: сейчас ${short(tip.tip)} (проверено ${hm(now)}). Начни заново: crew_task {action: "precheck", n: ${t.n}} (эта запись остаётся, пока не начнёшь новую); замок на сдвинутую вершину не выдастся.` : `${target} пока не сдвинулась. Дальше — crew_task {action: "merge", n: ${t.n}}: замок выдастся на эту вершину.`
-  }${warn}`
+  }${pubNote}${warn}`
 }
 
 /** Отпустить замок вливания, который сессия держит для этой задачи (REQ-10). Запись устаревает («замок отпущен»). */
@@ -296,7 +326,7 @@ export function unlockMerge(t: Task, session: string): string {
   if (!h) return `Замка вливания проекта ${t.project} нет — отпускать нечего.`
   if (h.session !== session) return `Замок вливания проекта ${t.project} не твой (держит приёмщик задачи ${taskNo({ project: t.project, n: h.n })}); чужой замок unlock не снимает.`
   if (h.n !== t.n) return `Твой замок вливания — для задачи ${taskNo({ project: t.project, n: h.n })}, а не ${taskNo(t)}: unlock {n: ${h.n}}.`
-  releaseMergeLock(t.project, session, t.n)
+  releaseTaskLocks(t, session, t.n)
   markPrecheckStale(t, "замок отпущен")
   taskEvent(t, session, undefined, "замок вливания отпущен (unlock); предпроверка устарела")
   return `Замок вливания проекта ${t.project} отпущен. Предпроверка устарела (замок отпущен): чтобы вливать, начни заново — crew_task {action: "precheck", n: ${t.n}}.`
@@ -316,9 +346,11 @@ export async function releaseLandedLock(project: string, target: string): Promis
   const t = loadTask(project, lock.n)
   const rec = t?.precheck
   if (!t || t.status !== "reviewing" || t.reviewer !== lock.session || !rec || rec.state !== "green" || rec.round !== roundOf(t) || !rec.candidate || rec.candidate === rec.base) return undefined // кандидат = основа: своего содержимого нет, «влитым» его считать нельзя
-  const tip = await (seams.readTip ?? originTip)(repoDir(t), target)
+  const dir = landingDir(t)
+  target = landingTarget(t, target)
+  const tip = await readTip(dir, target, landingRemote(t))
   if (!tip.ok || tip.source !== "origin") return undefined
-  if (runGit(repoDir(t), ["merge-base", "--is-ancestor", rec.candidate, tip.tip], 10_000).code !== 0) return undefined
+  if (runGit(dir, ["merge-base", "--is-ancestor", rec.candidate, tip.tip], 10_000).code !== 0) return undefined
   if (!holdsFor(project, lock.session, lock.n, lock.at)) return undefined // за время чтения замок сменился
   const cur = loadTask(project, lock.n)
   if (!cur || cur.status !== "reviewing" || !cur.precheck || cur.precheck.state !== "green" || cur.precheck.green_at !== rec.green_at) return undefined
@@ -332,7 +364,7 @@ export async function releaseLandedLock(project: string, target: string): Promis
     taskEvent(cur, "crew-harness", undefined, `замок отпущен: слияние на вершине ${short(tip.tip)} (проверенный кандидат ${short(rec.candidate)} уже в ${target}); дальше accept, уборка без замка`)
   }
   seams.betweenLandedSteps?.()
-  releaseMergeLock(project, lock.session, lock.n)
+  releaseTaskLocks(cur, lock.session, lock.n)
   return `merge lock of ${project} ${taskNo({ project, n: lock.n })} released: landed on ${short(tip.tip)}`
 }
 
@@ -343,7 +375,7 @@ const sameTip = (tip: string, base: string): boolean => tip === base // GATE:sam
 /** запись зелёная и этого круга */
 const isFresh = (rec: PrecheckRecord | undefined, t: Task): boolean => !!rec && rec.state === "green" && rec.round === roundOf(t) // GATE:green
 /** запись, перечитанная с диска после чтения вершины, всё ещё та же зелёная */
-const recordUnchanged = (cur: PrecheckRecord | undefined, rec: PrecheckRecord): boolean => !!cur && cur.state === "green" && cur.base === rec.base && cur.round === rec.round && cur.at === rec.at && cur.green_at === rec.green_at // GATE:recheck
+const recordUnchanged = (cur: PrecheckRecord | undefined, rec: PrecheckRecord): boolean => !!cur && cur.state === "green" && cur.base === rec.base && cur.round === rec.round && cur.at === rec.at && cur.green_at === rec.green_at && sameSnap(cur.landing, rec.landing) // GATE:recheck
 /** замок вливания проекта держит именно эта сессия и именно для этой задачи (сессия одна, задач у приёмщика несколько); с `at` — ещё и тот же экземпляр замка (метка `at` записана при взятии в этом вызове) */
 const holdsFor = (project: string, session: string, n: number, at?: number): boolean => {
   const h = mergeHolder(project)
@@ -368,7 +400,8 @@ export type Gate = { text: string } | { granted: string }
  */
 export async function gateMerge(t: Task, session: string, target: string): Promise<Gate> {
   const project = t.project
-  const dir = repoDir(t)
+  const dir = landingDir(t)
+  target = landingTarget(t, target)
   const rec = t.precheck
   const base = rec?.base ?? ""
   const refuse = (why: string, next = "") => ({ text: `Замок не выдан: ${why}.${next ? ` ${next}` : ""}` })
@@ -380,6 +413,8 @@ export async function gateMerge(t: Task, session: string, target: string): Promi
     if (rec.state === "stale") return refuse(`предпроверка задачи ${taskRef(t)} устарела (${rec.stale?.reason ?? "причина не записана"})`, start)
     return refuse(`запись предпроверки прежнего круга: задачу с тех пор возвращали или передавали`, start)
   }
+  // 2b. запись привязана к repo/remote/ref/url явно (задача 257): привязка или живой адрес remote с тех пор сменились — записи здесь нет
+  if (!sameSnap(rec.landing, liveSnap(t))) return refuse(`зелёная предпроверка сделана для другой привязки репозитория результата (в записи ${rec.landing ? `${rec.landing.remote}/${rec.landing.branch} ${rec.landing.url}` : "без привязки"}, у задачи ${t.landing ? `${t.landing.remote}/${t.landing.branch} ${t.landing.url}` : "без привязки"})`, start)
   // 3. держание замка — до любого takeMergeLock
   const holder = mergeHolder(project)
   if (holder && holder.session === session && holder.n !== t.n) return refuse(`замок у тебя уже для ${taskNo({ project, n: holder.n })}; сначала accept, rework или unlock по ней`)
@@ -401,18 +436,32 @@ export async function gateMerge(t: Task, session: string, target: string): Promi
   const got = takeMergeLock(project, session, t.n)
   if (!got.ok) return { text: `Замок вливания проекта ${project} у приёмщика задачи ${taskNo({ project, n: got.holder.n })} (сессия ${got.holder.session}) с ${hm(got.holder.at)}. Дождись (спроси позже ещё раз) — вливать одновременно нельзя. Твоя предпроверка остаётся действующей, пока ${target} не сдвинется.` }
   const stamp = mergeHolder(project)?.at // метка этого экземпляра замка: по ней шаги 6–9 узнают «мой» замок, а не взятый параллельным вызовом
+  // 5b. замок публикации в цель привязки (задача 257): в одну цель (url#branch) не вливают две задачи, даже разных проектов-владельцев
+  const pubKey = pubKeyOf(t)
+  if (pubKey) {
+    const pg = takePubLock(pubKey, project, session, t.n)
+    if (!pg.ok) {
+      if (!hadLock) releaseOwnLock(project, session, t.n, stamp)
+      return refuse(`цель публикации ${t.landing!.url}#${t.landing!.branch} занята: вливает приёмщик задачи ${pg.holder.project} ${taskNo({ project: pg.holder.project, n: pg.holder.n })} (сессия ${pg.holder.session}) с ${hm(pg.holder.at)}`, hadLock ? "Замок вливания проекта остаётся у тебя, как был. Дождись освобождения цели и повтори merge." : "Замок не взят. Дождись освобождения цели и повтори merge.")
+    }
+  }
+  /** отпустить замки этого вызова: проекта — только если взят этим вызовом (метка), публикации — только если его держит эта задача */
+  const releaseBoth = (): void => {
+    releaseOwnLock(project, session, t.n, stamp)
+    if (pubKey) releasePubLock(pubKey, project, session, t.n)
+  }
   // 6. вершина — под замком
-  const tip = await readTip(dir, target)
+  const tip = await readTip(dir, target, landingRemote(t))
   await seams.afterTip?.()
   if (!tip.ok) {
-    if (!hadLock) releaseOwnLock(project, session, t.n, stamp)
+    if (!hadLock) releaseBoth()
     return hadLock
       ? { text: `Вершину ${target} узнать не удалось (${tip.error}). Замок остаётся у тебя, как был; повтори merge позже или отпусти его: crew_task {action: "unlock", n: ${t.n}}.` }
       : refuse(`вершину ${target} на origin узнать не удалось (${tip.error})`, "Замок не взят; повтори merge через минуту. Влить без origin всё равно нельзя.")
   }
   // 7. вершина сдвинулась
   if (!sameTip(tip.tip, base)) {
-    releaseOwnLock(project, session, t.n, stamp)
+    releaseBoth()
     const cur = loadTask(project, t.n)
     if (cur && hadLock) {
       markPrecheckStale(cur, "главная сдвинулась")
@@ -420,9 +469,17 @@ export async function gateMerge(t: Task, session: string, target: string): Promi
     }
     return refuse(`${target} сдвинулась — предпроверка зелёная на ${short(base)}, сейчас на origin ${short(tip.tip)} (проверено ${hm(Date.now())})`, `Замок не взят${hadLock ? "; запись устарела" : ""}. Повтори предпроверку.${neighbourHints(cur ?? t, "moved")}`)
   }
-  // 7b. кандидат должен быть fast-forward от вершины под замком (код 1 — не потомок; иное — не удалось узнать, не отказ)
-  if (rec?.candidate && runGit(dir, ["merge-base", "--is-ancestor", tip.tip, rec.candidate], 10_000).code === 1) {
-    releaseOwnLock(project, session, t.n, stamp)
+  // 7b. кандидат должен быть fast-forward от вершины под замком (код 1 — не потомок; иное — не удалось узнать, не отказ).
+  // Опубликованный кандидат (задача 257): fast-forward не нужен, под замком перепроверяется сам факт публикации.
+  if (rec?.candidate && rec.published) {
+    if (runGit(dir, ["merge-base", "--is-ancestor", rec.candidate, tip.tip], 10_000).code !== 0) {
+      releaseBoth()
+      const cur = loadTask(project, t.n)
+      if (cur) markPrecheckStale(cur, "факт публикации не подтвердился")
+      return refuse(`кандидат ${short(rec.candidate)} числился опубликованным, но в ${target} (${short(tip.tip)}) на ${landingRemote(t)} его нет`, `Замок не взят; запись устарела. Сверь публикацию и повтори предпроверку.`)
+    }
+  } else if (rec?.candidate && runGit(dir, ["merge-base", "--is-ancestor", tip.tip, rec.candidate], 10_000).code === 1) {
+    releaseBoth()
     const cur = loadTask(project, t.n)
     if (cur && hadLock) markPrecheckStale(cur, "кандидат не от вершины")
     return refuse(`кандидат ${short(rec.candidate)} не fast-forward от вершины ${target} под замком (${short(tip.tip)})`, `Замок не взят${hadLock ? "; запись устарела" : ""}. Собери кандидата заново от этой вершины и повтори предпроверку.`)
@@ -430,7 +487,7 @@ export async function gateMerge(t: Task, session: string, target: string): Promi
   // 7c. ветка задачи ушла вперёд кандидата после его фиксации (задача 030)
   const ahead = rec ? branchAheadOfCandidate(dir, t, rec) : undefined
   if (ahead) {
-    releaseOwnLock(project, session, t.n, stamp)
+    releaseBoth()
     const cur = loadTask(project, t.n)
     if (cur) {
       markPrecheckStale(cur, "ветка задачи ушла вперёд кандидата")
@@ -441,11 +498,15 @@ export async function gateMerge(t: Task, session: string, target: string): Promi
   // 8. запись, перечитанная с диска: по-прежнему та же зелёная
   const cur = loadTask(project, t.n)
   if (!cur || !recordUnchanged(cur.precheck, rec ?? ({} as PrecheckRecord))) {
-    releaseOwnLock(project, session, t.n, stamp)
+    releaseBoth()
     return refuse(`предпроверка задачи ${taskRef(t)} за время чтения вершины изменилась (устарела или заменена)`, `Замок отпущен. ${start}`)
   }
   // 9. замок всё ещё у этой сессии
   if (!lockStillMine(project, session, t.n, stamp)) return { text: `Замок потерян: за время чтения вершины его сняли (cancel или rework по другой задаче, перехват). Замок не выдан; повтори merge.` }
+  if (pubKey) {
+    const ph = pubHolder(pubKey)
+    if (!ph || ph.project !== project || ph.session !== session || ph.n !== t.n) return { text: `Замок публикации в цель привязки потерян: за время чтения вершины его сняли или перехватили. Замок не выдан; повтори merge.` }
+  }
   // 10. запись «замок на вершине»; окно между сверкой и записью допустимо (README)
   cur.precheck = { ...cur.precheck!, lock_on: { tip: tip.tip, at: Date.now() } }
   taskEvent(cur, session, undefined, `замок вливания взят на вершине ${short(tip.tip)}`)
@@ -454,8 +515,10 @@ export async function gateMerge(t: Task, session: string, target: string): Promi
 
 /** Вершина целевой ветки, в которой принята задача: из `<цель>` и `origin/<цель>` первая существующая, где head — предок; иначе первая существующая. */
 export function acceptedTip(t: Task, target: string, head?: string): string | undefined {
-  const dir = repoDir(t)
-  const tips = [target, `origin/${target}`].map((r) => resolveCommit(dir, r)).filter((x): x is string => !!x)
+  const dir = landingDir(t)
+  target = landingTarget(t, target)
+  const remote = landingRemote(t)
+  const tips = [target, `${remote}/${target}`].map((r) => resolveCommit(dir, r)).filter((x): x is string => !!x)
   if (!tips.length) return undefined
   if (head) for (const tp of tips) if (runGit(dir, ["merge-base", "--is-ancestor", head, tp], 10_000).ok) return tp
   return tips[0]
@@ -465,7 +528,11 @@ export function acceptedTip(t: Task, target: string, head?: string): string | un
 export function landingLine(t: Task, target: string): string {
   const cand = t.precheck?.candidate
   if (!cand) return ""
+  target = landingTarget(t, target)
+  if (t.precheck?.published)
+    return `Проверенный кандидат ${cand} уже опубликован в ${target} (${landingDir(t)}, факт публикации перепроверен под замком): вливать не нужно — сразу crew_task {action: "accept", n: ${t.n}, commit: "${cand}"}.`
   const br = t.branch ? resolveCommit(repoDir(t), t.branch) : undefined
   const diff = t.branch && br && br !== cand ? ` Ветка задачи ${t.branch} (${short(br)}) отличается от проверенного кандидата, это нормально (squash/пересборка): влей кандидата.` : ""
-  return `Вливается ровно проверенный кандидат ${cand} (${short(cand)}): fast-forward ${target} до него и push кандидата в ${target} (git push origin ${cand}:${target}); ветку задачи не вливай.${diff}`
+  const where = t.landing ? ` в репозитории результата ${t.landing.dir} (git -C ${t.landing.dir} push ${landingRemote(t)} ${cand}:${target})` : ` (git push origin ${cand}:${target})`
+  return `Вливается ровно проверенный кандидат ${cand} (${short(cand)}): fast-forward ${target} до него и push кандидата в ${target}${where}; ветку задачи не вливай.${diff}`
 }
