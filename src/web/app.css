@@ -1104,6 +1104,8 @@ input[aria-invalid="true"] { border-color: var(--danger); }
 /* ---- режимы работы по методике (задача 192p) ---- */
 .route-chip { max-width: 55%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .route-chip > span { overflow: hidden; text-overflow: ellipsis; }
+/* задача 192.12: выбор набора «роль → семья» */
+.preset-chip { max-width: 40%; background: transparent; color: inherit; border: 0; font: inherit; cursor: pointer; }
 
 /* Полоса шагов лежит над полем ввода и не сдвигает макет: абсолютная, привязана к верху композера. */
 .route-cards { display: flex; flex-direction: column; gap: 6px; }

@@ -617,6 +617,8 @@ export function createMockServer({ journal, now = Date.now, machines: withMachin
       mint(entries, trace, CHUNK_FIRST_MS, 'session_deleted', {});
     } else if (event.kind === 'session_rename') {
       mint(entries, trace, CHUNK_FIRST_MS, 'session_renamed', { name: String(input.name) });
+    } else if (event.kind === 'session_preset') {
+      mint(entries, trace, CHUNK_FIRST_MS, 'session_preset', { preset: String(input.preset) });
     } else if (event.kind === 'session_agent') {
       const from = family[trace] || 'opencode';
       family[trace] = String(input.agent);
@@ -797,6 +799,7 @@ export function mockFetch(real) {
       numbers[upload[1]] = (numbers[upload[1]] ?? 0) + 1;
       return json({ n: numbers[upload[1]], bytes: init.body && init.body.size ? init.body.size : 0 });
     }
+    if (path === '/api/presets') return json({ active: 'default', presets: [{ name: 'default', description: '', origin: 'built-in', roles: {} }, { name: 'mix', description: 'пример', origin: 'user', roles: {} }], roles: [] });
     if (path === '/api/stt/status') return json({ available: true, provider: 'local', model: 'small' });
     if (path === '/api/stt') return json({ text: MOCK_STT_TEXT });
     if (path === '/api/fs/list') return reply(mockFsList(new URLSearchParams(query).get('path') ?? ''));

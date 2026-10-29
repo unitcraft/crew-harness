@@ -90,7 +90,7 @@ const AGO_KEY = { now: 'ago.now', min: 'ago.min', hour: 'ago.hour', day: 'ago.da
  */
 export function createView(doc, refs, deps) {
   const {
-    agents, now, handlers, registryFailed = false, imageSrc = (image) => image.src, projectsApi,
+    agents, now, handlers, registryFailed = false, imageSrc = (image) => image.src, projectsApi, presets = () => null,
   } = deps;
   const win = doc.defaultView;
   const drafts = new Map();
@@ -681,6 +681,12 @@ export function createView(doc, refs, deps) {
     const on = worktreeButton.getAttribute('aria-pressed') !== 'true';
     if (worktreeButton.dataset.draft === 'true') handlers.onDraftWorktree(currentTrace, on); else handlers.onWorktree(currentTrace, on);
   });
+  // Задача 192.12: набор «роль → семья, модель, усилие» — выбор под полем новой сессии и у открытой сессии
+  const presetSelect = h(doc, 'select', { class: 'status-btn preset-chip', hidden: true, title: t('preset.label'), 'aria-label': t('preset.label') });
+  presetSelect.addEventListener('change', () => {
+    if (!currentTrace) return;
+    if (presetSelect.dataset.draft === 'true') handlers.onDraftPreset(currentTrace, presetSelect.value); else handlers.onSessionPreset(currentTrace, presetSelect.value);
+  });
   // Задача 192.4: где идёт работа (main, ветка папки проекта или своя ветка wip/задачи)
   // Задача 192.6: подпись — отдельной строкой под строкой чипов, чтобы не отнимать у них ширину
   const whereNote = h(doc, 'p', { class: 'where-note', hidden: true });
@@ -688,7 +694,7 @@ export function createView(doc, refs, deps) {
   const menu = h(doc, 'div', { class: 'menu', role: 'menu', hidden: true });
   // Одна группа чипов у правого края: семья, режим, модель и усилие; за ней кольцо контекста и спиннер (задача 192).
   const statusGroup = h(doc, 'div', { class: 'status-group' }, familyButton, modeButton, statusModel, modelButton, effortButton);
-  const status = h(doc, 'div', { class: 'composer-status', 'data-empty': 'true' }, worktreeButton, routeButton, h(doc, 'span', { class: 'grow' }), statusGroup, ringBox, spinner, menu);
+  const status = h(doc, 'div', { class: 'composer-status', 'data-empty': 'true' }, worktreeButton, routeButton, h(doc, 'span', { class: 'grow' }), statusGroup, ringBox, spinner, presetSelect, menu);
 
   // Меню выбора режима, модели и усилия (задача 192): показывает только то, что агент отдал по ACP.
   const MENU_MODELS = 4;
@@ -1562,6 +1568,20 @@ export function createView(doc, refs, deps) {
     worktreeButton.disabled = hasTree || noRepo;
     worktreeButton.title = noRepo ? t('route.worktree_not_repo') : hasTree ? t('route.worktree_locked') : (treeOn ? t('route.worktree_on') : t('route.worktree_off'));
     routeButton.title = `${t('route.label')}: ${routeDescription(currentRoute)}`;
+    // набор: показываем, когда сервер отдал больше одного
+    const presetInfo = presets();
+    const presetList = presetInfo && Array.isArray(presetInfo.presets) ? presetInfo.presets : [];
+    presetSelect.hidden = presetList.length < 2;
+    if (presetList.length >= 2) {
+      const chosen = session.preset || (presetInfo.active || 'default');
+      const sig = `${presetList.map((p) => p.name).join('|')}`;
+      if (presetSelect.dataset.sig !== sig) {
+        presetSelect.replaceChildren(...presetList.map((p) => h(doc, 'option', { value: p.name, text: p.name === 'default' ? t('preset.default_name') : p.name, title: p.description || '' })));
+        presetSelect.dataset.sig = sig;
+      }
+      presetSelect.value = chosen;
+      presetSelect.dataset.draft = String(Boolean(session.draft));
+    }
     const where = session.draft ? (noRepo ? t('where.draft_folder') : (treeOn ? whereText(session) : t('where.draft_off'))) : whereText(session);
     whereNote.hidden = !where;
     whereNote.textContent = where;

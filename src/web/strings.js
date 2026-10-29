@@ -367,6 +367,8 @@ export const S = Object.freeze({
   'ask.skipped': 'Вопрос пропущен: {question}',
   // ---- режимы работы по методике (задача 192p)
   'route.label': 'Режим работы',
+  'preset.label': 'Набор: кто какую роль делает',
+  'preset.default_name': 'по умолчанию',
   'route.interactive': 'Интерактивный',
   'route.interactive_desc': 'Пишем задачи, они делаются по супербыстрому пути, шагов нет',
   'route.fast': 'Быстрая задача',

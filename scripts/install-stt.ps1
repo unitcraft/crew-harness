@@ -7,8 +7,9 @@
 # The files are not in the repository (685 MB and 488 MB): the addresses, sizes and SHA256 are in tools/stt/manifest.json. The script downloads
 # what is missing into `<tool folder>/_download`, checks the size and the SHA256 (a mismatch stops it and deletes the file), unpacks, and
 # says what it did. A second run downloads nothing when the files are in place and their SHA256 are right.
-# The tool folder: the variable CREW_STT_DIR, else %LOCALAPPDATA%/crew-harness/stt (the same folder the control panel looks in: the
-# setting stt.dir / CREW_SERVER_STT_DIR names another). No path of a machine is written in the repository.
+# The tool folder (the same one the control panel looks in; the setting voice.dir / stt.dir names another): CREW_VOICE_DIR, CREW_STT_DIR, an older install in
+# %LOCALAPPDATA%/crew-harness/stt that is still there, CREW_TOOLS_DIR/whisper, <CREW_HOME>/tools/whisper, else ~/.crew-harness/tools/whisper (task 192.12, ADR-0016).
+# No path of a machine is written in the repository.
 param(
     [string]$Model = '',
     [switch]$Check,
@@ -20,9 +21,18 @@ $ErrorActionPreference = 'Stop'
 # ----- the parts that the tests call (scripts/tests/test-install-stt.ps1) -----
 
 function Get-SttDir {
+    if (-not [string]::IsNullOrWhiteSpace($env:CREW_VOICE_DIR)) { return $env:CREW_VOICE_DIR }
     if (-not [string]::IsNullOrWhiteSpace($env:CREW_STT_DIR)) { return $env:CREW_STT_DIR }
-    if (-not [string]::IsNullOrWhiteSpace($env:LOCALAPPDATA)) { return (Join-Path $env:LOCALAPPDATA 'crew-harness/stt') }
-    throw 'Neither CREW_STT_DIR nor LOCALAPPDATA is set: name the folder in CREW_STT_DIR.'
+    if (-not [string]::IsNullOrWhiteSpace($env:LOCALAPPDATA)) {
+        $older = Join-Path $env:LOCALAPPDATA 'crew-harness/stt'
+        if (Test-Path (Join-Path $older 'bin/whisper-server.exe')) { return $older }
+    }
+    if (-not [string]::IsNullOrWhiteSpace($env:CREW_TOOLS_DIR)) { return (Join-Path $env:CREW_TOOLS_DIR 'whisper') }
+    if (-not [string]::IsNullOrWhiteSpace($env:CREW_HOME)) { return (Join-Path $env:CREW_HOME 'tools/whisper') }
+    $home_dir = $env:USERPROFILE
+    if ([string]::IsNullOrWhiteSpace($home_dir)) { $home_dir = $env:HOME }
+    if (-not [string]::IsNullOrWhiteSpace($home_dir)) { return (Join-Path $home_dir '.crew-harness/tools/whisper') }
+    throw 'No folder known: name it in CREW_VOICE_DIR (or CREW_STT_DIR, CREW_TOOLS_DIR, CREW_HOME).'
 }
 
 function Assert-ManifestEntry($entry, $what, $needStrip) {

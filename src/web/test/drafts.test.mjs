@@ -106,3 +106,15 @@ test('Worktree новой сессии: по умолчанию выключен
   const view = fs.readFileSync(new URL('../view.js', import.meta.url), 'utf8');
   assert.match(view, /treeOn \? whereText\(session\) : t\('where\.draft_off'\)/);
 });
+
+test('набор сессии (задача 192.12): событие session_preset запоминает набор, пустое значение — набор из настроек; у черновика набора нет', () => {
+  let m = reduce(initialModel(), { id: 'a', trace: 's', step: 0, kind: 'session_created', input: { name: 'N', agent: 'opencode' }, time: 1 });
+  assert.equal(m.sessions.s.preset, undefined);
+  m = reduce(m, { id: 'b', trace: 's', step: 1, kind: 'session_preset', input: { preset: 'mix' }, time: 2 });
+  assert.equal(m.sessions.s.preset, 'mix');
+  m = reduce(m, { id: 'c', trace: 's', step: 2, kind: 'session_preset', input: { preset: '' }, time: 3 });
+  assert.equal(m.sessions.s.preset, '');
+  const d = addDraft(initialModel(), { id: 'x', agent: 'opencode', now: 5 });
+  assert.equal(d.sessions.x.preset, '');
+  assert.equal(patchDraft(d, 'x', { preset: 'mix' }).sessions.x.preset, 'mix');
+});

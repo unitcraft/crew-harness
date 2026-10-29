@@ -28,6 +28,8 @@ export const KINDS = Object.freeze([
   'usage_update', 'tool_call', 'tool_call_update', 'output_file', 'file_diff',
   'background_task', 'background_task_update',
   'session_model', 'agent_switched', 'session_renamed',
+  // задача 192.12: набор «роль → семья, модель, усилие», выбранный для сессии
+  'session_preset',
   // задача 192: место сессии в списке проекта (и проект, если её перенесли) и удаление сессии (его шлёт сервер, в журнале его нет)
   'session_placed', 'session_deleted',
   // задача 192t: выбранное владельцем значение больше недоступно у агента — строка в ленте
@@ -244,6 +246,10 @@ function apply(session, event) {
       // владелец переименовал сессию в заголовке (задача 192): последнее имя журнала и есть имя
       const name = str(input.name).trim();
       return name ? { ...session, name } : session;
+    }
+    case 'session_preset': {
+      // владелец выбрал набор сессии (задача 192.12): последнее слово журнала; пусто — набор из настроек
+      return { ...session, preset: str(input.preset) };
     }
     case 'session_placed': {
       // владелец перетащил сессию (задача 192): место в списке; project_id и project — если её перенесли в другой проект ('' — без проекта)
@@ -645,7 +651,7 @@ export function addDraft(model, { id, agent, projectId = '', project = '', folde
   const session = next.sessions[id];
   if (!session) return model;
   // режим по умолчанию у человека — «Интерактивный»; Worktree по умолчанию выключен (выбор владельца приходит параметром)
-  return { ...next, sessions: { ...next.sessions, [id]: { ...session, draft: true, route: INTERACTIVE_STATE.route, worktree: worktree === true } } };
+  return { ...next, sessions: { ...next.sessions, [id]: { ...session, draft: true, route: INTERACTIVE_STATE.route, worktree: worktree === true, preset: '' } } };
 }
 
 /** Убрать все черновики (кроме `keep`). */

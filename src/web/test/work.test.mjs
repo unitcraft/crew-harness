@@ -51,6 +51,7 @@ test('виды событий: девять прежних, шесть рабо�
     'session_deleted',
     'session_model',
     'session_placed',
+    'session_preset',
     'session_renamed',
     'setting_dropped',
     'tool_call',

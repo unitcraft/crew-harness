@@ -100,17 +100,23 @@ try {
     Set-Content -LiteralPath (Join-Path $inst 'bin/.sha256') -Value ('a' * 64)
     Check 'installed: the marker is right' (Test-SttBinaryInstalled $inst $binary)
 
-    # the folder: CREW_STT_DIR first, then LOCALAPPDATA
-    $oldDir = $env:CREW_STT_DIR; $oldLocal = $env:LOCALAPPDATA
+    # the folder: CREW_VOICE_DIR, CREW_STT_DIR, an older install in LOCALAPPDATA, CREW_TOOLS_DIR, CREW_HOME, the folder of the user (task 192.12)
+    $oldDir = $env:CREW_STT_DIR; $oldLocal = $env:LOCALAPPDATA; $oldVoice = $env:CREW_VOICE_DIR; $oldTools = $env:CREW_TOOLS_DIR; $oldHome = $env:CREW_HOME
     try {
+        $env:CREW_VOICE_DIR = ''; $env:CREW_TOOLS_DIR = ''; $env:CREW_HOME = ''
         $env:CREW_STT_DIR = 'C:/work/somewhere/stt'
         Check 'dir: CREW_STT_DIR' ((Get-SttDir) -eq 'C:/work/somewhere/stt')
-        $env:CREW_STT_DIR = ''
+        $env:CREW_VOICE_DIR = 'C:/work/voice'
+        Check 'dir: CREW_VOICE_DIR over CREW_STT_DIR' ((Get-SttDir) -eq 'C:/work/voice')
+        $env:CREW_VOICE_DIR = ''; $env:CREW_STT_DIR = ''
         $env:LOCALAPPDATA = 'C:/work/local'
-        Check 'dir: LOCALAPPDATA default' ((Get-SttDir).Replace('\', '/') -eq 'C:/work/local/crew-harness/stt')
-        $env:LOCALAPPDATA = ''
-        Check 'dir: neither is an error' (Throws { Get-SttDir })
-    } finally { $env:CREW_STT_DIR = $oldDir; $env:LOCALAPPDATA = $oldLocal }
+        $env:CREW_TOOLS_DIR = 'C:/work/tools'
+        Check 'dir: CREW_TOOLS_DIR/whisper when no older install is there' ((Get-SttDir).Replace([string][char]92, '/') -eq 'C:/work/tools/whisper')
+        $env:CREW_TOOLS_DIR = ''; $env:CREW_HOME = 'C:/work/inst'
+        Check 'dir: CREW_HOME/tools/whisper' ((Get-SttDir).Replace([string][char]92, '/') -eq 'C:/work/inst/tools/whisper')
+        $env:CREW_HOME = ''
+        Check 'dir: the folder of the user otherwise' ((Get-SttDir).Replace([string][char]92, '/') -like '*/.crew-harness/tools/whisper')
+    } finally { $env:CREW_STT_DIR = $oldDir; $env:LOCALAPPDATA = $oldLocal; $env:CREW_VOICE_DIR = $oldVoice; $env:CREW_TOOLS_DIR = $oldTools; $env:CREW_HOME = $oldHome }
 } finally {
     Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue
 }
