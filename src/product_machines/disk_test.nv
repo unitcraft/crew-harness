@@ -44,7 +44,7 @@ test "disk: the machines of the tree are read from machines/product and pass the
         Ok(m) => {
             assert(m.dialog().contains("\"machine\":\"DialogSession\""))
             assert(m.dialog_table().starts_with("# Машина: Диалог с агентом"))
-            assert(m.dialog_table().contains("- alula_version: 0.27"))
+            assert(m.dialog_table().contains("- alula_version: 0.28"))
             assert(m.text("libs/call_cancel.alula.md").contains("- library: call_cancel"))
             assert(m.journal().contains("`user_message`"))
             assert(m.files.len() == 4)
@@ -73,14 +73,14 @@ test "disk: a missing file is an error that names its path" {
 }
 
 test "disk: a tree, a table or a library of another alula_version is refused" {
-    ro tree = dk_copy("version-tree", "dialog.alula.json", "\"alula_version\":\"0.27\"", "\"alula_version\":\"0.26\"", false)
+    ro tree = dk_copy("version-tree", "dialog.alula.json", "\"alula_version\":\"0.28\"", "\"alula_version\":\"0.27\"", false)
     ro e = dk_error(tree)
     assert(e.contains("${tree}/dialog.alula.json"))
-    assert(e.contains("alula_version 0.26"))
-    assert(e.contains("0.27"))
-    ro table = dk_copy("version-table", "dialog.alula.md", "- alula_version: 0.27", "- alula_version: 0.26", false)
+    assert(e.contains("alula_version 0.27"))
+    assert(e.contains("0.28"))
+    ro table = dk_copy("version-table", "dialog.alula.md", "- alula_version: 0.28", "- alula_version: 0.27", false)
     assert(dk_error(table).contains("${table}/dialog.alula.md"))
-    ro lib = dk_copy("version-lib", "libs/", "- alula_version: 0.27", "- alula_version: 0.26", false)
+    ro lib = dk_copy("version-lib", "libs/", "- alula_version: 0.28", "- alula_version: 0.27", false)
     assert(dk_error(lib).contains("call_cancel.alula.md"))
 }
 
@@ -88,7 +88,7 @@ test "disk: a library whose definitions_hash is not the hash of the connection i
     ro dir = dk_copy("hash", "libs/", "## Общие события", "Лишняя строка.\n\n## Общие события", false)
     ro e = dk_error(dir)
     assert(e.contains("${dir}/libs/call_cancel.alula.md"))
-    assert(e.contains("e193a5abd356"))
+    assert(e.contains("2afbf89d9d64"))
     assert(e.contains("hash"))
 }
 

@@ -32,10 +32,10 @@ fn has_bracket_after_name217(line str) -> bool {
     false
 }
 
-test "v217 tables say alula_version 0.27" {
+test "v217 tables say alula_version 0.28" {
     for name in tables217() {
         ro text = text_of_file(table_files(), name)
-        assert(text.contains("alula_version: 0.27"))
+        assert(text.contains("alula_version: 0.28"))
         assert(!text.contains("format: 2.14"))
     }
 }
@@ -70,8 +70,8 @@ test "v217 the tables use the default expression of the request" {
 test "v217 the chat machines write their user as a free input" {
     for name in ["chat.alula.md", "dialog.alula.md"] {
         ro text = text_of_file(table_files(), name)
-        assert(text.contains("| пользователь | user | human(итог ИсходВорот) | — |"))
-        ro row = "| пользователь | user | human(итог ИсходВорот) | — |"
+        assert(text.contains("| пользователь | user | свободный_ввод |"))
+        ro row = "| пользователь | user | свободный_ввод |"
         ro at = text.find(row) ?? -1
         ro rest = text[at..]
         ro end = rest.find("\n") ?? 0

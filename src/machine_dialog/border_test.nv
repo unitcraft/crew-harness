@@ -14,7 +14,7 @@ test "bd dialog: the message and the chunk have the field содержание" 
     ro t = dialog_table_text()
     assert(t.contains("сообщение_пользователя { содержание строка }"))
     assert(t.contains("тип КусокОтвета { содержание строка }"))
-    assert(t.contains("| агент | agent | agent(итог строка) | — | — | КусокОтвета | попытка_агента |"))
+    assert(t.contains("| агент | agent | agent(итог строка) | — | — | — | — | КусокОтвета | попытка_агента |"))
 }
 
 test "bd dialog: the rows name the field" {
@@ -73,7 +73,7 @@ test "bd chat: the message and the chunk have the field содержание" {
     ro t = chat_table_text()
     assert(t.contains("сообщение_пользователя { содержание строка }"))
     assert(t.contains("тип КусокОтвета { содержание строка }"))
-    assert(t.contains("| агент | agent | agent(итог строка) | — | — | КусокОтвета | попытка_агента |"))
+    assert(t.contains("| агент | agent | agent(итог строка) | — | — | — | — | КусокОтвета | попытка_агента |"))
     assert(t.contains("сигнал(сообщение_пользователя { содержание: сообщение })"))
     assert(t.contains("часть { содержание: кусок }"))
     assert(!t.contains("(текст текст)"))
@@ -84,6 +84,6 @@ test "bd chat: the cancel before a request and while waiting is the signal of th
     // Alula 2.26 (task 240): one name of the cancel for the code in both states - two common events of the machine, the user says only his message
     assert(t.contains("| сигнал(отмена_запроса) | состояние == ПОКОЙ | журнал(\"cancelled_before_request\")"))
     assert(t.contains("| сигнал(отмена_запроса) | состояние == ОЖИДАНИЕ | журнал(\"cancelled_while_waiting\")"))
-    assert(t.contains("| пользователь | user | human(итог ИсходВорот) | — | сообщение_пользователя { содержание строка } | — | — |"))
+    assert(t.contains("| пользователь | user | свободный_ввод | — | — | — | сообщение_пользователя { содержание строка } | — | — |"))
     assert(!t.contains("сигнал(отмена)"))
 }

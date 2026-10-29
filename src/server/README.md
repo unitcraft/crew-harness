@@ -401,7 +401,7 @@ Since task 114 the hub runs every session on the machine of the many-turn chat w
   Since task 248 nothing of `machines/` is compiled into the programs: the hub reads the folder of the machines when it starts (`start_hub`, `crew_harness.product_machines.load_product_machines`):
   the setting `machines_dir` (`CREW_SERVER_MACHINES_DIR`), else `machines/product` beside the program (the release kit), else `machines/product` beside the folder of the program (the build of the tree:
   `target/` beside `machines/`). It reads `dialog.alula.json`, `dialog.alula.md`, `journal.md` and the libraries they connect (`libs/call_cancel.alula.md`) and checks them: every file is there,
-  the `alula_version` of the tree, the table and every library is the version of the engine (0.27), the hash of every connection is the `definitions_hash` of the file of the library. A failure stops the start
+  the `alula_version` of the tree, the table and every library is the version of the engine (0.28), the hash of every connection is the `definitions_hash` of the file of the library. A failure stops the start
   with the path (`the hub cannot start: the machines of the product cannot be read: <path>: ...`); there is no copy to fall back on. The hub writes the folder to its log
   (`the machines of the product: <folder> (DialogSession)`). `src/server/alula.nv` makes `AlulaMachine` once from the tree read; a machine that cannot be made stops the start with the message
   `the dialog machine cannot be made: ...`. The release kit is `sh scripts/package-release.sh <folder> [--build]`: `crew-harness.exe`, `crew-hub.exe` and `machines/product` (the dialog, the journal, `libs/`;

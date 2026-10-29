@@ -55,9 +55,9 @@ test "dl file is translation" {
 }
 
 test "dl header" {
-    assert(dialog_table_text().contains("- alula_version: 0.27"))
+    assert(dialog_table_text().contains("- alula_version: 0.28"))
     assert(dialog_table_text().contains("- machine: DialogSession"))
-    assert(dialog_machine_text().contains("\"alula_version\": \"0.27\"") || dialog_machine_text().contains("\"alula_version\":\"0.27\""))
+    assert(dialog_machine_text().contains("\"alula_version\": \"0.28\"") || dialog_machine_text().contains("\"alula_version\":\"0.28\""))
 }
 
 test "dl loads" {

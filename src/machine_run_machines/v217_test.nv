@@ -11,7 +11,7 @@ import alula.machine_run.{AlulaMachine, run_ok}
 // The chat machine as the file has it; and the same machine with the counter of the user put back (a party with gates).
 fn chat_free() -> AlulaMachine => chat()
 
-fn chat_gated() -> AlulaMachine => build_from(machine_text("chat.alula.json").replace("\"kind\": \"human\"", "\"kind\": \"human\", \"counter\": \"user_attempt\""))
+fn chat_gated() -> AlulaMachine => build_from(machine_text("chat.alula.json").replace("\"kind\": \"free_input\"", "\"kind\": \"human\", \"counter\": \"user_attempt\""))
 
 test "v217 the chat machine has a user without a counter" {
     ro m = chat_free()

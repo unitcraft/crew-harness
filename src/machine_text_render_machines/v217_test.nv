@@ -14,8 +14,8 @@ test "v217 the circle of the chat machine" {
 
 test "v217 the chat machine writes its user as a free input" {
     ro ru = render(machine_json("chat.alula.json"), "ru")
-    // Alula 2.26 (task 240): the column `части` stands before `счётчик`; the cancel is the signal of the protocol, not a signal of the user
-    assert(ru.contains("| user | user | human(итог ИсходВорот) | — | user_message { content строка } | — | — |"))
+    // Alula 2.26 (task 240): the column `части` stands before `счётчик`; the cancel is the signal of the protocol, not a signal of the user; Alula 0.28 (task 255): the columns `настройка` and `разбор` after `вид`, the kind `свободный_ввод`
+    assert(ru.contains("| user | user | свободный_ввод | — | — | — | user_message { content строка } | — | — |"))
 }
 
 test "v217 the tree of the chat has no counter for the user" {

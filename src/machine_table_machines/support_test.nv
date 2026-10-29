@@ -25,7 +25,7 @@ fn jstr(s str) -> str {
 
 // A small machine: one human gate, a fork, two ends. `extra_data`, `extra_states` and the rows are spliced in.
 // It is a tree of the seam of 2.25 (the old keys `format`/`version`, `alula_version` 2.25), which the package keeps: there the counter of a party is a datum of the tree, and the
-// tests of the loader on that datum (`parties`, `red write outside`) need it; a tree of 0.27 (`kind: machine`) holds no row for the counter (task 246).
+// tests of the loader on that datum (`parties`, `red write outside`) need it; a tree of 0.28 (`kind: machine`) holds no row for the counter (tasks 246 and 255).
 fn tiny_with(extra_data str, extra_states str, wait_rows str, ends_rows str) -> str {
     ro zero = jl("0")
     ro empty = jl(jstr(""))

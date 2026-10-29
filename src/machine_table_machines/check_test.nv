@@ -75,7 +75,7 @@ test "parties" {
     assert(says(tiny().replace("\"monotonic\":true,\"writes\":\"mechanics\"", "\"writes\":\"mechanics\""), "does not decrease"))
     assert(says(tiny().replace("\"monotonic\":true,\"writes\":\"mechanics\"", "\"monotonic\":true,\"writes\":\"rows\""), "written by mechanics"))
     assert(says(chat_with("\"result\": \"text\", ", ""), "declares the type of its result"))
-    assert(says(chat_with("\"kind\": \"human\"", "\"kind\": \"gatekeeper\""), "names the setting"))
-    assert(says(chat_with("\"kind\": \"human\"", "\"kind\": \"machine\""), "names the machine"))
+    assert(says(chat_with("\"kind\": \"free_input\"", "\"kind\": \"gatekeeper\""), "names the setting"))
+    assert(says(chat_with("\"kind\": \"free_input\"", "\"kind\": \"machine\""), "names the machine"))
     assert(says(tiny().replace("\"kind\":\"human\"", "\"kind\":\"agent\""), "signals of a party are for the gates"))
 }

@@ -36,7 +36,7 @@ test "chat states" {
 test "chat parties" {
     ro def = decoded(chat_machine_text())
     assert(def.parties.len() == 2)
-    assert(party_kind_word(def.parties[0].kind) == "human")
+    assert(party_kind_word(def.parties[0].kind) == "free_input")
     assert(party_kind_word(def.parties[1].kind) == "agent")
     assert(def.parties[0].signals.len() == 1)
     assert(def.parties[0].signals[0].fields.len() == 1)
@@ -105,7 +105,7 @@ test "missing keys" {
 }
 
 test "bad kinds" {
-    assert(says(chat_with("\"kind\": \"human\"", "\"kind\": \"robot\""), "kind of a party"))
+    assert(says(chat_with("\"kind\": \"free_input\"", "\"kind\": \"robot\""), "kind of a party"))
     assert(says(chat_with("\"kind\": \"appeal\", \"party\": \"user\"", "\"kind\": \"loop\", \"party\": \"user\""), "kind of a state"))
     assert(says(chat_with("\"kind\": \"signal\", \"name\": \"user_message\"", "\"kind\": \"wish\", \"word\": \"user_message\""), "kind of an event"))
     assert(says(chat_with("\"do\": \"journal\", \"code\": \"agent_done\"", "\"do\": \"teleport\", \"code\": \"agent_done\""), "unknown action"))
@@ -126,7 +126,7 @@ test "bad expr" {
 }
 
 test "paths of errors" {
-    assert(first_issue(chat_with("\"kind\": \"human\"", "\"kind\": \"robot\"")).starts_with("$.parties[0].kind"))
+    assert(first_issue(chat_with("\"kind\": \"free_input\"", "\"kind\": \"robot\"")).starts_with("$.parties[0].kind"))
     assert(first_issue(chat_with("\"kind\": \"signal\", \"name\": \"user_message\"", "\"kind\": \"wish\", \"word\": \"user_message\"")).starts_with("$.states[0].rows[0].event.kind"))
     assert(first_issue(chat_with("\"do\": \"journal\", \"code\": \"agent_done\"", "\"do\": \"teleport\", \"code\": \"agent_done\"")).starts_with("$.states[1].rows[1].actions[0].do"))
 }
