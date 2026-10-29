@@ -2,6 +2,8 @@
 // text that can be printed.
 module crew_harness.server
 
+// ORACLE-WORKAROUND(32): `std.fs` is imported first in the first import of the file (the settings read the layers from the disk), or `.join` on a `[]str` is E_RECV_METHOD_MISMATCH (spikes/env/README.md, task 116 (e)); drop when item 32 is fixed
+import std.fs.{Path}
 import crew_harness.config.{defaults_layer}
 import std.os.{Os, MockOs, mock_os, real_os, temp_dir, pid}
 import std.fs.{Fs, real_fs, read_text, write_text, create_dir_all, remove_dir_all, Path}
