@@ -4,6 +4,8 @@
 // machine connects, and taken by a common event of the machine in the state of the open turn.
 module crew_harness.machine_dialog
 
+// ORACLE-WORKAROUND(32): `std.fs` is imported first in the first file of the unit (the machines are read from the disk, task 248), or `.join` on a `[]str` is E_RECV_METHOD_MISMATCH (spikes/env/README.md, task 116 (e)); drop when item 32 is fixed
+import std.fs.{Path}
 import std.text
 import alula.machine_text.{translate_checked_with, error_text}
 import crew_harness.machines.{product_registry, chat_table_text, dialog_machine_text, dialog_table_text, translation_files}

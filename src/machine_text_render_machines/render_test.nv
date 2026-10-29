@@ -3,6 +3,8 @@
 // The proofs on the agent step (its types, enumerations and functions) left the product with the methodology (task 249).
 module crew_harness.machine_text_render_machines
 
+// ORACLE-WORKAROUND(32): `std.fs` is imported first in the first file of the unit (the machines are read from the disk, task 248), or `.join` on a `[]str` is E_RECV_METHOD_MISMATCH (spikes/env/README.md, task 116 (e)); drop when item 32 is fixed
+import std.fs.{Path}
 import std.text
 import alula.machine.{text_of_file}
 import alula.machine_text_eq.{case_text}

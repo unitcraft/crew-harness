@@ -3,6 +3,8 @@
 // the engine (journal lines with the envelope, sent and cancelled requests, the outcome, the acknowledgements).
 module crew_harness.machine_chat
 
+// ORACLE-WORKAROUND(32): `std.fs` is imported first in the first file of the unit (its machines are read from the disk, task 248), or `.join` on a `[]str` is E_RECV_METHOD_MISMATCH (spikes/env/README.md, task 116 (e)); drop when item 32 is fixed
+import std.fs.{Path}
 // ORACLE-WORKAROUND(32): `import std.text` is needed in `nova build` for `[]str.join` (a `nova test` build has it already); drop the import when item 32 is fixed
 import std.text
 import std.encoding.json.{Json, JsonObject}

@@ -2,6 +2,8 @@
 // against the table of the language, the union that the registry of the host holds. The table of the methodology went to the methodology with its machines (task 249).
 module crew_harness.machine_registry
 
+// ORACLE-WORKAROUND(32): `std.fs` is imported first in the first file of the unit (the machines are read from the disk, task 248), or `.join` on a `[]str` is E_RECV_METHOD_MISMATCH (spikes/env/README.md, task 116 (e)); drop when item 32 is fixed
+import std.fs.{Path}
 import alula.machine.{JournalCode, parse_journal, language_journal, journal_find, journal_table_issues}
 import crew_harness.machines.{product_registry, product_journal_text}
 

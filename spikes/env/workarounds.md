@@ -4,7 +4,7 @@
 
 Every place of the product that goes round a defect or a limit of Oracle carries a comment `// ORACLE-WORKAROUND(N): what is gone round; how to simplify when item N is fixed`, where N is an item of [README.md](README.md) ("Known problems"). `git grep ORACLE-WORKAROUND` finds them, `python scripts/oracle-workarounds.py --list` prints them by item with the line. When Nova fixes an item, open its places below, simplify the code as the mark says and remove the mark; then rerun `python scripts/oracle-workarounds.py --index`.
 
-Marks: 68 in 42 files. Items with marks: 28. Items without marks: 33 (no workaround in the code).
+Marks: 78 in 49 files. Items with marks: 28. Items without marks: 33 (no workaround in the code).
 
 | Item | What | Places (files; marks in a file if more than one) | Marks |
 |---|---|---|---|
@@ -39,7 +39,7 @@ Marks: 68 in 42 files. Items with marks: 28. Items without marks: 33 (no workaro
 | 29 | `user_request_vs_http`, `user_session_vs_postgres`: the table of type names is one for the whole program, dependencies included.... | `src/server/hub.nv` | 1 |
 | 30 | `pg_polaris_message`: the driver nova-postgres and Polaris cannot be in one program. The driver has a variant... | `src/server/front/front.nv`, `src/server/front/front_settings.nv`, `src/server/stdio.nv` | 3 |
 | 31 | `repro_stdin_read` (a program): (a) `Stdin.read(buf)` is `fread` and returns only when `buf` is FULL or at the end of the stream... | `src/server/stdio.nv` (2) | 2 |
-| 32 | `repro_text_import` (a program): `import std.text` in one module makes a variable named `text`, bound by a record pattern... | `src/acp/client.nv`, `src/chat/chat_test.nv`, `src/machine_chat/equal_test.nv`, `src/machine_dialog_eq/equal_test.nv`, `src/machine_dialog_eq/inject_test.nv`, `src/machines/data.nv`, `src/product_machines/data.nv`, `src/server/dialog_test.nv`, `src/server/settings.nv` | 9 |
+| 32 | `repro_text_import` (a program): `import std.text` in one module makes a variable named `text`, bound by a record pattern... | `src/acp/client.nv`, `src/chat/chat_test.nv`, `src/machine_chat/equal_test.nv` (2), `src/machine_dialog/border_test.nv`, `src/machine_dialog_eq/equal_test.nv` (2), `src/machine_dialog_eq/inject_test.nv`, `src/machine_registry/journal_test.nv`, `src/machine_run_machines/accepts_signal_test.nv`, `src/machine_table_machines/check_test.nv`, `src/machine_text_eq_machines/eq_test.nv`, `src/machine_text_machines/chat_test.nv`, `src/machine_text_render_machines/render_test.nv`, `src/machines/data.nv`, `src/product_machines/data.nv`, `src/server/alula.nv`, `src/server/dialog_test.nv`, `src/server/settings.nv` | 19 |
 | 33 | `for_in_enum_literal`: `for c in [Pure, Writing]`, an array literal whose items are variants of a user enum without payload, does... | `src/chat/chat_test.nv` | 1 |
 | 34 | `option_enum_named_variants`: an enum with a variant with named fields (`FieldOf { target, name }`) and another variant that... | no workaround in the code | 0 |
 | 35 | `result_display`: a `Result` in an interpolation (`"${r}"`, `r = "5".to_int()`) passes the checker and fails at link time with | no workaround in the code | 0 |

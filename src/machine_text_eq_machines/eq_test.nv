@@ -4,6 +4,8 @@
 // transition and the state at the level of one step of the machine.
 module crew_harness.machine_text_eq_machines
 
+// ORACLE-WORKAROUND(32): `std.fs` is imported first in the first file of the unit (the machines are read from the disk, task 248), or `.join` on a `[]str` is E_RECV_METHOD_MISMATCH (spikes/env/README.md, task 116 (e)); drop when item 32 is fixed
+import std.fs.{Path}
 import std.text
 import alula.engine.{Incoming, Order, StepEnvironment, journal_line}
 import alula.machine_run.{AlulaState, AlulaMachine, Test, StepTrace, load_alula_machine, alula_step, ScriptedHost, drive_test, parse_test, test_incoming, run_test, run_ok, report_text}

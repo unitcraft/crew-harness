@@ -1,6 +1,8 @@
 // chat_test.nv - the chat machine written as tables (machines/chat.alula.md) and its translation: the same tree as the hand-written chat.alula.json.
 module crew_harness.machine_text_machines
 
+// ORACLE-WORKAROUND(32): `std.fs` is imported first in the first file of the unit (the machines are read from the disk, task 248), or `.join` on a `[]str` is E_RECV_METHOD_MISMATCH (spikes/env/README.md, task 116 (e)); drop when item 32 is fixed
+import std.fs.{Path}
 import std.text
 import std.encoding.json.{Json, JsonValue, JsonObject}
 import crew_harness.machines.{chat_machine_text, chat_table_text, translation_files, product_registry}

@@ -1,6 +1,8 @@
 // accepts_signal_test.nv - task 166: the question "does the state take this signal?" is `AlulaMachine.accepts_signal` (0.3.x of `alula` had the former term in the name of the method).
 module crew_harness.machine_run_machines
 
+// ORACLE-WORKAROUND(32): `std.fs` is imported first in the first file of the unit (the machines are read from the disk, task 248), or `.join` on a `[]str` is E_RECV_METHOD_MISMATCH (spikes/env/README.md, task 116 (e)); drop when item 32 is fixed
+import std.fs.{Path}
 import alula.machine.{text_of_file}
 import crew_harness.machines.{machine_files, product_registry}
 import alula.machine_run.{AlulaMachine, load_alula_machine}

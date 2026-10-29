@@ -1,6 +1,8 @@
 // check_test.nv - the checks of a table: every check is red on a broken table and green on the good one.
 module crew_harness.machine_table_machines
 
+// ORACLE-WORKAROUND(32): `std.fs` is imported first in the first file of the unit (the machines are read from the disk, task 248), or `.join` on a `[]str` is E_RECV_METHOD_MISMATCH (spikes/env/README.md, task 116 (e)); drop when item 32 is fixed
+import std.fs.{Path}
 import alula.machine.{text_of_file}
 import std.text
 import crew_harness.machines.{product_registry, chat_machine_text, machine_files}
