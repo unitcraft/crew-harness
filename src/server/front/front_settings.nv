@@ -15,7 +15,7 @@ import std.text
 import std.encoding.json.{Json, JsonValue, JsonObject}
 import std.fs.{Fs, read_text, Path}
 import std.os.{Os, env}
-import crew_harness.config.{ConfigLayout, legacy_layout, layout_in, layout_with_data_dir, crew_home, work_dir_now, find_project_dir, file_layers, env_layer, arg_layer, merge_layers, normalize_layer, file_text, tools_dir_now}
+import crew_harness.config.{ConfigLayout, legacy_layout, layout_in, layout_with_data_dir, crew_home, work_dir_now, find_project_dir, file_layers, env_layer, arg_layer, merge_layers, normalize_layer, file_text as cfg_file_text, tools_dir_now}
 
 /// FrontSettings: where to listen, where the page is, how to start the hub, where the recognizer of the voice listens (`stt_url`, a local http address) and its default language.
 export type AgentChoice { id str, label str }
@@ -217,12 +217,17 @@ fn fs_from_file(text str) -> FrontSettings {
 // The folder of the recognizer when no setting names it (task 192.12): an install of the older place (`%LOCALAPPDATA%/crew-harness/stt`) that is still there is used;
 // else `CREW_TOOLS_DIR/whisper` or `<home>/tools/whisper`; with no root at all, the older place.
 fn fs_default_stt_dir(layout ConfigLayout) Os Fs -> str {
+    // CREW_STT_DIR is the default of the installer: under the setting `voice.dir`, over the guesses below
+    match fs_env("CREW_STT_DIR") {
+        Some(dir) => return dir
+        None => ()
+    }
     ro old = match fs_env("LOCALAPPDATA") {
         Some(local) => "${local.replace("\\", "/")}/crew-harness/stt"
         None => ""
     }
     if old.byte_len() > 0 {
-        match file_text("${old}/bin/whisper-server.exe") {
+        match cfg_file_text("${old}/bin/whisper-server.exe") {
             Some(t) => return old
             None => ()
         }
@@ -239,7 +244,7 @@ export fn front_settings(file str) Os Fs -> Result[FrontSettings, str] => front_
 /// (or CREW_SERVER_CONFIG), `.crew-harness/config.json` and `local.json` of the project, secrets.json, the variables CREW_*, the words `key=value` of `sets` (the arguments `--set`).
 export fn front_settings_in(file str, home str, sets []str) Os Fs -> Result[FrontSettings, str] {
     ro name = if file.byte_len() > 0 { file } else { fs_env("CREW_SERVER_CONFIG") ?? "" }
-    if name.byte_len() > 0 && file_text(name).is_none() { return Err("the settings file ${name} cannot be read") }
+    if name.byte_len() > 0 && cfg_file_text(name).is_none() { return Err("the settings file ${name} cannot be read") }
     ro project = find_project_dir(work_dir_now(), home)
     ro at = layout_in(home, project)
     mut layers = file_layers(at, name)?

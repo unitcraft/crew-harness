@@ -300,7 +300,6 @@ type EnvKey { var str, key str, kind str }
 fn ek(var str, key str, kind str) -> EnvKey => { var, key, kind }
 
 fn env_keys() -> []EnvKey => [
-    ek("CREW_STT_DIR", "voice.dir", "s"),
     ek("CREW_SERVER_PORT", "port", "i"), ek("CREW_SERVER_STORE", "store", "s"), ek("CREW_SERVER_DATA_DIR", "data_dir", "s"), ek("CREW_SERVER_WORKDIR", "workdir", "s"),
     ek("CREW_SERVER_WEB_DIR", "web_dir", "s"), ek("CREW_SERVER_MACHINES_DIR", "machines_dir", "s"), ek("CREW_SERVER_ACP_TRACE", "acp_trace", "b"), ek("CREW_SERVER_ASK_FORM", "ask_form", "b"),
     ek("CREW_SERVER_ASK_TIMEOUT_SECONDS", "ask_timeout_seconds", "i"), ek("CREW_SERVER_IDLE_SECONDS", "idle_term_seconds", "i"),

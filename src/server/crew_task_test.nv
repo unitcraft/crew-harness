@@ -400,6 +400,7 @@ test "crew_task: the mode, the reason and the children of an epic are read, chec
         Err(e) => panic("not read: ${e}")
     }
     assert(crew_task_tool_json().to_str().contains("children") && crew_task_list_tool_json().to_str().contains("reason"))
+}
 
 // ----- the texts by layers and the threshold of the addition at once (task 192.12) -----
 
