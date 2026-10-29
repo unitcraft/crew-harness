@@ -401,3 +401,8 @@ test "crew_task: the mode, the reason and the children of an epic are read, chec
     }
     assert(crew_task_tool_json().to_str().contains("children") && crew_task_list_tool_json().to_str().contains("reason"))
 }
+
+test "crew_task: the page gets the minutes of silence of the agent (task 192.14)" {
+    ro o = cht_j(silent_view_extend("{}", 7)).object() ?? JsonObject.new()
+    assert(((o.get("silent_minutes") ?? JsonValue.null()).int() ?? 0) == 7)
+}

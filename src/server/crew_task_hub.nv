@@ -44,7 +44,7 @@ fn Hub @ct_running_old(s Dialog) -> []RunSub {
 /// The state of the mode for the page with the cards and the numbers of the tasks in work (called from `route_state_text`).
 fn Hub @ct_view(at int, base str) -> str {
     ro s = @sessions[at]
-    ext_view_extend(hints_view_extend(@cs_view(at, crew_view_extend(base, s.rt.props, @ct_lines(at), @cs_active_all(), @settings.route_max_active, @settings.route_confirm_word, @settings.route_over_limit_word)), s.rt.hints, s.rt.ctx_used, s.rt.ctx_size, s.rt.ctx_hist), s.rt.exts)
+    silent_view_extend(ext_view_extend(hints_view_extend(@cs_view(at, crew_view_extend(base, s.rt.props, @ct_lines(at), @cs_active_all(), @settings.route_max_active, @settings.route_confirm_word, @settings.route_over_limit_word)), s.rt.hints, s.rt.ctx_used, s.rt.ctx_size, s.rt.ctx_hist), s.rt.exts), @settings.agent_silent_minutes)
 }
 
 // A service hint to the agent is remembered for the panel "Машины" (not in the feed, not in the journal).

@@ -543,6 +543,16 @@ export fn crew_view_extend(base str, props []Proposal, subs []SubLine, active in
     JsonValue.object(o).to_str()
 }
 
+/// The minutes without an event of the agent after which the page says "молчит" (the setting `agent_silent_minutes`, task 192.14), added to the state for the page.
+export fn silent_view_extend(base str, minutes int) -> str {
+    mut o = match Json.parse(base) {
+        Ok(v) => v.object() ?? JsonObject.new()
+        Err(e) => JsonObject.new()
+    }
+    mput(o, "silent_minutes", JsonValue.int(minutes))
+    JsonValue.object(o).to_str()
+}
+
 /// The service hints of the session for the panel "Машины" (task 192.5): `hints` - the newest last, each `{ms, kind, text}`.
 export fn hints_view_extend(base str, hints []HintRec, ctx_used int, ctx_size int, ctx_hist []CtxRec) -> str {
     mut o = match Json.parse(base) {
