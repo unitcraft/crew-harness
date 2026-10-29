@@ -7,7 +7,7 @@
 // repository upward from the working directory (the nearest folder with `nova.toml`).
 module crew_harness.server
 
-import crew_harness.product_machines.{dialog_machine_text}
+import crew_harness.product_machines.{dialog_machine_text, tree_machines_dir}
 import crew_harness.pgdb.{PgConfig}
 import std.encoding.json.{Json, JsonValue, JsonObject}
 import crew_harness.storage.{session_dir, session_file}
@@ -70,7 +70,7 @@ fn kit_settings(store str, name str, idle_ms int, pg PgConfig) -> ServerSettings
     agents.push(kit_agent("second", "--ok", ""))
     ServerSettings {
         port: 8099, data_dir, store, pg, agents, idle_term_ms: idle_ms,
-        workdir: kit_repo_root().display(), web_dir: "src/web", hub_program: "", hub_args: []str.new(), acp_trace: false,
+        workdir: kit_repo_root().display(), web_dir: "src/web", machines_dir: tree_machines_dir(), hub_program: "", hub_args: []str.new(), acp_trace: false,
         stt_url: "http://127.0.0.1:8178/inference", stt_language: "auto"
     }
 }

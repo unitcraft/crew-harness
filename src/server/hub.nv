@@ -18,7 +18,7 @@
 module crew_harness.server
 
 import alula.engine.{Engine, Incoming, EventKind, Journal, Store, Link, PartyRequest, start_engine, resume_engine, decode_snapshot}
-import crew_harness.product_machines.{dialog_machine_text}
+import crew_harness.product_machines.{find_machines_dir, load_product_machines}
 import alula.machine_run.{AlulaMachine, AlulaState}
 import crew_harness.acp.{AcpConfig, AcpClient, open_client_traced, acp_link, page_event, TRACE_LIMIT}
 import crew_harness.storage.{open_data_dir, file_journal, file_store, list_sessions, valid_session_name, session_file_made, migrate_flat_sessions}
@@ -26,7 +26,7 @@ import crew_harness.pgstore.{PgWorld, pg_journal, pg_store}
 import crew_harness.pgdb.{pg_list}
 import std.encoding.json.{Json, JsonValue, JsonObject}
 import std.net.{real_net}
-import std.os.{Os, real_os, cwd}
+import std.os.{Os, real_os, cwd, args}
 
 /// Outgoing: a text for the page `conn`; conn 0 - for every page that is attached.
 export type Outgoing { conn int, text str }
@@ -359,13 +359,24 @@ fn Hub mut @add_session(s Dialog) -> () {
     @sessions.push(s)
 }
 
-/// Start the hub: the settings are checked, the data folder is opened, every session of the store is resumed (the engine from
-/// its snapshot and journal, the lines of the page from the journal); an agent is started for a session only if a request of it is open.
-export fn start_hub(settings ServerSettings) Proc Detach Time Net Fs Os -> Result[Hub, str] => start_hub_from(settings, dialog_machine_text())
+/// Start the hub: the settings are checked, the machines of the product are read from their folder and checked (task 248: the setting
+/// `machines_dir`, else `machines/product` beside the program, else beside its folder; a missing file, another alula_version or a hash of a
+/// library that is not the hash of its file stops the start with the path), the data folder is opened, every session of the store is resumed
+/// (the engine from its snapshot and journal, the lines of the page from the journal); an agent is started for a session only if a request of it is open.
+export fn start_hub(settings ServerSettings) Proc Detach Time Net Fs Os -> Result[Hub, str] => start_hub_from(settings, "")
 
-/// The same over the text of the JSON of the machine of the sessions (the tests run a changed copy of the table: a state with another name).
+/// The same over the text of the JSON of the machine of the sessions ("" - `dialog.alula.json` of the folder of the machines; the tests run a changed
+/// copy of the table: a state with another name).
 export fn start_hub_from(settings ServerSettings, table_text str) Proc Detach Time Net Fs Os -> Result[Hub, str] {
     settings.check()?
+    ro argv = with Os = real_os() { args() }
+    ro machines_dir = find_machines_dir(settings.machines_dir, if argv.len() > 0 { argv[0] } else { "" })?
+    ro machines = match load_product_machines(machines_dir) {
+        Ok(m) => m
+        Err(e) => return Err("the machines of the product cannot be read: ${e}")
+    }
+    ro registry = machines.registry()?
+    ro machine_text = if table_text.byte_len() > 0 { table_text } else { machines.dialog() }
     if !open_data_dir(settings.data_dir) { return Err("the data folder ${settings.data_dir} cannot be opened") }
     ro workdir = if settings.workdir.byte_len() > 0 {
         settings.workdir
@@ -375,7 +386,7 @@ export fn start_hub_from(settings ServerSettings, table_text str) Proc Detach Ti
             Err(e) => return Err("the working folder is unknown")
         }
     }
-    ro machine = hub_machine_from(table_text, settings.idle_term_ms)?
+    ro machine = hub_machine_with(machine_text, registry, settings.idle_term_ms)?
     mut hub = Hub {
         settings, machine, workdir, sessions: []Dialog.new(), conns: []int.new(), out: []Outgoing.new(), log: []str.new(), serial: 0
     }
@@ -395,6 +406,7 @@ export fn start_hub_from(settings ServerSettings, table_text str) Proc Detach Ti
     for id in ids {
         hub.resume_session(id)
     }
+    hub.say_log("the machines of the product: ${machines_dir} (${machine.name()})")
     hub.say_log("started: ${settings.describe()}; ${hub.sessions.len()} session(s) resumed")
     Ok(hub)
 }

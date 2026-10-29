@@ -1,120 +1,123 @@
-// data.nv - the machines of the product as data, compiled into the tests with `embed_str` (a path is read relative to this file): the JSON `kind: machine`, the tables, the scenarios, the library and
+// data.nv - the machines of the product as data for the tests, read from the disk of the tree (`tree_text`, task 248: nothing is compiled in): the JSON `kind: machine`, the tables, the scenarios, the library and
 // the table of the journal codes of the product (`machines/product/`). The package `alula` knows only the language (one primitive, 35 codes, spec 7a); `product_registry()` is the language and the codes
 // of the product. The machines of the methodology left the product with task 249 (it closes task 159, their move): they live in the set of the methodology (its repository, `alula-machines/`).
 module crew_harness.machines
 
+// ORACLE-WORKAROUND(32): `std.fs` is imported first in the first file of the unit (the machines are read from the disk, task 248), or `.join` on a `[]str` is E_RECV_METHOD_MISMATCH (spikes/env/README.md, task 116 (e)); drop when item 32 is fixed
+import std.fs.{Path}
 import alula.machine.{NamedText, Registry, text_of_file, load_host}
+import crew_harness.product_machines.{tree_text, tree_paths}
 
 /// The machines as JSON, by the name of the file (`chat.alula.json`).
 export fn machine_files() -> []NamedText => [
-    NamedText { name: "chat.alula.json", text: embed_str("../../machines/product/chat.alula.json") },
-    NamedText { name: "dialog.alula.json", text: embed_str("../../machines/product/dialog.alula.json") }
+    NamedText { name: "chat.alula.json", text: tree_text("machines/product/chat.alula.json") },
+    NamedText { name: "dialog.alula.json", text: tree_text("machines/product/dialog.alula.json") }
 ]
 
 /// The machines written as tables, by the name of the file (`chat.alula.md`).
 export fn table_files() -> []NamedText => [
-    NamedText { name: "chat.alula.md", text: embed_str("../../machines/product/chat.alula.md") },
-    NamedText { name: "dialog.alula.md", text: embed_str("../../machines/product/dialog.alula.md") }
+    NamedText { name: "chat.alula.md", text: tree_text("machines/product/chat.alula.md") },
+    NamedText { name: "dialog.alula.md", text: tree_text("machines/product/dialog.alula.md") }
 ]
 
 /// The scenarios, by the name of the file (`chat-ack.alula.test.json`).
 export fn test_files() -> []NamedText => [
-    NamedText { name: "chat-ack-discarded.alula.test.json", text: embed_str("../../machines/product/tests/chat-ack-discarded.alula.test.json") },
-    NamedText { name: "chat-ack-restart.alula.test.json", text: embed_str("../../machines/product/tests/chat-ack-restart.alula.test.json") },
-    NamedText { name: "chat-ack.alula.test.json", text: embed_str("../../machines/product/tests/chat-ack.alula.test.json") },
-    NamedText { name: "chat-answer-after-cancel.alula.test.json", text: embed_str("../../machines/product/tests/chat-answer-after-cancel.alula.test.json") },
-    NamedText { name: "chat-answer-after-timeout.alula.test.json", text: embed_str("../../machines/product/tests/chat-answer-after-timeout.alula.test.json") },
-    NamedText { name: "chat-cancel-awaiting.alula.test.json", text: embed_str("../../machines/product/tests/chat-cancel-awaiting.alula.test.json") },
-    NamedText { name: "chat-cancel-idle.alula.test.json", text: embed_str("../../machines/product/tests/chat-cancel-idle.alula.test.json") },
-    NamedText { name: "chat-cancel-in-window.alula.test.json", text: embed_str("../../machines/product/tests/chat-cancel-in-window.alula.test.json") },
-    NamedText { name: "chat-chunk-renews-term.alula.test.json", text: embed_str("../../machines/product/tests/chat-chunk-renews-term.alula.test.json") },
-    NamedText { name: "chat-chunks-and-done.alula.test.json", text: embed_str("../../machines/product/tests/chat-chunks-and-done.alula.test.json") },
-    NamedText { name: "chat-cyrillic.alula.test.json", text: embed_str("../../machines/product/tests/chat-cyrillic.alula.test.json") },
-    NamedText { name: "chat-ignored-after-done.alula.test.json", text: embed_str("../../machines/product/tests/chat-ignored-after-done.alula.test.json") },
-    NamedText { name: "chat-ignored-chunk.alula.test.json", text: embed_str("../../machines/product/tests/chat-ignored-chunk.alula.test.json") },
-    NamedText { name: "chat-ignored-second-message.alula.test.json", text: embed_str("../../machines/product/tests/chat-ignored-second-message.alula.test.json") },
-    NamedText { name: "chat-journal-restart-answer.alula.test.json", text: embed_str("../../machines/product/tests/chat-journal-restart-answer.alula.test.json") },
-    NamedText { name: "chat-late-chunk.alula.test.json", text: embed_str("../../machines/product/tests/chat-late-chunk.alula.test.json") },
-    NamedText { name: "chat-message-opens-request.alula.test.json", text: embed_str("../../machines/product/tests/chat-message-opens-request.alula.test.json") },
-    NamedText { name: "chat-pump-order.alula.test.json", text: embed_str("../../machines/product/tests/chat-pump-order.alula.test.json") },
-    NamedText { name: "chat-refused-cancelled.alula.test.json", text: embed_str("../../machines/product/tests/chat-refused-cancelled.alula.test.json") },
-    NamedText { name: "chat-refused-ceiling-reached.alula.test.json", text: embed_str("../../machines/product/tests/chat-refused-ceiling-reached.alula.test.json") },
-    NamedText { name: "chat-refused-connection-lost.alula.test.json", text: embed_str("../../machines/product/tests/chat-refused-connection-lost.alula.test.json") },
-    NamedText { name: "chat-refused-form-not-fixed.alula.test.json", text: embed_str("../../machines/product/tests/chat-refused-form-not-fixed.alula.test.json") },
-    NamedText { name: "chat-refused-max-tokens.alula.test.json", text: embed_str("../../machines/product/tests/chat-refused-max-tokens.alula.test.json") },
-    NamedText { name: "chat-refused-max-turn-requests.alula.test.json", text: embed_str("../../machines/product/tests/chat-refused-max-turn-requests.alula.test.json") },
-    NamedText { name: "chat-refused-model-refused.alula.test.json", text: embed_str("../../machines/product/tests/chat-refused-model-refused.alula.test.json") },
-    NamedText { name: "chat-refused-no-result.alula.test.json", text: embed_str("../../machines/product/tests/chat-refused-no-result.alula.test.json") },
-    NamedText { name: "chat-refused-stopped-by-human.alula.test.json", text: embed_str("../../machines/product/tests/chat-refused-stopped-by-human.alula.test.json") },
-    NamedText { name: "chat-refused-timeout.alula.test.json", text: embed_str("../../machines/product/tests/chat-refused-timeout.alula.test.json") },
-    NamedText { name: "chat-refused-unknown-code.alula.test.json", text: embed_str("../../machines/product/tests/chat-refused-unknown-code.alula.test.json") },
-    NamedText { name: "chat-restart-after-answer.alula.test.json", text: embed_str("../../machines/product/tests/chat-restart-after-answer.alula.test.json") },
-    NamedText { name: "chat-restart-after-request.alula.test.json", text: embed_str("../../machines/product/tests/chat-restart-after-request.alula.test.json") },
-    NamedText { name: "chat-restart-before-send.alula.test.json", text: embed_str("../../machines/product/tests/chat-restart-before-send.alula.test.json") },
-    NamedText { name: "chat-second-answer.alula.test.json", text: embed_str("../../machines/product/tests/chat-second-answer.alula.test.json") },
-    NamedText { name: "chat-silent-agent.alula.test.json", text: embed_str("../../machines/product/tests/chat-silent-agent.alula.test.json") },
-    NamedText { name: "chat-start.alula.test.json", text: embed_str("../../machines/product/tests/chat-start.alula.test.json") },
-    NamedText { name: "chat-timeout-awaiting.alula.test.json", text: embed_str("../../machines/product/tests/chat-timeout-awaiting.alula.test.json") },
-    NamedText { name: "chat-tool-and-permission.alula.test.json", text: embed_str("../../machines/product/tests/chat-tool-and-permission.alula.test.json") },
-    NamedText { name: "chat-unknown-name.alula.test.json", text: embed_str("../../machines/product/tests/chat-unknown-name.alula.test.json") },
-    NamedText { name: "chat-unknown-request.alula.test.json", text: embed_str("../../machines/product/tests/chat-unknown-request.alula.test.json") },
-    NamedText { name: "dialog-answer-while-dead.alula.test.json", text: embed_str("../../machines/product/tests/dialog-answer-while-dead.alula.test.json") },
-    NamedText { name: "dialog-cancel-before-send.alula.test.json", text: embed_str("../../machines/product/tests/dialog-cancel-before-send.alula.test.json") },
-    NamedText { name: "dialog-cancel-idle.alula.test.json", text: embed_str("../../machines/product/tests/dialog-cancel-idle.alula.test.json") },
-    NamedText { name: "dialog-cancel-then-next.alula.test.json", text: embed_str("../../machines/product/tests/dialog-cancel-then-next.alula.test.json") },
-    NamedText { name: "dialog-closed-table-only.alula.test.json", text: embed_str("../../machines/product/tests/dialog-closed-table-only.alula.test.json") },
-    NamedText { name: "dialog-flow-ack-discarded.alula.test.json", text: embed_str("../../machines/product/tests/dialog-flow-ack-discarded.alula.test.json") },
-    NamedText { name: "dialog-flow-ack-restart.alula.test.json", text: embed_str("../../machines/product/tests/dialog-flow-ack-restart.alula.test.json") },
-    NamedText { name: "dialog-flow-ack.alula.test.json", text: embed_str("../../machines/product/tests/dialog-flow-ack.alula.test.json") },
-    NamedText { name: "dialog-flow-answer-after-cancel.alula.test.json", text: embed_str("../../machines/product/tests/dialog-flow-answer-after-cancel.alula.test.json") },
-    NamedText { name: "dialog-flow-answer-after-timeout.alula.test.json", text: embed_str("../../machines/product/tests/dialog-flow-answer-after-timeout.alula.test.json") },
-    NamedText { name: "dialog-flow-cancel-awaiting.alula.test.json", text: embed_str("../../machines/product/tests/dialog-flow-cancel-awaiting.alula.test.json") },
-    NamedText { name: "dialog-flow-cancel-in-window.alula.test.json", text: embed_str("../../machines/product/tests/dialog-flow-cancel-in-window.alula.test.json") },
-    NamedText { name: "dialog-flow-chunk-renews-term.alula.test.json", text: embed_str("../../machines/product/tests/dialog-flow-chunk-renews-term.alula.test.json") },
-    NamedText { name: "dialog-flow-chunks-and-done.alula.test.json", text: embed_str("../../machines/product/tests/dialog-flow-chunks-and-done.alula.test.json") },
-    NamedText { name: "dialog-flow-cyrillic.alula.test.json", text: embed_str("../../machines/product/tests/dialog-flow-cyrillic.alula.test.json") },
-    NamedText { name: "dialog-flow-ignored-chunk.alula.test.json", text: embed_str("../../machines/product/tests/dialog-flow-ignored-chunk.alula.test.json") },
-    NamedText { name: "dialog-flow-ignored-second-message.alula.test.json", text: embed_str("../../machines/product/tests/dialog-flow-ignored-second-message.alula.test.json") },
-    NamedText { name: "dialog-flow-journal-restart-answer.alula.test.json", text: embed_str("../../machines/product/tests/dialog-flow-journal-restart-answer.alula.test.json") },
-    NamedText { name: "dialog-flow-late-chunk.alula.test.json", text: embed_str("../../machines/product/tests/dialog-flow-late-chunk.alula.test.json") },
-    NamedText { name: "dialog-flow-message-opens-request.alula.test.json", text: embed_str("../../machines/product/tests/dialog-flow-message-opens-request.alula.test.json") },
-    NamedText { name: "dialog-flow-pump-order.alula.test.json", text: embed_str("../../machines/product/tests/dialog-flow-pump-order.alula.test.json") },
-    NamedText { name: "dialog-flow-refused-model-refused.alula.test.json", text: embed_str("../../machines/product/tests/dialog-flow-refused-model-refused.alula.test.json") },
-    NamedText { name: "dialog-flow-refused-unknown-code.alula.test.json", text: embed_str("../../machines/product/tests/dialog-flow-refused-unknown-code.alula.test.json") },
-    NamedText { name: "dialog-flow-restart-after-answer.alula.test.json", text: embed_str("../../machines/product/tests/dialog-flow-restart-after-answer.alula.test.json") },
-    NamedText { name: "dialog-flow-restart-after-request.alula.test.json", text: embed_str("../../machines/product/tests/dialog-flow-restart-after-request.alula.test.json") },
-    NamedText { name: "dialog-flow-restart-before-send.alula.test.json", text: embed_str("../../machines/product/tests/dialog-flow-restart-before-send.alula.test.json") },
-    NamedText { name: "dialog-flow-second-answer.alula.test.json", text: embed_str("../../machines/product/tests/dialog-flow-second-answer.alula.test.json") },
-    NamedText { name: "dialog-flow-silent-agent.alula.test.json", text: embed_str("../../machines/product/tests/dialog-flow-silent-agent.alula.test.json") },
-    NamedText { name: "dialog-flow-start.alula.test.json", text: embed_str("../../machines/product/tests/dialog-flow-start.alula.test.json") },
-    NamedText { name: "dialog-flow-timeout-awaiting.alula.test.json", text: embed_str("../../machines/product/tests/dialog-flow-timeout-awaiting.alula.test.json") },
-    NamedText { name: "dialog-flow-tool-and-permission.alula.test.json", text: embed_str("../../machines/product/tests/dialog-flow-tool-and-permission.alula.test.json") },
-    NamedText { name: "dialog-flow-unknown-name.alula.test.json", text: embed_str("../../machines/product/tests/dialog-flow-unknown-name.alula.test.json") },
-    NamedText { name: "dialog-flow-unknown-request.alula.test.json", text: embed_str("../../machines/product/tests/dialog-flow-unknown-request.alula.test.json") },
-    NamedText { name: "dialog-restart-before-send-second.alula.test.json", text: embed_str("../../machines/product/tests/dialog-restart-before-send-second.alula.test.json") },
-    NamedText { name: "dialog-second-turn.alula.test.json", text: embed_str("../../machines/product/tests/dialog-second-turn.alula.test.json") },
-    NamedText { name: "dialog-timeout-then-next.alula.test.json", text: embed_str("../../machines/product/tests/dialog-timeout-then-next.alula.test.json") },
-    NamedText { name: "dialog-turn-ends.alula.test.json", text: embed_str("../../machines/product/tests/dialog-turn-ends.alula.test.json") },
-    NamedText { name: "free-input-chat-message.alula.test.json", text: embed_str("../../machines/product/tests/free-input-chat-message.alula.test.json") },
-    NamedText { name: "free-input-counter-stays.alula.test.json", text: embed_str("../../machines/product/tests/free-input-counter-stays.alula.test.json") },
-    NamedText { name: "free-input-dialog-close.alula.test.json", text: embed_str("../../machines/product/tests/free-input-dialog-close.alula.test.json") },
-    NamedText { name: "free-input-no-gate-record.alula.test.json", text: embed_str("../../machines/product/tests/free-input-no-gate-record.alula.test.json") },
-    NamedText { name: "free-input-signal-without-row.alula.test.json", text: embed_str("../../machines/product/tests/free-input-signal-without-row.alula.test.json") }
+    NamedText { name: "chat-ack-discarded.alula.test.json", text: tree_text("machines/product/tests/chat-ack-discarded.alula.test.json") },
+    NamedText { name: "chat-ack-restart.alula.test.json", text: tree_text("machines/product/tests/chat-ack-restart.alula.test.json") },
+    NamedText { name: "chat-ack.alula.test.json", text: tree_text("machines/product/tests/chat-ack.alula.test.json") },
+    NamedText { name: "chat-answer-after-cancel.alula.test.json", text: tree_text("machines/product/tests/chat-answer-after-cancel.alula.test.json") },
+    NamedText { name: "chat-answer-after-timeout.alula.test.json", text: tree_text("machines/product/tests/chat-answer-after-timeout.alula.test.json") },
+    NamedText { name: "chat-cancel-awaiting.alula.test.json", text: tree_text("machines/product/tests/chat-cancel-awaiting.alula.test.json") },
+    NamedText { name: "chat-cancel-idle.alula.test.json", text: tree_text("machines/product/tests/chat-cancel-idle.alula.test.json") },
+    NamedText { name: "chat-cancel-in-window.alula.test.json", text: tree_text("machines/product/tests/chat-cancel-in-window.alula.test.json") },
+    NamedText { name: "chat-chunk-renews-term.alula.test.json", text: tree_text("machines/product/tests/chat-chunk-renews-term.alula.test.json") },
+    NamedText { name: "chat-chunks-and-done.alula.test.json", text: tree_text("machines/product/tests/chat-chunks-and-done.alula.test.json") },
+    NamedText { name: "chat-cyrillic.alula.test.json", text: tree_text("machines/product/tests/chat-cyrillic.alula.test.json") },
+    NamedText { name: "chat-ignored-after-done.alula.test.json", text: tree_text("machines/product/tests/chat-ignored-after-done.alula.test.json") },
+    NamedText { name: "chat-ignored-chunk.alula.test.json", text: tree_text("machines/product/tests/chat-ignored-chunk.alula.test.json") },
+    NamedText { name: "chat-ignored-second-message.alula.test.json", text: tree_text("machines/product/tests/chat-ignored-second-message.alula.test.json") },
+    NamedText { name: "chat-journal-restart-answer.alula.test.json", text: tree_text("machines/product/tests/chat-journal-restart-answer.alula.test.json") },
+    NamedText { name: "chat-late-chunk.alula.test.json", text: tree_text("machines/product/tests/chat-late-chunk.alula.test.json") },
+    NamedText { name: "chat-message-opens-request.alula.test.json", text: tree_text("machines/product/tests/chat-message-opens-request.alula.test.json") },
+    NamedText { name: "chat-pump-order.alula.test.json", text: tree_text("machines/product/tests/chat-pump-order.alula.test.json") },
+    NamedText { name: "chat-refused-cancelled.alula.test.json", text: tree_text("machines/product/tests/chat-refused-cancelled.alula.test.json") },
+    NamedText { name: "chat-refused-ceiling-reached.alula.test.json", text: tree_text("machines/product/tests/chat-refused-ceiling-reached.alula.test.json") },
+    NamedText { name: "chat-refused-connection-lost.alula.test.json", text: tree_text("machines/product/tests/chat-refused-connection-lost.alula.test.json") },
+    NamedText { name: "chat-refused-form-not-fixed.alula.test.json", text: tree_text("machines/product/tests/chat-refused-form-not-fixed.alula.test.json") },
+    NamedText { name: "chat-refused-max-tokens.alula.test.json", text: tree_text("machines/product/tests/chat-refused-max-tokens.alula.test.json") },
+    NamedText { name: "chat-refused-max-turn-requests.alula.test.json", text: tree_text("machines/product/tests/chat-refused-max-turn-requests.alula.test.json") },
+    NamedText { name: "chat-refused-model-refused.alula.test.json", text: tree_text("machines/product/tests/chat-refused-model-refused.alula.test.json") },
+    NamedText { name: "chat-refused-no-result.alula.test.json", text: tree_text("machines/product/tests/chat-refused-no-result.alula.test.json") },
+    NamedText { name: "chat-refused-stopped-by-human.alula.test.json", text: tree_text("machines/product/tests/chat-refused-stopped-by-human.alula.test.json") },
+    NamedText { name: "chat-refused-timeout.alula.test.json", text: tree_text("machines/product/tests/chat-refused-timeout.alula.test.json") },
+    NamedText { name: "chat-refused-unknown-code.alula.test.json", text: tree_text("machines/product/tests/chat-refused-unknown-code.alula.test.json") },
+    NamedText { name: "chat-restart-after-answer.alula.test.json", text: tree_text("machines/product/tests/chat-restart-after-answer.alula.test.json") },
+    NamedText { name: "chat-restart-after-request.alula.test.json", text: tree_text("machines/product/tests/chat-restart-after-request.alula.test.json") },
+    NamedText { name: "chat-restart-before-send.alula.test.json", text: tree_text("machines/product/tests/chat-restart-before-send.alula.test.json") },
+    NamedText { name: "chat-second-answer.alula.test.json", text: tree_text("machines/product/tests/chat-second-answer.alula.test.json") },
+    NamedText { name: "chat-silent-agent.alula.test.json", text: tree_text("machines/product/tests/chat-silent-agent.alula.test.json") },
+    NamedText { name: "chat-start.alula.test.json", text: tree_text("machines/product/tests/chat-start.alula.test.json") },
+    NamedText { name: "chat-timeout-awaiting.alula.test.json", text: tree_text("machines/product/tests/chat-timeout-awaiting.alula.test.json") },
+    NamedText { name: "chat-tool-and-permission.alula.test.json", text: tree_text("machines/product/tests/chat-tool-and-permission.alula.test.json") },
+    NamedText { name: "chat-unknown-name.alula.test.json", text: tree_text("machines/product/tests/chat-unknown-name.alula.test.json") },
+    NamedText { name: "chat-unknown-request.alula.test.json", text: tree_text("machines/product/tests/chat-unknown-request.alula.test.json") },
+    NamedText { name: "dialog-answer-while-dead.alula.test.json", text: tree_text("machines/product/tests/dialog-answer-while-dead.alula.test.json") },
+    NamedText { name: "dialog-cancel-before-send.alula.test.json", text: tree_text("machines/product/tests/dialog-cancel-before-send.alula.test.json") },
+    NamedText { name: "dialog-cancel-idle.alula.test.json", text: tree_text("machines/product/tests/dialog-cancel-idle.alula.test.json") },
+    NamedText { name: "dialog-cancel-then-next.alula.test.json", text: tree_text("machines/product/tests/dialog-cancel-then-next.alula.test.json") },
+    NamedText { name: "dialog-closed-table-only.alula.test.json", text: tree_text("machines/product/tests/dialog-closed-table-only.alula.test.json") },
+    NamedText { name: "dialog-flow-ack-discarded.alula.test.json", text: tree_text("machines/product/tests/dialog-flow-ack-discarded.alula.test.json") },
+    NamedText { name: "dialog-flow-ack-restart.alula.test.json", text: tree_text("machines/product/tests/dialog-flow-ack-restart.alula.test.json") },
+    NamedText { name: "dialog-flow-ack.alula.test.json", text: tree_text("machines/product/tests/dialog-flow-ack.alula.test.json") },
+    NamedText { name: "dialog-flow-answer-after-cancel.alula.test.json", text: tree_text("machines/product/tests/dialog-flow-answer-after-cancel.alula.test.json") },
+    NamedText { name: "dialog-flow-answer-after-timeout.alula.test.json", text: tree_text("machines/product/tests/dialog-flow-answer-after-timeout.alula.test.json") },
+    NamedText { name: "dialog-flow-cancel-awaiting.alula.test.json", text: tree_text("machines/product/tests/dialog-flow-cancel-awaiting.alula.test.json") },
+    NamedText { name: "dialog-flow-cancel-in-window.alula.test.json", text: tree_text("machines/product/tests/dialog-flow-cancel-in-window.alula.test.json") },
+    NamedText { name: "dialog-flow-chunk-renews-term.alula.test.json", text: tree_text("machines/product/tests/dialog-flow-chunk-renews-term.alula.test.json") },
+    NamedText { name: "dialog-flow-chunks-and-done.alula.test.json", text: tree_text("machines/product/tests/dialog-flow-chunks-and-done.alula.test.json") },
+    NamedText { name: "dialog-flow-cyrillic.alula.test.json", text: tree_text("machines/product/tests/dialog-flow-cyrillic.alula.test.json") },
+    NamedText { name: "dialog-flow-ignored-chunk.alula.test.json", text: tree_text("machines/product/tests/dialog-flow-ignored-chunk.alula.test.json") },
+    NamedText { name: "dialog-flow-ignored-second-message.alula.test.json", text: tree_text("machines/product/tests/dialog-flow-ignored-second-message.alula.test.json") },
+    NamedText { name: "dialog-flow-journal-restart-answer.alula.test.json", text: tree_text("machines/product/tests/dialog-flow-journal-restart-answer.alula.test.json") },
+    NamedText { name: "dialog-flow-late-chunk.alula.test.json", text: tree_text("machines/product/tests/dialog-flow-late-chunk.alula.test.json") },
+    NamedText { name: "dialog-flow-message-opens-request.alula.test.json", text: tree_text("machines/product/tests/dialog-flow-message-opens-request.alula.test.json") },
+    NamedText { name: "dialog-flow-pump-order.alula.test.json", text: tree_text("machines/product/tests/dialog-flow-pump-order.alula.test.json") },
+    NamedText { name: "dialog-flow-refused-model-refused.alula.test.json", text: tree_text("machines/product/tests/dialog-flow-refused-model-refused.alula.test.json") },
+    NamedText { name: "dialog-flow-refused-unknown-code.alula.test.json", text: tree_text("machines/product/tests/dialog-flow-refused-unknown-code.alula.test.json") },
+    NamedText { name: "dialog-flow-restart-after-answer.alula.test.json", text: tree_text("machines/product/tests/dialog-flow-restart-after-answer.alula.test.json") },
+    NamedText { name: "dialog-flow-restart-after-request.alula.test.json", text: tree_text("machines/product/tests/dialog-flow-restart-after-request.alula.test.json") },
+    NamedText { name: "dialog-flow-restart-before-send.alula.test.json", text: tree_text("machines/product/tests/dialog-flow-restart-before-send.alula.test.json") },
+    NamedText { name: "dialog-flow-second-answer.alula.test.json", text: tree_text("machines/product/tests/dialog-flow-second-answer.alula.test.json") },
+    NamedText { name: "dialog-flow-silent-agent.alula.test.json", text: tree_text("machines/product/tests/dialog-flow-silent-agent.alula.test.json") },
+    NamedText { name: "dialog-flow-start.alula.test.json", text: tree_text("machines/product/tests/dialog-flow-start.alula.test.json") },
+    NamedText { name: "dialog-flow-timeout-awaiting.alula.test.json", text: tree_text("machines/product/tests/dialog-flow-timeout-awaiting.alula.test.json") },
+    NamedText { name: "dialog-flow-tool-and-permission.alula.test.json", text: tree_text("machines/product/tests/dialog-flow-tool-and-permission.alula.test.json") },
+    NamedText { name: "dialog-flow-unknown-name.alula.test.json", text: tree_text("machines/product/tests/dialog-flow-unknown-name.alula.test.json") },
+    NamedText { name: "dialog-flow-unknown-request.alula.test.json", text: tree_text("machines/product/tests/dialog-flow-unknown-request.alula.test.json") },
+    NamedText { name: "dialog-restart-before-send-second.alula.test.json", text: tree_text("machines/product/tests/dialog-restart-before-send-second.alula.test.json") },
+    NamedText { name: "dialog-second-turn.alula.test.json", text: tree_text("machines/product/tests/dialog-second-turn.alula.test.json") },
+    NamedText { name: "dialog-timeout-then-next.alula.test.json", text: tree_text("machines/product/tests/dialog-timeout-then-next.alula.test.json") },
+    NamedText { name: "dialog-turn-ends.alula.test.json", text: tree_text("machines/product/tests/dialog-turn-ends.alula.test.json") },
+    NamedText { name: "free-input-chat-message.alula.test.json", text: tree_text("machines/product/tests/free-input-chat-message.alula.test.json") },
+    NamedText { name: "free-input-counter-stays.alula.test.json", text: tree_text("machines/product/tests/free-input-counter-stays.alula.test.json") },
+    NamedText { name: "free-input-dialog-close.alula.test.json", text: tree_text("machines/product/tests/free-input-dialog-close.alula.test.json") },
+    NamedText { name: "free-input-no-gate-record.alula.test.json", text: tree_text("machines/product/tests/free-input-no-gate-record.alula.test.json") },
+    NamedText { name: "free-input-signal-without-row.alula.test.json", text: tree_text("machines/product/tests/free-input-signal-without-row.alula.test.json") }
 ]
 
-/// The names of the files that the folder of the product holds (read at compile time with `embed_dir`): `product_machines`, `product_tables` (the files of the folder itself), `product_libraries`
+/// The names of the files that the folder of the product holds (read from the disk of the tree, `tree_paths`): `product_machines`, `product_tables` (the files of the folder itself), `product_libraries`
 /// (`libs/…`), `product_scenarios`; a test compares them with the lists above, so a file that is added to the folder and not to its list is found. `product_files` is every file of the folder
 /// (a test proves there is no `*.alula.txt` among them: the one extension of a table is `.alula.md`, task 169).
 export fn data_dir_names(dir str) -> []str {
-    if dir == "product_machines" { return only_ending(embed_dir("../../machines/product").paths(), [".alula.json"]) }
-    if dir == "product_tables" { return only_top(only_ending(embed_dir("../../machines/product").paths(), [".alula.md"])) }
-    if dir == "product_libraries" { return only_libs(only_ending(embed_dir("../../machines/product").paths(), [".alula.md"])) }
-    if dir == "product_files" { return embed_dir("../../machines/product").paths() }
-    if dir == "product_scenarios" { return embed_dir("../../machines/product/tests").paths() }
+    if dir == "product_machines" { return only_ending(tree_paths("machines/product"), [".alula.json"]) }
+    if dir == "product_tables" { return only_top(only_ending(tree_paths("machines/product"), [".alula.md"])) }
+    if dir == "product_libraries" { return only_libs(only_ending(tree_paths("machines/product"), [".alula.md"])) }
+    if dir == "product_files" { return tree_paths("machines/product") }
+    if dir == "product_scenarios" { return tree_paths("machines/product/tests") }
     []str.new()
 }
 
-// The names of the files of the folder itself: `embed_dir` reads the folder recursively, the libraries lie in `libs/` beside the machines (Alula 2.26, section 9).
+// The names of the files of the folder itself: `tree_paths` reads the folder recursively, the libraries lie in `libs/` beside the machines (Alula 2.26, section 9).
 fn only_top(names []str) -> []str {
     mut out = []str.new()
     for n in names {
@@ -145,7 +148,7 @@ fn only_ending(names []str, suffixes []str) -> []str {
 /// The library that the tables connect (Alula 2.26, section 9; task 240), by the path beside a machine (`libs/call_cancel.alula.md`, as the line `- Файл:` of a connection names it): «Отмена запроса»
 /// of the product (`machines/product/libs/`: the signal of the protocol of the cancel). A test that translates a table passes it to the translator (`translation_files`).
 export fn library_files() -> []NamedText => [
-    NamedText { name: "libs/call_cancel.alula.md", text: embed_str("../../machines/product/libs/call_cancel.alula.md") }
+    NamedText { name: "libs/call_cancel.alula.md", text: tree_text("machines/product/libs/call_cancel.alula.md") }
 ]
 
 /// The files that a translation of a table is given: the libraries (the machines of the product call no other machine, so there is no called machine beside them).
@@ -196,7 +199,7 @@ export fn chat_table_text() -> str => text_of_file(table_files(), "chat.alula.md
 export fn dialog_table_text() -> str => text_of_file(table_files(), "dialog.alula.md")
 
 /// The table of the journal codes of the product (`machines/product/journal.md`).
-export fn product_journal_text() -> str => embed_str("../../machines/product/journal.md")
+export fn product_journal_text() -> str => tree_text("machines/product/journal.md")
 
 /// The registry of the host "product": the language (the machines of the product call no primitive of their own) and the codes of the journal of the product.
 export fn product_registry() -> Registry {

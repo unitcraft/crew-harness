@@ -78,6 +78,7 @@ and no error (`describe()` leaves it out).
 | `idle_term_seconds` | `CREW_SERVER_IDLE_SECONDS` | 900 | the idle term of a turn: an agent silent that long ends the turn with `Timeout`. A request for permission waits for a human, so keep it long |
 | `workdir` | `CREW_SERVER_WORKDIR` | the folder of the server | the folder the agents work in (`session/new` needs it) |
 | `web_dir` | `CREW_SERVER_WEB_DIR` | `src/web` | the folder of the page |
+| `machines_dir` | `CREW_SERVER_MACHINES_DIR` | `machines/product` beside the hub, else beside its folder | the folder of the machines of the product that the hub reads at its start (task 248, "Where the machine comes from" below) |
 | `acp_trace` | `CREW_SERVER_ACP_TRACE` (`true`/`false`) | `true` | write the raw JSON-RPC exchange with the agent, both ways, to `<data_dir>/<session>/acp.jsonl` (`{"t": unix ms, "dir": "out"|"in", "line": "<the line as it is>"}`); over 50 MB the file becomes `acp.1.jsonl` in the same folder. **The file holds the full text of the talk and the output of the tools, nothing is cut out.** |
 | `stt` {`url`,`language`,`managed`,`dir`,`model`} | `CREW_SERVER_STT_URL`, `CREW_SERVER_STT_LANGUAGE`, `CREW_SERVER_STT_MANAGED`, `CREW_SERVER_STT_DIR`, `CREW_SERVER_STT_MODEL` | `http://127.0.0.1:8178/inference`, `auto`, `true`, `CREW_STT_DIR` or `%LOCALAPPDATA%/crew-harness/stt`, `small` | the local speech recognizer (whisper.cpp `whisper-server`) that the front sends the voice to and, with `managed`, starts and ends itself (below); the address must be a plain `http://127.0.0.1:<port>/...` or `http://localhost:<port>/...` (the audio never leaves the machine); `language` is the default of `POST /api/stt`; `dir` holds `bin/whisper-server.exe` and `models/ggml-<model>.bin` |
 | `hub` {`program`,`args`} | `CREW_SERVER_HUB` (words separated by spaces) | `target/crew-hub.exe` | how the front starts the hub |
@@ -112,10 +113,15 @@ Whisper is a part of the control panel: the front starts it and ends it with its
 Since task 114 the hub runs every session on the machine of the many-turn chat written as a table of Alula (2.11 at the start, 2.22 since task 152: blocks, `=>`, `тип Имя перечисление`, a free input of the user),
 `src/machine/machines/dialog.alula.md` of the package `alula`, and not on the machine written in Nova.
 
-- **Where the machine comes from.** `dialog.alula.json` is the translation of the table by the translator `alula.machine_text` of the package `alula`
-  (`nova build src/machine_translate.nv`, no hand edit; a test compares the translation with the committed file). It is compiled into the program
-  (`embed_str` in `src/machine/data.nv` of `alula`), so the hub needs no file to find it. `src/server/alula.nv` makes `AlulaMachine` once, when the hub starts
-  (`start_hub`); a machine that cannot be made stops the start with the message `the dialog machine cannot be made: ...`.
+- **Where the machine comes from.** `dialog.alula.json` is the translation of the table `dialog.alula.md` (`alula compile`, no hand edit; a test compares the translation with the committed file).
+  Since task 248 nothing of `machines/` is compiled into the programs: the hub reads the folder of the machines when it starts (`start_hub`, `crew_harness.product_machines.load_product_machines`):
+  the setting `machines_dir` (`CREW_SERVER_MACHINES_DIR`), else `machines/product` beside the program (the release kit), else `machines/product` beside the folder of the program (the build of the tree:
+  `target/` beside `machines/`). It reads `dialog.alula.json`, `dialog.alula.md`, `journal.md` and the libraries they connect (`libs/call_cancel.alula.md`) and checks them: every file is there,
+  the `alula_version` of the tree, the table and every library is the version of the engine (0.27), the hash of every connection is the `definitions_hash` of the file of the library. A failure stops the start
+  with the path (`the hub cannot start: the machines of the product cannot be read: <path>: ...`); there is no copy to fall back on. The hub writes the folder to its log
+  (`the machines of the product: <folder> (DialogSession)`). `src/server/alula.nv` makes `AlulaMachine` once from the tree read; a machine that cannot be made stops the start with the message
+  `the dialog machine cannot be made: ...`. The release kit is `sh scripts/package-release.sh <folder> [--build]`: `crew-harness.exe`, `crew-hub.exe` and `machines/product` (the dialog, the journal, `libs/`;
+  no `tests/`, no chat), checked by `scripts/guards/check-release-kit.py --kit <folder>`.
 - **The states.** `Idle` (waits for a message), `Awaiting` (a request to the agent is open) and the end `Closed`. After an answer, a refusal, an idle term and a cancel the session
   goes back to `Idle` and forgets the turn (the data of the turn are cleared, as the state `Idle` of the machine in Nova holds nothing). The journal codes and their parameters, the numbers of requests
   (`agent-1`, `agent-2`...) and the notes of an event the state does not expect (`event_ignored`) are the same as before. The end `Closed` is reached by the signal `close_session`, which only the table has: the

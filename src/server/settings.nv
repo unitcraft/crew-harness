@@ -2,11 +2,11 @@
 //
 // The file is a JSON object; every key is optional (see `src/server/server.example.json`):
 //   port, data_dir, store ("files" or "pg"), pg {host, port, database, user, password}, agents [{id, label, program, args}],
-//   idle_term_seconds, workdir, web_dir, hub {program, args}, acp_trace (true by default: the raw exchange with the agent is written to
+//   idle_term_seconds, workdir, web_dir, machines_dir (the folder of the machines of the product, task 248), hub {program, args}, acp_trace (true by default: the raw exchange with the agent is written to
 //   <data_dir>/<session>/acp.jsonl), stt {url, language} (the local whisper server the front sends the voice to: `/api/stt`)
 // The environment is over the file, key by key:
 //   CREW_SERVER_PORT, CREW_SERVER_STORE, CREW_SERVER_DATA_DIR, CREW_SERVER_AGENT (the command of the one agent "opencode",
-//   words separated by spaces), CREW_SERVER_WORKDIR, CREW_SERVER_WEB_DIR, CREW_SERVER_ACP_TRACE (true/false), CREW_SERVER_STT_URL, CREW_SERVER_STT_LANGUAGE, CREW_SERVER_IDLE_SECONDS, CREW_SERVER_HUB (the command
+//   words separated by spaces), CREW_SERVER_WORKDIR, CREW_SERVER_WEB_DIR, CREW_SERVER_MACHINES_DIR, CREW_SERVER_ACP_TRACE (true/false), CREW_SERVER_STT_URL, CREW_SERVER_STT_LANGUAGE, CREW_SERVER_IDLE_SECONDS, CREW_SERVER_HUB (the command
 //   that starts the hub, words separated by spaces) and the CREW_PG_* variables of `crew_harness.pgconf`.
 // The file is named by the argument or, when that is empty, by CREW_SERVER_CONFIG. The password lives in the environment or in a
 // file outside the repository; it is in no error and no description.
@@ -25,7 +25,8 @@ export type AgentSpec { id str, label str, program str, args []str }
 
 /// ServerSettings: everything the server is told. `store` is "files" or "pg"; `data_dir` holds the files of the file store
 /// and, in both modes, the inbox files of the ACP client; `idle_term_ms` is the idle term of a turn; `workdir` is the folder
-/// the agents work in ("" - the folder of the server); `hub_program` and `hub_args` start the hub (the front only).
+/// the agents work in ("" - the folder of the server); `machines_dir` is the folder of the machines of the product ("" - `machines/product` beside
+/// the hub, else beside its folder: `crew_harness.product_machines.find_machines_dir`); `hub_program` and `hub_args` start the hub (the front only).
 export type ServerSettings {
     port int,
     data_dir str,
@@ -35,6 +36,7 @@ export type ServerSettings {
     idle_term_ms int,
     workdir str,
     web_dir str,
+    machines_dir str,
     hub_program str,
     hub_args []str,
     acp_trace bool,
@@ -177,6 +179,7 @@ export fn parse_server_settings(text str) -> Result[ServerSettings, str] {
     if idle_seconds < 1 { return Err("idle_term_seconds must be 1 or more") }
     ro workdir = st_text(o, "workdir", "")?
     ro web_dir = st_text(o, "web_dir", "src/web")?
+    ro machines_dir = st_text(o, "machines_dir", "")?
     ro acp_trace = st_flag(o, "acp_trace", true)?
     mut stt_url = STT_DEFAULT_URL
     mut stt_language = "auto"
@@ -202,7 +205,7 @@ export fn parse_server_settings(text str) -> Result[ServerSettings, str] {
         }
         None => ()
     }
-    Ok(ServerSettings { port, data_dir, store, pg, agents, idle_term_ms: idle_seconds * 1000, workdir, web_dir, hub_program, hub_args, acp_trace, stt_url, stt_language })
+    Ok(ServerSettings { port, data_dir, store, pg, agents, idle_term_ms: idle_seconds * 1000, workdir, web_dir, machines_dir, hub_program, hub_args, acp_trace, stt_url, stt_language })
 }
 
 fn st_env(key str) Os -> Option[str] {
@@ -308,6 +311,7 @@ export fn server_settings(file str) Os Fs -> Result[ServerSettings, str] {
         idle_term_ms,
         workdir: st_env("CREW_SERVER_WORKDIR") ?? base.workdir,
         web_dir: st_env("CREW_SERVER_WEB_DIR") ?? base.web_dir,
+        machines_dir: st_env("CREW_SERVER_MACHINES_DIR") ?? base.machines_dir,
         hub_program,
         hub_args,
         acp_trace,

@@ -1,9 +1,10 @@
-// alula.nv - the machine of the sessions of the hub (task 114): the many-turn chat written as data (`src/machine/machines/dialog.alula.md`, its JSON is
-// compiled into the program) and run by `AlulaMachine`. The hub makes it once when it starts. The idle term of a turn is the parameter of the project
+// alula.nv - the machine of the sessions of the hub (task 114): the many-turn chat written as data (`machines/product/dialog.alula.md`, its JSON is
+// read from the folder of the machines when the hub starts, task 248) and run by `AlulaMachine`. The hub makes it once when it starts. The idle term of a turn is the parameter of the project
 // `проект.срок_бездействия` (format 2.7, P-9): the settings give it in milliseconds (`idle_term_seconds` * 1000).
 module crew_harness.server
 
 import alula.machine.{Int}
+import alula.machine.{Registry}
 import crew_harness.product_machines.{product_registry, dialog_machine_text}
 import alula.machine_run.{AlulaMachine, ProjectValue, load_alula_machine_with}
 
@@ -12,13 +13,16 @@ export const IDLE_TERM_KEY = "проект.срок_бездействия"
 
 fn idle_term_values(idle_term_ms int) -> []ProjectValue => [ProjectValue { key: IDLE_TERM_KEY, value: Int(idle_term_ms) }]
 
-/// The machine of the sessions from the text of its JSON and the idle term in milliseconds; the error says what is wrong with the machine.
-export fn hub_machine_from(text str, idle_term_ms int) -> Result[AlulaMachine, str] {
-    match load_alula_machine_with(text, product_registry(), idle_term_values(idle_term_ms)) {
+/// The machine of the sessions from the text of its JSON, the registry of the product and the idle term in milliseconds; the error says what is wrong with the machine.
+export fn hub_machine_with(text str, registry Registry, idle_term_ms int) -> Result[AlulaMachine, str] {
+    match load_alula_machine_with(text, registry, idle_term_values(idle_term_ms)) {
         Ok(machine) => Ok(machine)
         Err(e) => Err("the dialog machine cannot be made: ${e}")
     }
 }
 
-/// The machine of the sessions: the embedded `dialog.alula.json` with the idle term of the settings.
+/// The same with the registry of the product of the tree (the tests).
+export fn hub_machine_from(text str, idle_term_ms int) -> Result[AlulaMachine, str] => hub_machine_with(text, product_registry(), idle_term_ms)
+
+/// The machine of the sessions of the tree: `machines/product/dialog.alula.json` with the idle term (the tests).
 export fn hub_machine(idle_term_ms int) -> Result[AlulaMachine, str] => hub_machine_from(dialog_machine_text(), idle_term_ms)

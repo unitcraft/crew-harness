@@ -259,3 +259,16 @@ test "settings: stt has the local whisper server by default, the file sets it, t
         Err(e) => assert(e.contains("stt"))
     }
 }
+
+test "settings: the folder of the machines is machines_dir of the file, CREW_SERVER_MACHINES_DIR over it, empty by default (task 248)" {
+    assert(must_settings("{}").machines_dir == "")
+    assert(must_settings("{\"machines_dir\":\"C:/work/kit/machines/product\"}").machines_dir == "C:/work/kit/machines/product")
+    assert(is_error(parse_server_settings("{\"machines_dir\":5}")))
+    ro path = settings_file("machines.json", "{\"machines_dir\":\"C:/work/kit/machines/product\"}")
+    mut env = MockOs.new()
+    env.put_env("CREW_SERVER_MACHINES_DIR", "C:/work/other/machines")
+    match with Os = mock_os(env), Fs = real_fs() { server_settings(path.display()) } {
+        Ok(s) => assert(s.machines_dir == "C:/work/other/machines")
+        Err(e) => panic(e)
+    }
+}

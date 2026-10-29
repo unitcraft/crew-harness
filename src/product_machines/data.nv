@@ -1,109 +1,370 @@
-// data.nv - the machines of the product as data that the programs embed: the chat (`machines/product/chat.alula.json`) and the many-turn chat `dialog` that the hub runs, with the table of the journal codes
-// of the product (`machines/product/journal.md`). The package `alula` knows the language only (two primitives, 35 codes, spec 7a); the registry of the product is the language and these codes: the
-// machines of the product call no primitive of their own. The tests read the same files from `crew_harness.machines` (tests only).
+// data.nv - the machines of the product, read from a folder on the disk (task 248; nothing of `machines/` is compiled into the programs): the many-turn
+// chat `dialog` that the hub runs (`dialog.alula.json`, `dialog.alula.md`), the libraries it connects (`libs/call_cancel.alula.md`) and the table of
+// the journal codes of the product (`journal.md`). The release kit holds them in `machines/product/` beside the programs; in the tree of the repository
+// they are `machines/product/`, with the chat of one turn (`chat.alula.json`, `chat.alula.md`: the tests and the e2e only, not in the kit; the
+// integrator by the word of the owner, 2026-10-29, «по рекомендации»). A folder is checked when it is read: every
+// file is there, the alula_version of every tree, table and library is the one of the engine, the hash of every connection of a library is the
+// `definitions_hash` of its file. There is no copy to fall back on: an error names the path. The package `alula` knows the language only (spec 7a);
+// the registry of the product is the language and the codes of `journal.md`: the machines of the product call no primitive of their own.
+// The tests read the same files from the tree (`tree_product_machines`) and from `crew_harness.machines`.
 module crew_harness.product_machines
 
-import alula.machine.{NamedText, Registry, load_host}
+// ORACLE-WORKAROUND(32): `std.fs` is imported first in the first file of the unit, or `.join` on a `[]str` is E_RECV_METHOD_MISMATCH (spikes/env/README.md, task 116 (e)); reorder freely when item 32 is fixed
+import std.fs.{Fs, real_fs, Path, read_text, read_dir, try_exists}
+import alula.machine.{NamedText, Registry, load_host, text_of_file}
+import alula.machine_table.{ALULA_VERSION}
+import alula.machine_text.{definitions_hash}
+import std.encoding.json.{Json, JsonValue, JsonObject}
+import std.os.{Os, real_os, cwd}
 
-/// The scenarios of the machines of the product (`machines/product/tests/`), by the name of the file.
-export fn test_files() -> []NamedText => [
-    NamedText { name: "chat-ack-discarded.alula.test.json", text: embed_str("../../machines/product/tests/chat-ack-discarded.alula.test.json") },
-    NamedText { name: "chat-ack-restart.alula.test.json", text: embed_str("../../machines/product/tests/chat-ack-restart.alula.test.json") },
-    NamedText { name: "chat-ack.alula.test.json", text: embed_str("../../machines/product/tests/chat-ack.alula.test.json") },
-    NamedText { name: "chat-answer-after-cancel.alula.test.json", text: embed_str("../../machines/product/tests/chat-answer-after-cancel.alula.test.json") },
-    NamedText { name: "chat-answer-after-timeout.alula.test.json", text: embed_str("../../machines/product/tests/chat-answer-after-timeout.alula.test.json") },
-    NamedText { name: "chat-cancel-awaiting.alula.test.json", text: embed_str("../../machines/product/tests/chat-cancel-awaiting.alula.test.json") },
-    NamedText { name: "chat-cancel-idle.alula.test.json", text: embed_str("../../machines/product/tests/chat-cancel-idle.alula.test.json") },
-    NamedText { name: "chat-cancel-in-window.alula.test.json", text: embed_str("../../machines/product/tests/chat-cancel-in-window.alula.test.json") },
-    NamedText { name: "chat-chunk-renews-term.alula.test.json", text: embed_str("../../machines/product/tests/chat-chunk-renews-term.alula.test.json") },
-    NamedText { name: "chat-chunks-and-done.alula.test.json", text: embed_str("../../machines/product/tests/chat-chunks-and-done.alula.test.json") },
-    NamedText { name: "chat-cyrillic.alula.test.json", text: embed_str("../../machines/product/tests/chat-cyrillic.alula.test.json") },
-    NamedText { name: "chat-ignored-after-done.alula.test.json", text: embed_str("../../machines/product/tests/chat-ignored-after-done.alula.test.json") },
-    NamedText { name: "chat-ignored-chunk.alula.test.json", text: embed_str("../../machines/product/tests/chat-ignored-chunk.alula.test.json") },
-    NamedText { name: "chat-ignored-second-message.alula.test.json", text: embed_str("../../machines/product/tests/chat-ignored-second-message.alula.test.json") },
-    NamedText { name: "chat-journal-restart-answer.alula.test.json", text: embed_str("../../machines/product/tests/chat-journal-restart-answer.alula.test.json") },
-    NamedText { name: "chat-late-chunk.alula.test.json", text: embed_str("../../machines/product/tests/chat-late-chunk.alula.test.json") },
-    NamedText { name: "chat-message-opens-request.alula.test.json", text: embed_str("../../machines/product/tests/chat-message-opens-request.alula.test.json") },
-    NamedText { name: "chat-pump-order.alula.test.json", text: embed_str("../../machines/product/tests/chat-pump-order.alula.test.json") },
-    NamedText { name: "chat-refused-cancelled.alula.test.json", text: embed_str("../../machines/product/tests/chat-refused-cancelled.alula.test.json") },
-    NamedText { name: "chat-refused-ceiling-reached.alula.test.json", text: embed_str("../../machines/product/tests/chat-refused-ceiling-reached.alula.test.json") },
-    NamedText { name: "chat-refused-connection-lost.alula.test.json", text: embed_str("../../machines/product/tests/chat-refused-connection-lost.alula.test.json") },
-    NamedText { name: "chat-refused-form-not-fixed.alula.test.json", text: embed_str("../../machines/product/tests/chat-refused-form-not-fixed.alula.test.json") },
-    NamedText { name: "chat-refused-max-tokens.alula.test.json", text: embed_str("../../machines/product/tests/chat-refused-max-tokens.alula.test.json") },
-    NamedText { name: "chat-refused-max-turn-requests.alula.test.json", text: embed_str("../../machines/product/tests/chat-refused-max-turn-requests.alula.test.json") },
-    NamedText { name: "chat-refused-model-refused.alula.test.json", text: embed_str("../../machines/product/tests/chat-refused-model-refused.alula.test.json") },
-    NamedText { name: "chat-refused-no-result.alula.test.json", text: embed_str("../../machines/product/tests/chat-refused-no-result.alula.test.json") },
-    NamedText { name: "chat-refused-stopped-by-human.alula.test.json", text: embed_str("../../machines/product/tests/chat-refused-stopped-by-human.alula.test.json") },
-    NamedText { name: "chat-refused-timeout.alula.test.json", text: embed_str("../../machines/product/tests/chat-refused-timeout.alula.test.json") },
-    NamedText { name: "chat-refused-unknown-code.alula.test.json", text: embed_str("../../machines/product/tests/chat-refused-unknown-code.alula.test.json") },
-    NamedText { name: "chat-restart-after-answer.alula.test.json", text: embed_str("../../machines/product/tests/chat-restart-after-answer.alula.test.json") },
-    NamedText { name: "chat-restart-after-request.alula.test.json", text: embed_str("../../machines/product/tests/chat-restart-after-request.alula.test.json") },
-    NamedText { name: "chat-restart-before-send.alula.test.json", text: embed_str("../../machines/product/tests/chat-restart-before-send.alula.test.json") },
-    NamedText { name: "chat-second-answer.alula.test.json", text: embed_str("../../machines/product/tests/chat-second-answer.alula.test.json") },
-    NamedText { name: "chat-silent-agent.alula.test.json", text: embed_str("../../machines/product/tests/chat-silent-agent.alula.test.json") },
-    NamedText { name: "chat-start.alula.test.json", text: embed_str("../../machines/product/tests/chat-start.alula.test.json") },
-    NamedText { name: "chat-timeout-awaiting.alula.test.json", text: embed_str("../../machines/product/tests/chat-timeout-awaiting.alula.test.json") },
-    NamedText { name: "chat-tool-and-permission.alula.test.json", text: embed_str("../../machines/product/tests/chat-tool-and-permission.alula.test.json") },
-    NamedText { name: "chat-unknown-name.alula.test.json", text: embed_str("../../machines/product/tests/chat-unknown-name.alula.test.json") },
-    NamedText { name: "chat-unknown-request.alula.test.json", text: embed_str("../../machines/product/tests/chat-unknown-request.alula.test.json") },
-    NamedText { name: "dialog-answer-while-dead.alula.test.json", text: embed_str("../../machines/product/tests/dialog-answer-while-dead.alula.test.json") },
-    NamedText { name: "dialog-cancel-before-send.alula.test.json", text: embed_str("../../machines/product/tests/dialog-cancel-before-send.alula.test.json") },
-    NamedText { name: "dialog-cancel-idle.alula.test.json", text: embed_str("../../machines/product/tests/dialog-cancel-idle.alula.test.json") },
-    NamedText { name: "dialog-cancel-then-next.alula.test.json", text: embed_str("../../machines/product/tests/dialog-cancel-then-next.alula.test.json") },
-    NamedText { name: "dialog-closed-table-only.alula.test.json", text: embed_str("../../machines/product/tests/dialog-closed-table-only.alula.test.json") },
-    NamedText { name: "dialog-flow-ack-discarded.alula.test.json", text: embed_str("../../machines/product/tests/dialog-flow-ack-discarded.alula.test.json") },
-    NamedText { name: "dialog-flow-ack-restart.alula.test.json", text: embed_str("../../machines/product/tests/dialog-flow-ack-restart.alula.test.json") },
-    NamedText { name: "dialog-flow-ack.alula.test.json", text: embed_str("../../machines/product/tests/dialog-flow-ack.alula.test.json") },
-    NamedText { name: "dialog-flow-answer-after-cancel.alula.test.json", text: embed_str("../../machines/product/tests/dialog-flow-answer-after-cancel.alula.test.json") },
-    NamedText { name: "dialog-flow-answer-after-timeout.alula.test.json", text: embed_str("../../machines/product/tests/dialog-flow-answer-after-timeout.alula.test.json") },
-    NamedText { name: "dialog-flow-cancel-awaiting.alula.test.json", text: embed_str("../../machines/product/tests/dialog-flow-cancel-awaiting.alula.test.json") },
-    NamedText { name: "dialog-flow-cancel-in-window.alula.test.json", text: embed_str("../../machines/product/tests/dialog-flow-cancel-in-window.alula.test.json") },
-    NamedText { name: "dialog-flow-chunk-renews-term.alula.test.json", text: embed_str("../../machines/product/tests/dialog-flow-chunk-renews-term.alula.test.json") },
-    NamedText { name: "dialog-flow-chunks-and-done.alula.test.json", text: embed_str("../../machines/product/tests/dialog-flow-chunks-and-done.alula.test.json") },
-    NamedText { name: "dialog-flow-cyrillic.alula.test.json", text: embed_str("../../machines/product/tests/dialog-flow-cyrillic.alula.test.json") },
-    NamedText { name: "dialog-flow-ignored-chunk.alula.test.json", text: embed_str("../../machines/product/tests/dialog-flow-ignored-chunk.alula.test.json") },
-    NamedText { name: "dialog-flow-ignored-second-message.alula.test.json", text: embed_str("../../machines/product/tests/dialog-flow-ignored-second-message.alula.test.json") },
-    NamedText { name: "dialog-flow-journal-restart-answer.alula.test.json", text: embed_str("../../machines/product/tests/dialog-flow-journal-restart-answer.alula.test.json") },
-    NamedText { name: "dialog-flow-late-chunk.alula.test.json", text: embed_str("../../machines/product/tests/dialog-flow-late-chunk.alula.test.json") },
-    NamedText { name: "dialog-flow-message-opens-request.alula.test.json", text: embed_str("../../machines/product/tests/dialog-flow-message-opens-request.alula.test.json") },
-    NamedText { name: "dialog-flow-pump-order.alula.test.json", text: embed_str("../../machines/product/tests/dialog-flow-pump-order.alula.test.json") },
-    NamedText { name: "dialog-flow-refused-model-refused.alula.test.json", text: embed_str("../../machines/product/tests/dialog-flow-refused-model-refused.alula.test.json") },
-    NamedText { name: "dialog-flow-refused-unknown-code.alula.test.json", text: embed_str("../../machines/product/tests/dialog-flow-refused-unknown-code.alula.test.json") },
-    NamedText { name: "dialog-flow-restart-after-answer.alula.test.json", text: embed_str("../../machines/product/tests/dialog-flow-restart-after-answer.alula.test.json") },
-    NamedText { name: "dialog-flow-restart-after-request.alula.test.json", text: embed_str("../../machines/product/tests/dialog-flow-restart-after-request.alula.test.json") },
-    NamedText { name: "dialog-flow-restart-before-send.alula.test.json", text: embed_str("../../machines/product/tests/dialog-flow-restart-before-send.alula.test.json") },
-    NamedText { name: "dialog-flow-second-answer.alula.test.json", text: embed_str("../../machines/product/tests/dialog-flow-second-answer.alula.test.json") },
-    NamedText { name: "dialog-flow-silent-agent.alula.test.json", text: embed_str("../../machines/product/tests/dialog-flow-silent-agent.alula.test.json") },
-    NamedText { name: "dialog-flow-start.alula.test.json", text: embed_str("../../machines/product/tests/dialog-flow-start.alula.test.json") },
-    NamedText { name: "dialog-flow-timeout-awaiting.alula.test.json", text: embed_str("../../machines/product/tests/dialog-flow-timeout-awaiting.alula.test.json") },
-    NamedText { name: "dialog-flow-tool-and-permission.alula.test.json", text: embed_str("../../machines/product/tests/dialog-flow-tool-and-permission.alula.test.json") },
-    NamedText { name: "dialog-flow-unknown-name.alula.test.json", text: embed_str("../../machines/product/tests/dialog-flow-unknown-name.alula.test.json") },
-    NamedText { name: "dialog-flow-unknown-request.alula.test.json", text: embed_str("../../machines/product/tests/dialog-flow-unknown-request.alula.test.json") },
-    NamedText { name: "dialog-restart-before-send-second.alula.test.json", text: embed_str("../../machines/product/tests/dialog-restart-before-send-second.alula.test.json") },
-    NamedText { name: "dialog-second-turn.alula.test.json", text: embed_str("../../machines/product/tests/dialog-second-turn.alula.test.json") },
-    NamedText { name: "dialog-timeout-then-next.alula.test.json", text: embed_str("../../machines/product/tests/dialog-timeout-then-next.alula.test.json") },
-    NamedText { name: "dialog-turn-ends.alula.test.json", text: embed_str("../../machines/product/tests/dialog-turn-ends.alula.test.json") },
-    NamedText { name: "free-input-chat-message.alula.test.json", text: embed_str("../../machines/product/tests/free-input-chat-message.alula.test.json") },
-    NamedText { name: "free-input-counter-stays.alula.test.json", text: embed_str("../../machines/product/tests/free-input-counter-stays.alula.test.json") },
-    NamedText { name: "free-input-dialog-close.alula.test.json", text: embed_str("../../machines/product/tests/free-input-dialog-close.alula.test.json") },
-    NamedText { name: "free-input-no-gate-record.alula.test.json", text: embed_str("../../machines/product/tests/free-input-no-gate-record.alula.test.json") },
-    NamedText { name: "free-input-signal-without-row.alula.test.json", text: embed_str("../../machines/product/tests/free-input-signal-without-row.alula.test.json") }
-]
+/// ProductMachines: the files of the machines of the product read from the folder `dir` and checked, by the name in the folder
+/// (`dialog.alula.json`, `libs/call_cancel.alula.md`).
+export type ProductMachines { dir str, files []NamedText }
 
-/// The text of the machine of the chat session (`machines/product/chat.alula.json`).
-export fn chat_machine_text() -> str => embed_str("../../machines/product/chat.alula.json")
+/// The files that the folder of the machines of the product must hold; the libraries are those that the trees connect.
+export fn product_file_names() -> []str => ["dialog.alula.json", "dialog.alula.md", "journal.md"]
 
-/// The text of the machine of the many-turn chat session (`machines/product/dialog.alula.json`), the translation of `dialog.alula.md`: the machine that the session server runs.
-export fn dialog_machine_text() -> str => embed_str("../../machines/product/dialog.alula.json")
+/// The text of the file `name` of the folder ("" for a file that is not read).
+export fn ProductMachines @text(name str) -> str => text_of_file(@files, name)
 
-/// The table of the journal codes of the product (`machines/product/journal.md`): `user_message`, `agent_chunk`, `agent_done`, `agent_refused`, `cancelled_while_waiting`, `no_answer_in_time`,
-/// `cancelled_before_request`, `session_closed`, `turn_answered`, `turn_refused`.
-export fn product_journal_text() -> str => embed_str("../../machines/product/journal.md")
+/// The tree of the many-turn chat that the hub runs.
+export fn ProductMachines @dialog() -> str => @text("dialog.alula.json")
 
-/// The registry of the host "product": the language and the codes of the journal of the product.
+/// The table of the many-turn chat.
+export fn ProductMachines @dialog_table() -> str => @text("dialog.alula.md")
+
+/// The table of the journal codes of the product: `user_message`, `agent_chunk`, `agent_done`, `agent_refused`, `cancelled_while_waiting`,
+/// `no_answer_in_time`, `cancelled_before_request`, `session_closed`, `turn_answered`, `turn_refused`.
+export fn ProductMachines @journal() -> str => @text("journal.md")
+
+/// The registry of the host "product": the language and the codes of `journal.md`.
+export fn ProductMachines @registry() -> Result[Registry, str] {
+    match load_host("", @journal()) {
+        Ok(reg) => Ok(reg)
+        Err(errors) => Err("the journal ${@dir}/journal.md is wrong: ${pm_join(errors, " | ")}")
+    }
+}
+
+// ----- reading a folder -----
+
+fn pm_read(path str) -> Result[str, str] {
+    with Fs = real_fs() {
+        ro there = match try_exists(Path.from_bytes(path.bytes())) {
+            Ok(b) => b
+            Err(e) => false
+        }
+        if !there { return Err("the machine file ${path} is missing") }
+        match read_text(Path.from_bytes(path.bytes())) {
+            Ok(t) => Ok(t)
+            Err(e) => Err("the machine file ${path} cannot be read")
+        }
+    }
+}
+
+fn pm_object(text str) -> Option[JsonObject] {
+    match Json.parse(text) {
+        Ok(v) => v.object()
+        Err(e) => None
+    }
+}
+
+fn pm_str(o JsonObject, key str) -> str {
+    match o.get(key) {
+        Some(v) => v.str() ?? ""
+        None => ""
+    }
+}
+
+/// A connection of a library: the file beside the machine and the hash that the machine was built with.
+type PmInclude { file str, hash str }
+
+fn pm_includes(o JsonObject) -> []PmInclude {
+    mut out = []PmInclude.new()
+    match o.get("includes") {
+        Some(list) => {
+            for item in list.array() ?? []JsonValue.new() {
+                match item.object() {
+                    Some(inc) => out.push(PmInclude { file: pm_str(inc, "file"), hash: pm_str(inc, "hash") })
+                    None => ()
+                }
+            }
+        }
+        None => ()
+    }
+    out
+}
+
+// The value of the line `- <key>: <value>` of the header of a table or a library ("" when there is none).
+fn pm_header(text str, key str) -> str {
+    for line in text.split("\n") {
+        ro l = line.trim_ascii()
+        if l.starts_with("- ${key}:") { return l[key.byte_len() + 3..].trim_ascii() }
+        if l.starts_with("## ") { return "" }
+    }
+    ""
+}
+
+// The connections of a table: the lines `- Файл: libs/…` and the line `- Хеш: …` after each.
+fn pm_table_includes(text str) -> []PmInclude {
+    mut out = []PmInclude.new()
+    mut file = ""
+    for line in text.split("\n") {
+        ro l = line.trim_ascii()
+        if l.starts_with("- Файл: ") { file = l["- Файл: ".byte_len()..].trim_ascii() }
+        if l.starts_with("- Хеш: ") && file.byte_len() > 0 {
+            out.push(PmInclude { file, hash: l["- Хеш: ".byte_len()..].trim_ascii() })
+            file = ""
+        }
+    }
+    out
+}
+
+fn pm_version_error(path str, version str) -> str =>
+    "${path}: alula_version ${if version.byte_len() > 0 { version } else { "(none)" }}, the engine reads ${ALULA_VERSION}; the machines and the programs are of different releases (migrate the files with the script of the package alula)"
+
+/// The checks of the files of a folder (`files` by the name in the folder): every file of `product_file_names` and every connected library is there,
+/// the alula_version of every tree, table and library is the one of the engine, the hash of every connection is the `definitions_hash` of the file.
+export fn check_product_machines(dir str, files []NamedText) -> Result[ProductMachines, str] {
+    for name in product_file_names() {
+        mut there = false
+        for f in files {
+            if f.name == name { there = true }
+        }
+        if !there { return Err("the machine file ${dir}/${name} is missing") }
+    }
+    for name in ["dialog.alula.json"] {
+        ro o = match pm_object(text_of_file(files, name)) {
+            Some(x) => x
+            None => return Err("${dir}/${name}: the tree is not a JSON object")
+        }
+        ro version = pm_str(o, "alula_version")
+        if version != ALULA_VERSION { return Err(pm_version_error("${dir}/${name}", version)) }
+        pm_check_includes(dir, name, pm_includes(o), files)?
+    }
+    for name in ["dialog.alula.md"] {
+        ro text = text_of_file(files, name)
+        ro version = pm_header(text, "alula_version")
+        if version != ALULA_VERSION { return Err(pm_version_error("${dir}/${name}", version)) }
+        pm_check_includes(dir, name, pm_table_includes(text), files)?
+    }
+    for f in files {
+        if f.name.starts_with("libs/") {
+            ro version = pm_header(f.text, "alula_version")
+            if version != ALULA_VERSION { return Err(pm_version_error("${dir}/${f.name}", version)) }
+        }
+    }
+    Ok(ProductMachines { dir, files })
+}
+
+fn pm_check_includes(dir str, machine str, includes []PmInclude, files []NamedText) -> Result[(), str] {
+    for inc in includes {
+        mut found = false
+        for f in files {
+            if f.name == inc.file {
+                found = true
+                ro actual = definitions_hash(f.text)
+                if actual != inc.hash {
+                    return Err("${dir}/${inc.file}: the connection in ${dir}/${machine} names the hash ${inc.hash}, the file has the hash ${actual} (definitions_hash); the library and the machine are of different builds")
+                }
+            }
+        }
+        if !found { return Err("the library ${dir}/${inc.file} that ${dir}/${machine} connects is missing") }
+    }
+    Ok(())
+}
+
+/// The machines of the product from the folder `dir`: the files of `product_file_names` and the libraries that the trees and the tables connect,
+/// checked by `check_product_machines`. An error names the path; nothing is taken from anywhere else.
+export fn load_product_machines(dir str) -> Result[ProductMachines, str] {
+    mut files = []NamedText.new()
+    for name in product_file_names() {
+        files.push(NamedText { name, text: pm_read("${dir}/${name}")? })
+    }
+    mut libs = []str.new()
+    for name in ["dialog.alula.json"] {
+        match pm_object(text_of_file(files, name)) {
+            Some(o) => {
+                for inc in pm_includes(o) {
+                    if !pm_has(libs, inc.file) { libs.push(inc.file) }
+                }
+            }
+            None => ()
+        }
+    }
+    for name in ["dialog.alula.md"] {
+        for inc in pm_table_includes(text_of_file(files, name)) {
+            if !pm_has(libs, inc.file) { libs.push(inc.file) }
+        }
+    }
+    for lib in libs {
+        files.push(NamedText { name: lib, text: pm_read("${dir}/${lib}")? })
+    }
+    check_product_machines(dir, files)
+}
+
+// The words with `sep` between them (`[]str.join` and `Path.join` share the name in one unit on Oracle 0.1.0).
+export fn pm_join(words []str, sep str) -> str {
+    mut out = ""
+    mut i = 0
+    while i < words.len() {
+        out = if i == 0 { words[i] } else { "${out}${sep}${words[i]}" }
+        i += 1
+    }
+    out
+}
+
+fn pm_has(names []str, name str) -> bool {
+    for n in names {
+        if n == name { return true }
+    }
+    false
+}
+
+// ----- where the folder is -----
+
+// The folder of a program by the path it was started with (`argv[0]`): "." for a bare name.
+fn pm_program_dir(program str) -> str {
+    mut at = -1
+    mut i = 0
+    ro bytes = program.bytes()
+    while i < bytes.len() {
+        if bytes[i] == 47 || bytes[i] == 92 { at = i }
+        i += 1
+    }
+    if at < 0 { "." } else { program[..at] }
+}
+
+/// The folders where the machines of a program started as `program` are looked for, in order: `machines/product` beside the program (the release
+/// kit), then `machines/product` beside the folder of the program (the build of the tree: `target/` beside `machines/`).
+export fn machines_dir_candidates(program str) -> []str {
+    ro dir = pm_program_dir(program)
+    ["${dir}/machines/product", "${dir}/../machines/product"]
+}
+
+fn pm_has_machines(dir str) -> bool {
+    with Fs = real_fs() {
+        match try_exists(Path.from_bytes("${dir}/dialog.alula.json".bytes())) {
+            Ok(b) => b
+            Err(e) => false
+        }
+    }
+}
+
+/// The folder of the machines: the setting `machines_dir` (or CREW_SERVER_MACHINES_DIR) when it is given, else the first of
+/// `machines_dir_candidates(program)` that holds `dialog.alula.json`; none - an error that names the folders looked at.
+export fn find_machines_dir(setting str, program str) -> Result[str, str] {
+    if setting.byte_len() > 0 { return Ok(setting) }
+    ro candidates = machines_dir_candidates(program)
+    for dir in candidates {
+        if pm_has_machines(dir) { return Ok(dir) }
+    }
+    Err("the machines of the product are not found: no dialog.alula.json in ${pm_join(candidates, " or ")}; put the folder machines/product beside the program or name it by the setting machines_dir or CREW_SERVER_MACHINES_DIR")
+}
+
+// ----- the tree of the repository (the tests) -----
+
+/// The root of the tree of the repository: the nearest folder with `nova.toml` upward from the working directory (the tests run in the tree).
+export fn tree_root() -> str {
+    mut dir = with Os = real_os() {
+        match cwd() {
+            Ok(p) => p.display().replace("\\", "/")
+            Err(e) => panic("no working directory")
+        }
+    }
+    mut hops = 0
+    while hops < 12 {
+        ro found = with Fs = real_fs() {
+            match try_exists(Path.from_bytes("${dir}/nova.toml".bytes())) {
+                Ok(b) => b
+                Err(e) => false
+            }
+        }
+        if found { return dir }
+        ro up = pm_program_dir(dir)
+        if up == "." || up == dir { break }
+        dir = up
+        hops += 1
+    }
+    panic("nova.toml was not found above the working directory")
+}
+
+/// The text of the file `path` of the tree (`machines/product/journal.md`); a file that is not there stops the test with its path.
+export fn tree_text(path str) -> str {
+    match pm_read("${tree_root()}/${path}") {
+        Ok(t) => t
+        Err(e) => panic(e)
+    }
+}
+
+/// The names of the files of the folder `path` of the tree, its subfolders too (`libs/pause.alula.md`), in the order of the names.
+export fn tree_paths(path str) -> []str {
+    ro out = pm_walk("${tree_root()}/${path}", "")
+    mut sorted = []str.new()
+    for name in out {
+        mut at = sorted.len()
+        while at > 0 && name < sorted[at - 1] { at -= 1 }
+        sorted.insert(at, name)
+    }
+    sorted
+}
+
+fn pm_walk(dir str, prefix str) -> []str {
+    mut out = []str.new()
+    with Fs = real_fs() {
+        match read_dir(Path.from_bytes(dir.bytes())) {
+            Err(e) => ()
+            Ok(entries) => {
+                for entry in entries {
+                    match entry.name_str() {
+                        Some(name) => {
+                            if entry.is_dir() {
+                                for inner in pm_walk("${dir}/${name}", "${prefix}${name}/") { out.push(inner) }
+                            } else {
+                                out.push("${prefix}${name}")
+                            }
+                        }
+                        None => ()
+                    }
+                }
+            }
+        }
+    }
+    out
+}
+
+/// The folder of the machines of the product in the tree.
+export fn tree_machines_dir() -> str => "${tree_root()}/machines/product"
+
+/// The machines of the product of the tree, checked; a folder that does not pass stops the test.
+export fn tree_product_machines() -> ProductMachines {
+    match load_product_machines(tree_machines_dir()) {
+        Ok(m) => m
+        Err(e) => panic(e)
+    }
+}
+
+/// The scenarios of the machines of the product (`machines/product/tests/` of the tree), by the name of the file.
+export fn test_files() -> []NamedText {
+    mut out = []NamedText.new()
+    for name in tree_paths("machines/product/tests") {
+        if name.ends_with(".alula.test.json") { out.push(NamedText { name, text: tree_text("machines/product/tests/${name}") }) }
+    }
+    out
+}
+
+/// The tree of the chat session of the tree (`machines/product/chat.alula.json`; not a machine of the kit).
+export fn chat_machine_text() -> str => tree_text("machines/product/chat.alula.json")
+
+/// The tree of the many-turn chat of the tree (`machines/product/dialog.alula.json`), the translation of `dialog.alula.md`.
+export fn dialog_machine_text() -> str => tree_product_machines().dialog()
+
+/// The table of the journal codes of the product of the tree (`machines/product/journal.md`).
+export fn product_journal_text() -> str => tree_product_machines().journal()
+
+/// The registry of the host "product" of the tree: the language and the codes of the journal of the product.
 export fn product_registry() -> Registry {
-    match load_host("", product_journal_text()) {
+    match tree_product_machines().registry() {
         Ok(reg) => reg
-        Err(errors) => panic("the registry of the product is wrong: ${errors.join(" | ")}")
+        Err(e) => panic("the registry of the product is wrong: ${e}")
     }
 }
