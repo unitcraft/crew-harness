@@ -191,7 +191,7 @@ test('ошибка переводит состояние в «ошибка»', (
   assert.equal(s.state, 'error');
   const agent = s.messages.find((x) => x.role === 'agent');
   assert.equal(agent.status, 'error');
-  assert.equal(agent.reason, 'обрыв');
+  assert.match(agent.reason, /Точная причина недоступна/);
 });
 
 test('новое сообщение владельца после отказа снова переводит в «отвечает»', () => {

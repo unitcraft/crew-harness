@@ -20,6 +20,7 @@ import { normalizeQuestions, summarize } from './question.js';
 import { INTERACTIVE_STATE, parseRouteState, subtaskNotes } from './routes.js';
 import { parseMachineState } from './machines.js';
 import { parseTurnRequest, addRequest } from './request.js';
+import { safeError } from './delivery.js';
 
 export const KINDS = Object.freeze([
   'session_created', 'user_message', 'agent_chunk', 'agent_done', 'agent_refused',
@@ -305,19 +306,19 @@ function apply(session, event) {
 
     case 'agent_chunk': {
       const { index, message } = agentMessageFor(session.messages, turn);
-      if (message.status !== 'streaming') return session; // кусок после отмены/отказа/конца — запоздалый
+      if (message.status !== 'streaming' && message.status !== 'error') return session; // после отмены/отказа/конца — запоздалый
       if (message.chunks.some((c) => c.step === event.step)) return session; // другой id, тот же шаг: уже есть
       const chunks = [...message.chunks, { step: event.step, text: str(input.text) }].sort((a, b) => a.step - b.step);
       return {
         ...session,
         state: session.state === 'permission' ? 'permission' : 'answering',
-        messages: putMessage(session.messages, index, { ...message, chunks, text: chunks.map((c) => c.text).join('') }),
+        messages: putMessage(session.messages, index, { ...message, status: 'streaming', reason: '', chunks, text: chunks.map((c) => c.text).join('') }),
       };
     }
 
     case 'agent_done': {
       const { index, message } = agentMessageFor(session.messages, turn);
-      if (message.status !== 'streaming') return session;
+      if (message.status !== 'streaming' && message.status !== 'error') return session;
       return {
         ...session,
         state: 'idle',
@@ -502,10 +503,14 @@ function apply(session, event) {
     }
 
     case 'error': {
+      // No explicit turn means a session-level failure, not a failure of an arbitrary previous answer.
+      if (!str(input.turn)) return { ...session, state: 'error', pending: null, pendingQuestion: null,
+        switchingTo: '', optionsPending: false,
+        messages: [...session.messages, { role: 'session_error', key: `err:${event.id}`, reason: safeError(input.message) }] };
       const { index, message } = agentMessageFor(session.messages, turn);
       const messages = turn && message.status === 'streaming'
-        ? putMessage(session.messages, index, { ...message, status: 'error', reason: str(input.message) })
-        : session.messages;
+        ? putMessage(session.messages, index, { ...message, status: 'error', reason: safeError(input.message) })
+        : [...session.messages, { role: 'session_error', key: `err:${event.id}`, turn: str(input.turn), reason: safeError(input.message) }];
       return { ...session, state: 'error', pending: null, pendingQuestion: null, messages, switchingTo: '', optionsPending: false };
     }
 
@@ -535,7 +540,7 @@ export function reduce(model, event) {
   }
 
   if (event.kind === 'session_created') {
-    if (model.sessions[event.trace]) return { ...model, seen };
+    if (model.sessions[event.trace] && !model.sessions[event.trace].draft) return { ...model, seen };
     const session = {
       id: event.trace,
       name: str(event.input.name, event.trace),

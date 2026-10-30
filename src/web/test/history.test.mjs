@@ -6,6 +6,7 @@ import { historyStep, NO_HISTORY } from '../history.js';
 import { messageTime } from '../lists.js';
 import { createQueue } from '../queue.js';
 import { S, t } from '../strings.js';
+import { restoreText } from '../delivery.js';
 
 const web = new URL('../', import.meta.url);
 const read = (name) => fs.readFileSync(new URL(name, web), 'utf8');
@@ -112,7 +113,9 @@ test('сообщение владельца: ряд иконок (доставл
   assert.match(view, /if \(queued\) \{\s*row\.append\(iconButton\(doc, 'i-x', t\('msg\.unqueue'\)/);
   assert.match(view, /handlers\.onSendNow\(currentTrace, item\.index\)/);
   // «вернуть»: текст встаёт перед набранным через пустую строку, курсор после вставленного, ничего не отправляется
-  assert.match(view, /input\.value = keep\.trim\(\) === '' \? text : `\$\{text\}\\n\\n\$\{keep\}`;/);
+  assert.match(view, /input\.value = restoreText\(text, keep\);/);
+  assert.equal(restoreText('вернуть', 'черновик'), 'вернуть\n\nчерновик');
+  assert.equal(restoreText('вернуть', ''), 'вернуть');
   assert.match(view, /input\.setSelectionRange\(text\.length, text\.length\)/);
   // под ответом агента ряд только с «Скопировать» и временем, виден при наведении на ответ
   assert.match(css, /\.item-actions\[data-row="hover"\] \{ visibility: hidden; \}/);

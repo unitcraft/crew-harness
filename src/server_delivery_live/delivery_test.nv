@@ -1,0 +1,33 @@
+module crew_harness.server_delivery_live
+
+import crew_harness.server.{kit_files, scenario_delivery_receipt, scenario_delivery_intent_crash, scenario_delivery_refusal, scenario_delivery_append_crash, scenario_delivery_new_actions}
+
+test "260: new owner actions after multiple restarts have new client identities" {
+    ro report = scenario_delivery_new_actions(kit_files("delivery260-new-actions", 30000))
+    if report.byte_len() > 0 { panic("delivery new actions: ${report}") }
+    assert(report == "")
+}
+
+test "260: receipt is scoped to the session, replayed after restart and never repeats the turn" {
+    ro report = scenario_delivery_receipt(kit_files("delivery260", 30000))
+    if report.byte_len() > 0 { panic("delivery receipt: ${report}") }
+    assert(report == "")
+}
+
+test "260: crash after durable intent cannot replay an uncertain side effect" {
+    ro report = scenario_delivery_intent_crash(kit_files("delivery260-crash", 30000))
+    if report.byte_len() > 0 { panic("delivery intent crash: ${report}") }
+    assert(report == "")
+}
+
+test "260: pre-turn launch refusal names the send, not a previous turn" {
+    ro report = scenario_delivery_refusal()
+    if report.byte_len() > 0 { panic("delivery refusal: ${report}") }
+    assert(report == "")
+}
+
+test "260: crash after engine append but before final receipt does not create another user turn" {
+    ro report = scenario_delivery_append_crash(kit_files("delivery260-after-append", 30000))
+    if report.byte_len() > 0 { panic("delivery append crash: ${report}") }
+    assert(report == "")
+}

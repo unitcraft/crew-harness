@@ -1614,7 +1614,79 @@ export fn Hub mut @handle(conn int, text str) Proc Detach Time -> () {
     if kind == "session_created" {
         @create(conn, trace, input)
     } else if kind == "user_message" {
+        // Task 260: a page id is a delivery identity, not an engine turn id. Never replay an acknowledged send.
+        ro client_id = jtext(o, "id")
+        ro before_at = @find(trace)
+        mut previous_turn = ""
+        if before_at >= 0 {
+            mut s = @sessions[before_at]
+            previous_turn = s.turn
+            if client_id.byte_len() > 0 {
+                mut known_text = ""
+                for e in history_in(@settings.store == "pg", @settings.data_dir, s) {
+                    if e.name == "message_delivery" {
+                        match jobject(e.input) {
+                            Some(receipt) => {
+                                if jtext(receipt, "client_id") == client_id {
+                                    known_text = e.input
+                                }
+                            }
+                            None => ()
+                        }
+                    }
+                }
+                if known_text.byte_len() > 0 {
+                    match jobject(known_text) {
+                        Some(known) => @send(conn, event_line("delivery-${client_id}", trace, s.engine.step_number(), "message_delivery", known, now_millis()))
+                        None => ()
+                    }
+                    return
+                }
+                // Persist a receipt BEFORE a possible side effect. A crash between this and the final receipt is
+                // deliberately an uncertain outcome, never permission to send the same message again.
+                mut pending = JsonObject.new()
+                jput(pending, "client_id", JsonValue.str(client_id))
+                jput(pending, "accepted", JsonValue.bool(false))
+                jput(pending, "turn", JsonValue.str(""))
+                accept_in(@settings.store == "pg", @settings.data_dir, s, Incoming.signal("message_delivery", JsonValue.object(pending).to_str()))
+                @drain(before_at)
+            }
+        }
+        ro error_start = @out.len()
         @say(trace, jtext(input, "text"), jlist(input, "images"))
+        // Synchronous pre-turn refusals belong to this send, not to the previous engine turn.
+        mut error_at = error_start
+        while error_at < @out.len() {
+            mut outgoing = @out[error_at]
+            match jobject(outgoing.text) {
+                Some(line) => {
+                    if jtext(line, "kind") == "error" && jtext(line, "trace") == trace {
+                        match jchild(line, "input") {
+                            Some(data) => {
+                                mut error_data = error_input(jtext(data, "turn"), jtext(data, "message"))
+                                jput(error_data, "client_id", JsonValue.str(client_id))
+                                outgoing.text = event_line(jtext(line, "id"), trace, jint(line, "step"), "error", error_data, jint(line, "time"))
+                            }
+                            None => ()
+                        }
+                    }
+                }
+                None => ()
+            }
+            error_at += 1
+        }
+        ro after_at = @find(trace)
+        if after_at >= 0 && client_id.byte_len() > 0 {
+            mut s = @sessions[after_at]
+            mut receipt = JsonObject.new()
+            jput(receipt, "client_id", JsonValue.str(client_id))
+            ro accepted = s.turn.byte_len() > 0 && s.turn != previous_turn
+            jput(receipt, "accepted", JsonValue.bool(accepted))
+            jput(receipt, "turn", JsonValue.str(if accepted { s.turn } else { "" }))
+            // A host metadata event: no scenario transition, no provider payload or secret is journalled.
+            accept_in(@settings.store == "pg", @settings.data_dir, s, Incoming.signal("message_delivery", JsonValue.object(receipt).to_str()))
+            @drain(after_at)
+        }
     } else if kind == "cancel" {
         @cancel(trace)
     } else if kind == "permission_decision" {
@@ -1743,7 +1815,7 @@ fn Hub mut @watch_agent(at int) Time -> () {
         s.announced = true
         ro why = s.clients[0].last_error()
         @say_log("the agent of ${s.id} refused to start: ${why}")
-        @tell_error(0, s.id, s.engine.step_number(), "", "the agent refused to start: ${why}")
+        @tell_error(0, s.id, s.engine.step_number(), if s.engine.open_ids().len() > 0 { s.turn } else { "" }, "the agent refused to start: ${why}")
     }
     @sessions[at] = s
     if model_arrived { @drain(at) }

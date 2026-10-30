@@ -259,7 +259,16 @@ fn Rig mut @collect() -> () {
 
 /// A page sends an event of this kind about this session; `input` is the JSON text of its input.
 export fn Rig mut @page(conn int, kind str, trace str, input str) Proc Detach Time -> () {
-    @hub.handle(conn, kit_page_text(kind, trace, input))
+    // A fresh test action needs a fresh identity even after recreating the Rig. The number
+    // of heard frames resets on restart; the durable engine version does not. Replays use page_id.
+    ro at = @hub.find(trace)
+    ro version = if at >= 0 { @hub.sessions[at].engine.step_number() } else { 0 }
+    @hub.handle(conn, kit_page_text(kind, trace, input).replace("page-${kind}-${trace}", "page-${kind}-${trace}-${version}"))
+    @collect()
+}
+
+export fn Rig mut @page_id(conn int, kind str, trace str, input str, id str) Proc Detach Time -> () {
+    @hub.handle(conn, kit_page_text(kind, trace, input).replace("page-${kind}-${trace}", id))
     @collect()
 }
 
@@ -594,7 +603,9 @@ export fn scenario_question(settings ServerSettings) Proc Detach Time Net Fs Os 
     rig.page(1, "question_answer", "s-ask", "{\"request\":\"${request}\",\"skipped\":false,\"answers\":[{\"index\":0,\"selected\":[\"YAML\"],\"other\":\"\"}]}")
     c.expect(rig.until(KIT_DONE, 15000), "the turn ends after the answer")
     ro lines = rig.lines_for(1)
-    c.expect(kit_with(lines, "accept") == 1 && kit_with(lines, "question_0") == 1, "the agent got the choice")
+    // Check the actual answer, not incidental host metadata such as delivery.accepted.
+    ro choice_reply = answer_of(lines, line_input(asked, "turn"))
+    c.expect(choice_reply.contains("\"action\":\"accept\"") && choice_reply.contains("\"question_0\":\"YAML\""), "the agent got the choice")
     c.expect(kit_with(lines, "\"kind\":\"question_resolved\"") == 1, "the page is told the question is settled")
     // the second question is skipped
     rig.page(1, "user_message", "s-ask", "{\"turn\":\"t2\",\"text\":\"ask again\"}")

@@ -179,15 +179,18 @@ test('задача 192.6: шапка чата — только название,
   assert.match(css, /\.head-menu \.menu\.session-menu \{[^}]*max-width: calc\(100vw - 20px\)/);
 });
 
-test('задача 192.6: папка не git — Worktree недоступен и сессия уходит без дерева; сервер молчит — красная строка и текст возвращается в поле', () => {
+test('задача 192.6/260: папка не git — без Worktree; таймаут сохраняет сообщение и исходный id сессии', () => {
   const app = read('app.js');
   assert.match(read('projects.js'), /if \(raw && raw\.repo === false\) folder\.repo = false/);
   assert.match(view, /worktreeButton\.disabled = hasTree \|\| noRepo/);
   assert.match(view, /noRepo \? t\('route\.worktree_not_repo'\)/);
   assert.match(app, /worktree: draft\.worktree !== false && treeOk/);
-  assert.match(app, /watchCreated\(trace, draft, text\)/);
+  assert.match(app, /watchCreated\(trace\)/);
   assert.match(app, /flash\(t\('chat\.create_timeout'/);
-  assert.match(app, /view\.putText\(id, text\)/);
+  const watcher = app.slice(app.indexOf('function watchCreated('), app.indexOf('function draw('));
+  assert.match(watcher, /ui\.selected = trace/);
+  assert.doesNotMatch(watcher, /newId\(/, 'поздний ответ не должен создать вторую сессию');
+  assert.match(app, /delivery\.add\(event, savedSession\(trace\)\)/);
   assert.match(view, /putText\(trace, text\) \{\s*drafts\.set\(trace, text\);/);
   assert.match(read('strings.js'), /Папка проекта не git-репозиторий: Worktree недоступен/);
 });

@@ -1,0 +1,119 @@
+module crew_harness.server
+
+import alula.engine.{Incoming}
+
+fn delivery_count(lines []str, kind str) -> int {
+    mut count = 0
+    for line in lines { if line.contains("\"kind\":\"${kind}\"") { count += 1 } }
+    count
+}
+
+export fn scenario_delivery_new_actions(settings ServerSettings) Proc Detach Time Net Fs Os -> str {
+    mut c = Check { failures: []str.new() }
+    mut first = rig_open(settings)
+    first.attach(1)
+    first.page(1, "session_created", "new-actions", "{\"name\":\"new actions\",\"agent\":\"opencode\"}")
+    first.page(1, "user_message", "new-actions", "{\"text\":\"first new action\"}")
+    c.expect(first.until(KIT_DONE, 15000), "the first new action completes")
+    first.shut()
+    mut expected = 1
+    for word in ["second", "third"] {
+        expected += 1
+        mut resumed = rig_open(settings)
+        resumed.attach(1)
+        resumed.forget()
+        resumed.page(1, "user_message", "new-actions", "{\"text\":\"${word} new action\"}")
+        c.expect(resumed.until(KIT_DONE, 15000), "the ${word} new action completes after restart")
+        c.expect(delivery_count(resumed.lines_for(1), "user_message") == expected, "a new owner action is not mistaken for an old retry")
+        resumed.shut()
+    }
+    c.report()
+}
+
+export fn scenario_delivery_receipt(settings ServerSettings) Proc Detach Time Net Fs Os -> str {
+    mut c = Check { failures: []str.new() }
+    mut r = rig_open(settings)
+    r.attach(1)
+    r.page(1, "session_created", "delivery-s", "{\"name\":\"delivery\",\"agent\":\"opencode\"}")
+    r.page_id(1, "user_message", "delivery-s", "{\"text\":\"safe receipt test\"}", "delivery-id")
+    c.expect(r.until(KIT_DONE, 15000), "the agent finishes the accepted turn")
+    ro lines = r.lines_for(1)
+    c.expect(delivery_count(lines, "user_message") == 1, "one user message is accepted")
+    mut accepted = false
+    for line in lines {
+        if line.contains("\"kind\":\"message_delivery\"") && line.contains("\"accepted\":true") { accepted = true }
+    }
+    c.expect(accepted, "the final receipt confirms engine acceptance")
+    r.page_id(1, "user_message", "delivery-s", "{\"text\":\"must not be sent twice\"}", "delivery-id")
+    c.expect(delivery_count(r.lines_for(1), "user_message") == 1, "a double click does not open another turn")
+    r.shut()
+    mut resumed = rig_open(settings)
+    resumed.attach(2)
+    c.expect(delivery_count(resumed.lines_for(2), "user_message") == 1, "the accepted turn survives restart")
+    resumed.page_id(2, "user_message", "delivery-s", "{\"text\":\"reconnect replay\"}", "delivery-id")
+    c.expect(delivery_count(resumed.lines_for(2), "user_message") == 1, "a reconnect replay does not open another turn")
+    // The same identity in another session is not an acknowledgement for that session.
+    resumed.page(2, "session_created", "delivery-other", "{\"name\":\"other\",\"agent\":\"opencode\"}")
+    resumed.page_id(2, "user_message", "delivery-other", "{\"text\":\"another session\"}", "delivery-id")
+    c.expect(delivery_count(resumed.lines_for(2), "user_message") == 2, "the delivery identity is scoped to one session")
+    resumed.shut()
+    c.report()
+}
+
+export fn scenario_delivery_intent_crash(settings ServerSettings) Proc Detach Time Net Fs Os -> str {
+    mut c = Check { failures: []str.new() }
+    mut r = rig_open(settings)
+    r.attach(1)
+    r.page(1, "session_created", "pending-s", "{\"name\":\"pending\",\"agent\":\"opencode\"}")
+    // Fault boundary: only the first durable receipt was committed; no user_message has yet been accepted.
+    mut s = r.hub.sessions[0]
+    accept_in(settings.store == "pg", settings.data_dir, s, Incoming.signal("message_delivery", "{\"client_id\":\"uncertain-id\",\"accepted\":false,\"turn\":\"\"}"))
+    r.shut()
+    mut resumed = rig_open(settings)
+    resumed.attach(2)
+    resumed.page_id(2, "user_message", "pending-s", "{\"text\":\"do not guess after a crash\"}", "uncertain-id")
+    c.expect(delivery_count(resumed.lines_for(2), "user_message") == 0, "uncertain intent is not automatically replayed")
+    c.expect(delivery_count(resumed.lines_for(2), "message_delivery") >= 1, "the uncertain receipt survives restart")
+    resumed.shut()
+    c.report()
+}
+
+export fn scenario_delivery_refusal() Proc Detach Time Net Fs Os -> str {
+    mut c = Check { failures: []str.new() }
+    mut settings = kit_files("delivery260-refusal", 30000)
+    settings.agents = [AgentSpec { id: "missing", label: "Missing test agent", program: "crew-harness-no-such-agent-260", args: []str.new(), ask: "native" }]
+    mut r = rig_open(settings)
+    r.attach(1)
+    r.page(1, "session_created", "refused-s", "{\"name\":\"refused\",\"agent\":\"missing\"}")
+    r.page_id(1, "user_message", "refused-s", "{\"text\":\"keep local text\"}", "refused-send")
+    c.expect(delivery_count(r.lines_for(1), "user_message") == 0, "a launch refusal does not accept the user message")
+    mut linked = false
+    mut falsely_accepted = false
+    for line in r.lines_for(1) {
+        if line.contains("\"kind\":\"error\"") && line.contains("\"client_id\":\"refused-send\"") { linked = true }
+        if line.contains("\"accepted\":true") { falsely_accepted = true }
+    }
+    c.expect(linked, "the pre-turn error names its client id")
+    c.expect(!falsely_accepted, "a refusal is never acknowledged as accepted")
+    r.shut()
+    c.report()
+}
+
+export fn scenario_delivery_append_crash(settings ServerSettings) Proc Detach Time Net Fs Os -> str {
+    mut c = Check { failures: []str.new() }
+    mut r = rig_open(settings)
+    r.attach(1)
+    r.page(1, "session_created", "appended-s", "{\"name\":\"appended\",\"agent\":\"opencode\"}")
+    mut s = r.hub.sessions[0]
+    accept_in(settings.store == "pg", settings.data_dir, s, Incoming.signal("message_delivery", "{\"client_id\":\"appended-id\",\"accepted\":false,\"turn\":\"\"}"))
+    feed_in(settings.store == "pg", settings.data_dir, s, Incoming.signal("user_message", "the engine already accepted this text"))
+    // No final accepted receipt is written: restart at precisely that boundary.
+    r.shut()
+    mut resumed = rig_open(settings)
+    resumed.attach(2)
+    c.expect(delivery_count(resumed.lines_for(2), "user_message") == 1, "the engine append survives restart without a final receipt")
+    resumed.page_id(2, "user_message", "appended-s", "{\"text\":\"must not open a second turn\"}", "appended-id")
+    c.expect(delivery_count(resumed.lines_for(2), "user_message") == 1, "a replay after append does not create a second turn")
+    resumed.shut()
+    c.report()
+}

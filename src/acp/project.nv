@@ -621,6 +621,10 @@ fn refusal_input(reason str, turn str) -> Option[PageInput] {
 fn page_input_of(e Incoming, turn str) -> Option[PageInput] {
     match e.kind {
         EventKind.Input => {
+            if e.name == "message_delivery" {
+                ro value = object_input(e)?
+                return page_input("message_delivery", value)
+            }
             if e.name == "agent_model" {
                 ro value = object_input(e)?
                 return page_input("session_model", value)

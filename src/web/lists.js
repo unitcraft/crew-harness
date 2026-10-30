@@ -212,6 +212,9 @@ export function timeline(session) {
       items.push({ type: 'user', key: m.key, text: m.text, turn: m.turn, images: m.images ?? [], at: m.at ?? 0 });
     } else if (m.role === 'skipped') {
       items.push({ type: 'skipped', key: m.key, agent: m.agent, count: m.count });
+    } else if (m.role === 'session_error') {
+      items.push({ type: 'note', key: m.key, tone: 'error', reason: m.reason, turn: m.turn,
+        userText: session.messages.find(u => u.role === 'user' && u.turn === m.turn)?.text ?? '' });
     } else if (m.role === 'dropped') {
       items.push({ type: 'dropped', key: m.key, setting: m.setting, value: m.value, used: m.used });
     } else if (m.role === 'switch') {
@@ -261,7 +264,8 @@ export function timeline(session) {
       if (diffs.length > 0) items.push({ type: 'diffs', key: `d:${m.turn}`, rows: diffs, totals: diffTotals(diffs) });
 
       if (m.status === 'refused' || m.status === 'error' || m.status === 'cancelled') {
-        items.push({ type: 'note', key: `n:${m.turn}`, tone: m.status, reason: m.reason });
+        items.push({ type: 'note', key: `n:${m.turn}`, tone: m.status, reason: m.reason, turn: m.turn,
+          userText: session.messages.find(u => u.role === 'user' && u.turn === m.turn)?.text ?? '' });
       } else if (m.status === 'done' && m.text.trim().length > 0) {
         items.push({ type: 'actions', key: `x:${m.turn}`, text: m.text, at: m.doneAt, turn: m.turn });
       }

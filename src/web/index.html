@@ -16,6 +16,8 @@
 <!-- Модули страницы грузятся параллельно, а не водопадом из десятков запросов друг за другом: список совпадает с графом импортов app.js,
      его сверяет test/graph.test.mjs. mock.js и rec-worklet.js сюда не входят: первый грузится только в ?mock=1, второй — при записи звука. -->
 <link rel="modulepreload" href="app.js">
+<link rel="modulepreload" href="delivery.js">
+<link rel="modulepreload" href="delivery-ui.js">
 <link rel="modulepreload" href="state.js">
 <link rel="modulepreload" href="machines.js">
 <link rel="modulepreload" href="machines-ui.js">

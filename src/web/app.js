@@ -2,8 +2,8 @@
 //
 // Поток один: событие приходит из transport -> state.reduce даёт новую модель -> view рисует.
 // Решения владельца (сообщение, отмена, разрешение, новая сессия) уходят событиями через тот же
-// транспорт и появляются на экране, только когда вернутся в потоке: пульт состояния не хранит.
-// Здесь живёт лишь то, чего в потоке нет по природе: какая сессия открыта на экране.
+// транспорт; сервер остаётся источником истории. Локальная копия delivery.js хранит текст до
+// подтверждения, а не выдаёт запись в сокет за принятие сервером.
 
 import {
   initialModel, reduce, makeEvent, nextStep, normalizeTheme, nextTheme, THEME_KEY, beginSwitch, undoSwitch,
@@ -20,6 +20,7 @@ import { createProjectsApi } from './projects-api.js';
 import { routeSignal, normalizeRoute } from './routes.js';
 import { crewSignal } from './crew-task.js';
 import { createLoading } from './loading.js';
+import { createDelivery, safeError } from './delivery.js';
 
 const FLASH_MS = 4000;
 const TICK_MS = 1000;
@@ -69,6 +70,13 @@ const notifier = createNotifier({
 });
 
 let model = initialModel();
+const delivery = createDelivery((() => { try { return globalThis.localStorage; } catch { return null; } })());
+// Pending first messages must remain reachable even if creation never reached the server.
+for (const saved of delivery.sessions()) {
+  if (model.sessions[saved.id]) continue;
+  model = addDraft(model, { ...saved, now: saved.createdAt || Date.now() });
+  model = patchDraft(model, saved.id, { route: saved.route, worktree: saved.worktree });
+}
 let status = { state: 'connecting' };
 const UNREAD_KEY = 'crew-console-unread';
 function readUnread() {
@@ -85,6 +93,12 @@ const linked = /^#s=(.+)$/.exec(globalThis.location ? globalThis.location.hash :
 const ui = {
   selected: null, projects: null, pane: 'list', flash: '', flashTone: 'error', awaiting: linked ? decodeURIComponent(linked[1]) : null, theme: readTheme(), pins: {}, unread: readUnread(), acked: {}, silentMin: SILENT_DEFAULT_MIN, notify: { bell: notifier.bellOn(), sound: notifier.soundOn(), denied: false },
 };
+// A failed first create has no server row to select. Reopen its saved local copy on reload;
+// an explicit session link always takes precedence. This never resends anything.
+if (!ui.awaiting) {
+  const recovery = delivery.sessions().at(-1);
+  if (recovery) ui.awaiting = recovery.id;
+}
 applyTheme(ui.theme);
 
 const ctx = { newId, now: () => Date.now() };
@@ -106,20 +120,17 @@ async function loadProjects() {
   await loading.loadProjects();
 }
 
-// Задача 192.6: сессия, созданная первым сообщением, должна появиться; если сервер молчит — красная строка, а сообщение возвращается в поле нового черновика
+// Сессия, созданная первым сообщением, должна появиться. Таймаут не меняет её id: возможен поздний ответ.
 const CREATE_WAIT_MS = 10000;
-function watchCreated(trace, draft, text) {
+function watchCreated(trace) {
   timers.set(() => {
-    if (model.sessions[trace]) return;
+    if (model.sessions[trace] && !model.sessions[trace].draft) return;
     flash(t('chat.create_timeout', { n: CREATE_WAIT_MS / 1000 }));
-    const id = newId();
-    model = addDraft(dropDrafts(model), { id, agent: draft.agent, projectId: draft.projectId || '', project: draft.project || '', folder: draft.folder || '', branch: draft.branch || '', now: Date.now() });
-    model = patchDraft(model, id, { route: draft.route, worktree: draft.worktree });
+    // Never invent a new session id on timeout: the old create may still arrive.
     ui.awaiting = null;
-    ui.selected = id;
+    ui.selected = trace;
     ui.pane = 'chat';
     render();
-    if (view && view.putText) view.putText(id, text);
   }, CREATE_WAIT_MS);
 }
 
@@ -172,6 +183,28 @@ function send(kind, trace, step, input) {
   return ok;
 }
 
+function savedSession(trace) {
+  const s = model.sessions[trace];
+  return s ? { id: trace, agent: s.agent, projectId: s.projectId, project: s.project, folder: s.folder, branch: s.branch,
+    route: normalizeRoute(s.route), worktree: s.worktree === true, createdAt: s.createdAt } : null;
+}
+function sendMessage(trace, text, images = [], retry = null) {
+  const event = makeEvent('user_message', trace, nextStep(model, trace), messageInput(newId(), text, images), ctx);
+  if (retry) { event.id = retry.id; event.input.turn = retry.clientTurn || event.input.turn; }
+  else {
+    if (!delivery.add(event, savedSession(trace))) {
+      flash(t('delivery.storage'));
+      return false;
+    }
+  }
+  try {
+    if (!transport.send(event)) delivery.failed(event.id, 'offline');
+  } catch { delivery.unknown(event.id); }
+  timers.set(() => { if (delivery.items(trace).some(r => r.id === event.id && r.state === 'sending')) { delivery.unknown(event.id); render(); } }, 10000);
+  render();
+  return true;
+}
+
 // Очередь сообщений (Enter при работающем агенте): живёт только в странице, по сессиям, FIFO.
 const queue = createQueue();
 
@@ -210,6 +243,14 @@ const signal = (trace, { kind, input }) => [kind, trace, nextStep(model, trace),
 const handlers = {
   onRetryProjects() { loadProjects(); },
   onRetrySessions() { transport?.retry(); },
+  deliveryItems(trace) { return delivery.items(trace); },
+  onRetry(trace, id) {
+    const session = model.sessions[trace];
+    if (!session || session.draft || ['answering', 'permission'].includes(session.state)) return;
+    const item = delivery.beginRetry(id);
+    if (item) sendMessage(trace, item.text, [], item);
+  },
+  onForgetDelivery(id) { delivery.forget(id); render(); },
   queued(trace) { return queue.count(trace); },
   onQueue(trace, text, images = []) {
     queue.push(trace, { text, images });
@@ -311,7 +352,12 @@ const handlers = {
   // Без картинок — как раньше, сразу. С картинками — сначала они на сервер по очереди, потом сообщение с их номерами.
   onSend(trace, text, images = []) {
     const draft = model.sessions[trace];
+    let reserved = null;
     if (draft && draft.draft) {
+      // Protect the first message before even creating its session (creation may fail too).
+      const event = makeEvent('user_message', trace, 0, { text, turn: newId(), images: images.map(i => ({ name: i.name })) }, ctx);
+      if (!delivery.add(event, savedSession(trace))) { flash(t('delivery.storage')); return false; }
+      reserved = { id: event.id, clientTurn: event.input.turn };
       // первое сообщение черновика: сначала создаётся сессия (проект, папка, агент), потом уходит сообщение
       const folderInfo = (((ui.projects || []).find((p) => p.id === draft.projectId) || { folders: [] }).folders).find((f) => f.path === draft.folder);
       const treeOk = !(folderInfo && folderInfo.repo === false); // папка не git: сессия создаётся без дерева
@@ -323,22 +369,31 @@ const handlers = {
         if (draft.folder) input.folder = draft.folder;
         if (draft.branch) input.branch = draft.branch;
       }
-      model = dropDrafts(model);
-      if (!send('session_created', trace, 0, input)) {
+      model = dropDrafts(model, trace);
+      let created = false;
+      try { created = send('session_created', trace, 0, input); } catch { delivery.unknown(reserved.id); return false; }
+      if (!created) {
+        delivery.failed(reserved.id, 'offline');
         model = { ...model, sessions: { ...model.sessions, [trace]: draft } };
         render();
         return false;
       }
       ui.awaiting = trace;
-      watchCreated(trace, draft, text);
+      watchCreated(trace);
     }
-    if (images.length === 0) return send('user_message', trace, nextStep(model, trace), { turn: newId(), text });
+    if (images.length === 0) return sendMessage(trace, text, [], reserved);
     return uploadImages(trace, images, postImage).then((up) => {
       if (!up.ok) {
-        flash(t('images.upload_failed', { name: up.name, reason: up.error }));
+        flash(t('images.upload_failed', { name: up.name, reason: safeError(up.error) }));
+        if (reserved) delivery.failed(reserved.id, up.error);
+        else {
+          const event = makeEvent('user_message', trace, nextStep(model, trace), { text, images: images.map(i => ({ name: i.name })) }, ctx);
+          if (delivery.add(event, savedSession(trace))) delivery.failed(event.id, up.error);
+        }
+        render();
         return false;
       }
-      return send('user_message', trace, nextStep(model, trace), messageInput(newId(), text, up.images));
+      return sendMessage(trace, text, up.images, reserved);
     });
   },
   onCancel(trace) {
@@ -457,13 +512,16 @@ async function start() {
     WebSocketImpl: globalThis.WebSocket, timers,
     onEvent(event) {
       try {
+        if (event.kind === 'message_delivery') { delivery.receipt(event.input); render(); }
+        if (event.kind === 'error' && event.input) delivery.error(event);
         const next = reduce(model, event);
         if (next !== model) { model = next; drain(); render(); }
+        delivery.reconcile(model);
       } catch (e) {
         reportError(e);
       }
     },
-    onStatus(next) { status = next; render(); },
+    onStatus(next) { status = next; if (next.state === 'retry') delivery.disconnected(); render(); },
     onSnapshot(phase, ids) {
       if (phase === 'loading') {
         if (loading.state.sessions.data !== null) loadProjects();
