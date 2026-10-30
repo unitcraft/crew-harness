@@ -629,6 +629,12 @@ pre code { font: inherit; }
 .status-btn:hover, .status-btn[aria-expanded="true"] { background: var(--hover); }
 .status-btn:focus-visible { background: var(--hover); outline: 1px solid var(--border); outline-offset: 0; }
 .status-btn[hidden], .status-model[hidden] { display: none; }
+/* Задача 265: чип «Результат» компактный — ширина по содержимому, но не шире предела; длинный текст сокращается многоточием */
+.result-chip { max-width: min(260px, 40vw); }
+.result-chip > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+/* чипы без выбора (один агент, агент не предоставляет параметры) видны, но приглушены и не реагируют на наведение */
+.status-btn[aria-disabled="true"] { opacity: .55; cursor: default; }
+.status-btn[aria-disabled="true"]:hover { background: transparent; }
 .menu { position: absolute; bottom: calc(100% + 6px); z-index: 30; min-width: 250px; max-width: min(380px, 92vw); padding: 6px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); box-shadow: 0 8px 28px color-mix(in srgb, var(--fg) 14%, transparent); color: var(--fg); font-size: 14px; }
 .menu[hidden] { display: none; }
 .menu[data-side="left"] { left: 0; }

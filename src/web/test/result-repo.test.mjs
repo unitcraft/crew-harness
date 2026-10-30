@@ -14,8 +14,8 @@ test('цель результата видна в состоянии стран�
   assert.match(viewSource(), /projectsUi\.confirm\(/);
   const view = readFileSync(new URL('../view.js', import.meta.url), 'utf8');
   assert.match(view, /Учёт:.*→ результат:/);
-  assert.match(view, /resultRepoSelect\.disabled = Boolean\(task\) \|\| hasTree/);
-  assert.match(view, /handlers\.onResultRepo\(currentTrace, resultRepoSelect\.value\)/);
+  assert.match(view, /resultRepoButton\.disabled = Boolean\(task\) \|\| hasTree/);
+  assert.match(view, /handlers\.onResultRepo\(currentTrace, p\.id\)/);
 });
 
 function viewSource() { return readFileSync(new URL('../view.js', import.meta.url), 'utf8'); }
@@ -43,5 +43,5 @@ test('регистрация — подтверждение в локально�
   assert.match(handler, /origin_allowed\(req, port\)/);
   assert.match(handler, /result_repo_register\(data_dir, body\)/);
   assert.match(handler, /not isolation from arbitrary shell\/HTTP/);
-  assert.match(viewSource(), /value: '__register', text:/);
+  assert.match(viewSource(), /Подтвердить другой репозиторий…/);
 });

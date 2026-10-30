@@ -714,27 +714,31 @@ export function createView(doc, refs, deps) {
     if (worktreeButton.dataset.draft === 'true') handlers.onDraftWorktree(currentTrace, on); else handlers.onWorktree(currentTrace, on);
   });
   // Задача 192.12: набор «роль → семья, модель, усилие» — выбор под полем новой сессии и у открытой сессии
-  const resultRepoSelect = h(doc, 'select', { class: 'status-btn', hidden: true, title: 'Репозиторий результата', 'aria-label': 'Репозиторий результата' });
+  // Задача 265: чип «Результат» — кнопка с общим меню, а не select (его ширина была по самой длинной строке):
+  // чип ограничен и сокращает текст многоточием, полный текст — в title и aria-label, меню ограничено и слева.
+  const resultRepoButton = h(doc, 'button', { type: 'button', class: 'status-btn result-chip', hidden: true, title: 'Репозиторий результата', 'aria-label': 'Репозиторий результата', 'aria-haspopup': 'menu', 'aria-expanded': 'false' });
   let resultRepoRecords = [];
+  let resultRepoShown = { selected: '', label: '' };
   function fillResultRepos(selected = '', label = '') {
-    resultRepoSelect.replaceChildren(h(doc, 'option', { value: '', text: 'Результат: свой репозиторий' }),
-      ...resultRepoRecords.map((p) => h(doc, 'option', { value: p.id, text: `Результат: ${p.dir} → ${p.remote}/${p.branch}` })));
-    if (selected && !resultRepoRecords.some((p) => p.id === selected)) resultRepoSelect.append(h(doc, 'option', { value: selected, text: `Результат: ${label || selected}` }));
-    resultRepoSelect.append(h(doc, 'option', { value: '__register', text: 'Подтвердить другой репозиторий…' }));
-    resultRepoSelect.value = selected;
+    resultRepoShown = { selected, label };
+    const record = resultRepoRecords.find((p) => p.id === selected);
+    const text = selected ? `Результат: ${record ? `${record.dir} → ${record.remote}/${record.branch}` : (label || selected)}` : 'Результат: свой репозиторий';
+    resultRepoButton.replaceChildren(h(doc, 'span', { text }));
+    resultRepoButton.title = text;
+    resultRepoButton.setAttribute('aria-label', text);
   }
-  resultRepoSelect.addEventListener('focus', async () => {
+  async function refreshResultRepos() {
     if (!projectsApi || !projectsApi.listResultRepos) return;
-    const selected = resultRepoSelect.value;
     const r = await projectsApi.listResultRepos();
-    if (r.ok) { resultRepoRecords = (r.body && r.body.repositories) || []; fillResultRepos(selected); }
-  });
-  resultRepoSelect.addEventListener('change', async () => {
-    if (!currentTrace || resultRepoSelect.disabled) return;
-    if (resultRepoSelect.value !== '__register') { handlers.onResultRepo(currentTrace, resultRepoSelect.value); return; }
+    if (r.ok) {
+      resultRepoRecords = (r.body && r.body.repositories) || [];
+      fillResultRepos(resultRepoShown.selected, resultRepoShown.label);
+      if (menuKind === 'result') renderMenu();
+    }
+  }
+  async function registerResultRepo() {
     const trace = currentTrace;
-    const previous = current.session && current.session.routeState ? current.session.routeState.resultRepo : '';
-    fillResultRepos(previous);
+    if (!trace) return;
     const path = await projectsUi.pickFolder();
     if (!path) return;
     const inspected = await projectsApi.inspectResultRepo(path);
@@ -747,7 +751,8 @@ export function createView(doc, refs, deps) {
     resultRepoRecords.push(registered.body);
     fillResultRepos(registered.body.id);
     handlers.onResultRepo(trace, registered.body.id);
-  });
+  }
+  resultRepoButton.addEventListener('click', () => toggleMenu('result'));
   const presetSelect = h(doc, 'select', { class: 'status-btn preset-chip', hidden: true, title: t('preset.label'), 'aria-label': t('preset.label') });
   presetSelect.addEventListener('change', () => {
     if (!currentTrace) return;
@@ -760,11 +765,12 @@ export function createView(doc, refs, deps) {
   const menu = h(doc, 'div', { class: 'menu', role: 'menu', hidden: true });
   // Одна группа чипов у правого края: семья, режим, модель и усилие; за ней кольцо контекста и спиннер (задача 192).
   const statusGroup = h(doc, 'div', { class: 'status-group' }, familyButton, modeButton, statusModel, modelButton, effortButton);
-  const status = h(doc, 'div', { class: 'composer-status', 'data-empty': 'true' }, worktreeButton, routeButton, resultRepoSelect, h(doc, 'span', { class: 'grow' }), statusGroup, ringBox, spinner, presetSelect, menu);
+  const status = h(doc, 'div', { class: 'composer-status', 'data-empty': 'true' }, worktreeButton, routeButton, resultRepoButton, h(doc, 'span', { class: 'grow' }), statusGroup, ringBox, spinner, presetSelect, menu);
 
   // Меню выбора режима, модели и усилия (задача 192): показывает только то, что агент отдал по ACP.
+  // Задача 265: сюда же меню репозитория результата ('result').
   const MENU_MODELS = 4;
-  let menuKind = null; // null | 'mode' | 'model' | 'more' | 'effort'
+  let menuKind = null; // null | 'agent' | 'route' | 'result' | 'mode' | 'model' | 'more' | 'effort'
   let options = null;
   let currentAgent = '';
   let currentRoute = INTERACTIVE_STATE.route;
@@ -785,6 +791,7 @@ export function createView(doc, refs, deps) {
     effortButton.setAttribute('aria-expanded', 'false');
     familyButton.setAttribute('aria-expanded', 'false');
     routeButton.setAttribute('aria-expanded', 'false');
+    resultRepoButton.setAttribute('aria-expanded', 'false');
   }
 
   function choose(setting, value) {
@@ -820,6 +827,25 @@ export function createView(doc, refs, deps) {
         name: routeName(r.id), description: routeDescription(r.id), checked: r.id === currentRoute, number: i + 1,
         onPick: () => { if (currentTrace && r.id !== currentRoute) handlers.onRoute(currentTrace, r.id); closeMenu(); },
       })));
+      menu.hidden = false;
+      return;
+    }
+    if (menuKind === 'result') {
+      menuSearch.hidden = true;
+      menu.dataset.side = 'left';
+      const { selected, label } = resultRepoShown;
+      const rows = [
+        h(doc, 'div', { class: 'menu-head', text: 'Репозиторий результата' }),
+        menuRow({ name: 'Свой репозиторий', checked: selected === '', onPick: () => { if (currentTrace && selected !== '') handlers.onResultRepo(currentTrace, ''); closeMenu(); } }),
+        ...resultRepoRecords.map((p) => menuRow({
+          name: p.dir, description: `→ ${p.remote}/${p.branch}`, tip: `${p.dir} → ${p.remote}/${p.branch}`, checked: p.id === selected,
+          onPick: () => { if (currentTrace && p.id !== selected) handlers.onResultRepo(currentTrace, p.id); closeMenu(); },
+        })),
+      ];
+      if (selected && !resultRepoRecords.some((p) => p.id === selected)) rows.push(menuRow({ name: label || selected, checked: true, onPick: () => closeMenu() }));
+      rows.push(h(doc, 'div', { class: 'menu-sep', role: 'separator' }),
+        menuRow({ name: 'Подтвердить другой репозиторий…', onPick: () => { closeMenu(); registerResultRepo(); } }));
+      menuList.append(...rows);
       menu.hidden = false;
       return;
     }
@@ -866,17 +892,26 @@ export function createView(doc, refs, deps) {
     menuList.querySelector('[aria-checked="true"]')?.scrollIntoView?.({ block: 'nearest' });
   }
 
+  // Задача 265: меню не открывается, когда выбирать не из чего или чип выключен; причина — в подсказке чипа.
+  const hasOpts = (key) => Boolean(options && options[key].length > 0);
   function openMenu(kind) {
+    if (kind === 'agent' && agents.length < 2) return;
+    if (kind === 'result' && resultRepoButton.disabled) return;
+    if (kind === 'mode' && !hasOpts('modes')) return;
+    if ((kind === 'model' || kind === 'more') && !hasOpts('models')) return;
+    if (kind === 'effort' && !hasOpts('efforts')) return;
     menuKind = kind;
     menuQuery = '';
     menuSearch.value = '';
-    menuSig = kind === 'route' ? currentRoute : JSON.stringify(options);
+    menuSig = kind === 'route' ? currentRoute : kind === 'result' ? JSON.stringify(resultRepoShown) : JSON.stringify(options);
     familyButton.setAttribute('aria-expanded', kind === 'agent' ? 'true' : 'false');
     routeButton.setAttribute('aria-expanded', kind === 'route' ? 'true' : 'false');
+    resultRepoButton.setAttribute('aria-expanded', kind === 'result' ? 'true' : 'false');
     modeButton.setAttribute('aria-expanded', kind === 'mode' ? 'true' : 'false');
     modelButton.setAttribute('aria-expanded', kind === 'model' || kind === 'more' ? 'true' : 'false');
     effortButton.setAttribute('aria-expanded', kind === 'effort' ? 'true' : 'false');
     renderMenu();
+    if (kind === 'result') refreshResultRepos();
     if (kind === 'model' || kind === 'more') menuSearch.focus();
     else menu.querySelector('.menu-item')?.focus();
   }
@@ -1625,8 +1660,8 @@ export function createView(doc, refs, deps) {
     const hasTree = Boolean((task && task.worktree) || (session.routeState && session.routeState.where && session.routeState.where.kind === 'wip'));
     const resultRepo = session.routeState ? session.routeState.resultRepo : '';
     const resultLabel = session.routeState ? session.routeState.resultLabel : '';
-    resultRepoSelect.hidden = Boolean(session.draft);
-    resultRepoSelect.disabled = Boolean(task) || hasTree || busy || Boolean(session.routeState && session.routeState.where && session.routeState.where.kind === 'preparing');
+    resultRepoButton.hidden = Boolean(session.draft);
+    resultRepoButton.disabled = Boolean(task) || hasTree || busy || Boolean(session.routeState && session.routeState.where && session.routeState.where.kind === 'preparing');
     fillResultRepos(resultRepo || '', resultLabel);
     const treeOn = session.draft ? session.worktree !== false : (session.routeState ? session.routeState.useTree !== false : true);
     worktreeButton.hidden = false;
@@ -1660,29 +1695,53 @@ export function createView(doc, refs, deps) {
     whereNote.hidden = !where && !resultWhere;
     whereNote.textContent = [where, resultWhere].filter(Boolean).join(' · ');
     whereNote.title = whereNote.textContent;
-    familyButton.hidden = agents.length < 2;
+    // Задача 265: текущий агент виден при любом числе доступных. Выбора нет (0/1 агент) — чип приглушён,
+    // а подсказка называет фактическую причину, а не прячет чип.
+    familyButton.hidden = false;
     familyButton.replaceChildren(h(doc, 'span', { text: agentLabel(shown.agent) }));
+    familyButton.setAttribute('aria-disabled', String(agents.length < 2));
+    familyButton.title = agents.length > 1 ? t('status.agent')
+      : agents.length === 1 ? `${t('status.agent')}: ${t('status.agent_one')}`
+      : registryPending ? t('status.agents_loading')
+      : t(registryFailed ? 'sessions.agents_unavailable' : 'sessions.agents_none');
+    familyButton.setAttribute('aria-label', `${t('status.agent')}: ${agentLabel(shown.agent)}`);
     const hasModes = Boolean(options && options.modes.length > 0);
     const hasModels = Boolean(options && options.models.length > 0);
     const hasEfforts = Boolean(options && options.efforts.length > 0);
-    modeButton.hidden = !hasModes;
+    // Причина отсутствия вариантов — по факту: грузятся; у черновика без записи каталога появятся после запуска; агент не предоставляет.
+    const catalogEntry = model.catalog ? model.catalog[shown.agent] : undefined;
+    const paramWhy = (unsupported) => (shown.loading ? t('status.options_loading')
+      : !catalogEntry && session.draft ? t('status.options_after_start') : unsupported);
+    modeButton.hidden = false;
+    modeButton.setAttribute('aria-disabled', String(!hasModes));
     const modeLabel = hasModes ? labelFor('mode', options.modes, options.mode) : { name: '', title: '' };
     modeButton.title = modeLabel.title ? `${t('menu.mode')}: ${modeLabel.title}` : t('menu.mode');
-    modeButton.replaceChildren(h(doc, 'span', { text: hasModes ? (modeLabel.name || t('menu.mode')) : '' }));
+    if (!hasModes) modeButton.title = paramWhy(t('status.mode_unsupported'));
+    modeButton.replaceChildren(h(doc, 'span', { text: hasModes ? (modeLabel.name || t('menu.mode')) : (shown.loading ? '…' : t('menu.mode')) }));
     modelButton.hidden = !hasModels;
     modelButton.replaceChildren(h(doc, 'span', { text: hasModels ? (shown.model || nameOf(options.models, options.modelId) || t('session.model_unknown')) : '' }));
-    effortButton.hidden = !hasEfforts;
+    effortButton.hidden = false;
+    effortButton.setAttribute('aria-disabled', String(!hasEfforts));
     const effortLabel = hasEfforts ? labelFor('effort', effortChoices(options.efforts), options.effort) : { name: '', title: '' };
     effortButton.title = effortLabel.title ? `${t('menu.effort')}: ${effortLabel.title}` : t('menu.effort');
-    effortButton.replaceChildren(h(doc, 'span', { text: effortLabel.name }));
+    if (!hasEfforts) effortButton.title = paramWhy(t('status.effort_unsupported'));
+    effortButton.replaceChildren(h(doc, 'span', { text: hasEfforts ? effortLabel.name : (shown.loading ? '…' : t('menu.effort')) }));
     statusModel.hidden = hasModels;
-    statusModel.textContent = shown.model || (shown.loading ? t('session.loading') : '');
+    statusModel.textContent = shown.model || (shown.loading ? t('session.loading') : t('session.model_unknown'));
+    statusModel.title = hasModels ? '' : paramWhy(t('status.model_unsupported'));
     spinner.hidden = !busy;
-    status.dataset.empty = String(routeButton.hidden && worktreeButton.hidden && familyButton.hidden && !statusModel.textContent && !busy && !hasModes && !hasModels && !hasEfforts && !session.usage);
+    status.dataset.empty = String(routeButton.hidden && worktreeButton.hidden && resultRepoButton.hidden && familyButton.hidden && !statusModel.textContent && !busy && !session.usage);
     if (menuKind === 'agent') renderMenu();
     else if (menuKind === 'route') {
       if (menuSig !== currentRoute) renderMenu();
       menuSig = currentRoute;
+    } else if (menuKind === 'result') {
+      if (resultRepoButton.disabled || resultRepoButton.hidden) closeMenu();
+      else {
+        const sig = JSON.stringify([resultRepoShown, resultRepoRecords]);
+        if (sig !== menuSig) renderMenu();
+        menuSig = sig;
+      }
     } else if (menuKind && ((menuKind === 'mode' && !hasModes) || (menuKind === 'effort' && !hasEfforts) || ((menuKind === 'model' || menuKind === 'more') && !hasModels))) closeMenu();
     else if (menuKind) {
       const sig = JSON.stringify(options);
