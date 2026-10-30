@@ -1,5 +1,5 @@
 // The attach completion is transport control, including for an empty hub.
-module crew_harness.server_live
+module crew_harness.server_loading_live
 
 import crew_harness.server.{kit_files, rig_open, line_field}
 
