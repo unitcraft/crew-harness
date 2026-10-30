@@ -92,8 +92,9 @@ const AGO_KEY = { now: 'ago.now', min: 'ago.min', hour: 'ago.hour', day: 'ago.da
  */
 export function createView(doc, refs, deps) {
   const {
-    agents, now, handlers, registryFailed = false, registryPending = false, imageSrc = (image) => image.src, projectsApi, presets = () => null,
+    agents, now, handlers, imageSrc = (image) => image.src, projectsApi, presets = () => null,
   } = deps;
+  let { registryFailed = false, registryPending = false } = deps;
   const win = doc.defaultView;
   const drafts = createDraftStore((() => { try { return win?.localStorage; } catch { return null; } })());
   const attachDrafts = new Map(); // вложения по сессиям: как черновик, живут до отправки
@@ -935,7 +936,17 @@ export function createView(doc, refs, deps) {
     }
   });
 
-  const toggleMenu = (kind) => { if (menuKind) closeMenu(); else openMenu(kind); };
+  const toggleMenu = (kind) => {
+    const button = { agent: familyButton, mode: modeButton, model: modelButton, effort: effortButton }[kind];
+    // aria-disabled оставляет кнопку доступной с клавиатуры: Enter/Space, как и клик,
+    // объясняют отсутствие выбора через общую доступную строку уведомлений.
+    if (button?.getAttribute('aria-disabled') === 'true') {
+      closeMenu();
+      handlers.onNotice?.(button.title);
+      return;
+    }
+    if (menuKind) closeMenu(); else openMenu(kind);
+  };
   familyButton.addEventListener('click', () => toggleMenu('agent'));
   routeButton.addEventListener('click', () => toggleMenu('route'));
   modeButton.addEventListener('click', () => toggleMenu('mode'));
@@ -2405,6 +2416,8 @@ export function createView(doc, refs, deps) {
   return {
     tick,
     setAgents(next, failed) {
+      registryPending = false;
+      registryFailed = Boolean(failed);
       agents.splice(0, agents.length, ...next);
       agentNotice.textContent = t(failed ? 'sessions.agents_unavailable' : 'sessions.agents_none');
       agentNotice.hidden = agents.length > 0;

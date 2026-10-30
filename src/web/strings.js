@@ -193,7 +193,7 @@ export const S = Object.freeze({
   'composer.hint': 'Enter — отправить, Shift+Enter — новая строка',
   'menu.agent': 'Агент',
   'status.agent': 'Агент (семья)',
-  'status.agent_one': 'Доступен один агент',
+  'status.agent_one': 'В настройках сервера доступна одна семья агента. Модель внутри OpenCode выбирается отдельно в чипе модели',
   'status.agents_loading': 'Список агентов загружается…',
   'status.options_loading': 'Параметры агента загружаются…',
   'status.options_after_start': 'Параметры агента появятся после запуска сессии',
