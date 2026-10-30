@@ -323,7 +323,7 @@ export fn Rig @lines_for(conn int) -> []str {
     mut out = []str.new()
     for line in @lines_in_mode(conn, 0) {
         ro kind = line_field(line, "kind")
-        if kind != "route_state" && kind != "machine_state" && kind != "turn_request" { out.push(line) }
+        if kind != "route_state" && kind != "machine_state" && kind != "turn_request" && kind != "sessions_ready" { out.push(line) }
     }
     out
 }

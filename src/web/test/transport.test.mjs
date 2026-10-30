@@ -38,6 +38,22 @@ class FakeSocket {
   drop() { this.readyState = 3; this.onclose?.({}); }
 }
 
+test('открытый сокет не завершает загрузку; маркер приходит после журнала; старый сокет игнорируется', () => {
+  FakeSocket.all = [];
+  const timers = fakeTimers(); const states = []; const events = [];
+  const tr = createTransport({ mode: 'ws', url: 'ws://h/ws', timers, WebSocketImpl: FakeSocket,
+    onStatus() {}, onEvent: (e) => events.push(e), onSnapshot: (s) => states.push(s) });
+  tr.start(); const old = FakeSocket.all[0]; old.open();
+  assert.deepEqual(states, ['loading']);
+  old.message(JSON.stringify([{ id: 'event' }, { kind: 'sessions_ready', sessions: [] }]));
+  assert.deepEqual(states, ['loading', 'ready']);
+  assert.deepEqual(events, [{ id: 'event' }]);
+  tr.retry(); old.message(JSON.stringify({ id: 'stale' }));
+  assert.deepEqual(events, [{ id: 'event' }]);
+  assert.equal(FakeSocket.all.length, 2);
+  tr.stop(); assert.equal(timers.pending(), 0);
+});
+
 test('chooseMode: ?mock=1 — заглушка; http — сокет /ws; file без mock — нет сервера', () => {
   assert.deepEqual(chooseMode('?mock=1', 'file:', ''), { mode: 'mock' });
   assert.deepEqual(chooseMode('?mock=1', 'http:', 'localhost:80'), { mode: 'mock' });

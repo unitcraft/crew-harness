@@ -71,6 +71,7 @@ export class FakeElement {
     this._value = '';
     this._checked = false;
     this.type = '';
+    this.style = { setProperty(key, value) { this[key] = value; }, removeProperty(key) { delete this[key]; } };
   }
 
   get children() { return this.childNodes.filter((n) => n instanceof FakeElement); }
@@ -82,6 +83,11 @@ export class FakeElement {
       add: (c) => { if (!list().includes(c)) el.className = [...list(), c].join(' '); },
       remove: (c) => { el.className = list().filter((x) => x !== c).join(' '); },
       contains: (c) => list().includes(c),
+      toggle(c, force) {
+        const on = force ?? !list().includes(c);
+        if (on) this.add(c); else this.remove(c);
+        return on;
+      },
     };
   }
 
@@ -155,6 +161,16 @@ export class FakeElement {
     for (const c of this.childNodes) c.parentNode = null;
     this.childNodes = [];
     this.append(...nodes);
+  }
+
+  after(...nodes) {
+    const parent = this.parentNode;
+    if (!parent) return;
+    let at = parent.childNodes.indexOf(this) + 1;
+    for (const node of nodes) {
+      node.remove(); node.parentNode = parent;
+      parent.childNodes.splice(at++, 0, node);
+    }
   }
 
   remove() {
@@ -233,6 +249,7 @@ export function createFakeDocument() {
       return !event.defaultPrevented;
     },
     contains: (node) => doc.body.contains(node) || node === doc.body,
+    querySelectorAll: (selector) => doc.body.querySelectorAll(selector),
   };
   doc.body = new FakeElement(doc, 'body');
   doc.documentElement = doc.body;

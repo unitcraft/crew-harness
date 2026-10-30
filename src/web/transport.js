@@ -51,7 +51,7 @@ const isObject = (v) => v !== null && typeof v === 'object' && !Array.isArray(v)
  * @param deps.onStatus       (статус) => void
  */
 export function createTransport(deps) {
-  const { mode, server, url, WebSocketImpl, timers, onEvent, onStatus } = deps;
+  const { mode, server, url, WebSocketImpl, timers, onEvent, onStatus, onSnapshot = () => {} } = deps;
 
   // ---- заглушка ----
   const scheduled = new Map(); // id таймера -> trace
@@ -70,8 +70,10 @@ export function createTransport(deps) {
   }
 
   function startMock() {
+    onSnapshot('loading');
     onStatus({ state: 'mock' });
     for (const event of server.journal()) onEvent(event);
+    onSnapshot('ready');
   }
 
   function sendMock(event) {
@@ -91,22 +93,29 @@ export function createTransport(deps) {
 
   function connect() {
     timer = null;
+    onSnapshot('loading');
     onStatus({ state: 'connecting' });
     const ws = new WebSocketImpl(url);
     socket = ws;
     ws.onopen = () => {
+      if (stopped || socket !== ws) return;
       attempt = 0;
       onStatus({ state: 'connected' });
     };
     ws.onmessage = (message) => {
+      if (stopped || socket !== ws) return;
       let data;
       try { data = JSON.parse(message.data); } catch { return; }
       const list = Array.isArray(data) ? data : [data];
-      for (const e of list) if (isObject(e)) onEvent(e);
+      for (const e of list) if (isObject(e)) {
+        if (e.kind === 'sessions_ready' && Array.isArray(e.sessions)) onSnapshot('ready', e.sessions);
+        else onEvent(e);
+      }
     };
     ws.onclose = () => {
       if (socket !== ws) return;
       socket = null;
+      onSnapshot('error');
       if (!stopped) countdown(RETRY_STEPS[Math.min(attempt, RETRY_STEPS.length - 1)]);
       attempt += 1;
     };
@@ -138,6 +147,12 @@ export function createTransport(deps) {
       if (mode === 'mock') return sendMock(event);
       if (mode === 'ws') return sendSocket(event);
       return false;
+    },
+    retry() {
+      if (mode !== 'ws' || stopped) return;
+      if (timer !== null) timers.clear(timer);
+      if (socket) { const old = socket; socket = null; old.close(); }
+      connect();
     },
     stop() {
       stopped = true;

@@ -503,6 +503,14 @@ export const S = Object.freeze({
 
   // ---- соединение
   'conn.label': 'Соединение',
+  'loading.all': 'Загружаем проекты и сессии…',
+  'loading.projects': 'Загружаем проекты…',
+  'loading.sessions': 'Загружаем сессии…',
+  'loading.refreshing': 'Обновляем…',
+  'loading.slow': 'Загрузка занимает больше времени, чем обычно. Можно продолжать работу.',
+  'loading.sessions_error': 'Не удалось загрузить сессии. Проверьте соединение и повторите.',
+  'loading.error': 'Ошибка загрузки',
+  'loading.retry': 'Повторить',
   'conn.connecting': 'Подключение…',
   'conn.connected': 'Подключено',
   'conn.mock': 'Воспроизведение заглушки',

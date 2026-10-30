@@ -932,6 +932,10 @@ body { font-size: 14px; line-height: 1.55; letter-spacing: .005em; }
 .plus-btn:hover { background: var(--hover); color: var(--fg); }
 .plus-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 0; }
 .plus-btn .icon { width: 20px; height: 20px; stroke-width: 1.75; }
+.list-loading { padding: 8px 16px; color: var(--fg-muted); }
+.load-source p { margin: 8px 0; }
+.load-skeleton { height: 18px; margin: 10px 0; border-radius: 6px; background: var(--surface-2); }
+.load-skeleton:last-child { width: 70%; }
 .attach-row { display: flex; flex: 0 0 100%; flex-wrap: wrap; gap: 8px; margin: 0; padding: 4px 12px 6px 0; }
 .attach-row[hidden] { display: none; }
 .attach { position: relative; flex: none; width: 64px; height: 64px; }

@@ -90,7 +90,7 @@ const AGO_KEY = { now: 'ago.now', min: 'ago.min', hour: 'ago.hour', day: 'ago.da
  */
 export function createView(doc, refs, deps) {
   const {
-    agents, now, handlers, registryFailed = false, imageSrc = (image) => image.src, projectsApi, presets = () => null,
+    agents, now, handlers, registryFailed = false, registryPending = false, imageSrc = (image) => image.src, projectsApi, presets = () => null,
   } = deps;
   const win = doc.defaultView;
   const drafts = new Map();
@@ -152,18 +152,20 @@ export function createView(doc, refs, deps) {
   const search = h(doc, 'input', {
     type: 'search', class: 'search-input', autocomplete: 'off', placeholder: t('sessions.search'), 'aria-label': t('sessions.search'),
   });
-  const agentNotice = h(doc, 'p', { class: 'empty', text: t(registryFailed ? 'sessions.agents_unavailable' : 'sessions.agents_none'), hidden: agents.length > 0 });
+  const agentNotice = h(doc, 'p', { class: 'empty', text: t(registryFailed ? 'sessions.agents_unavailable' : 'sessions.agents_none'), hidden: agents.length > 0 || registryPending });
   const retryAgents = h(doc, 'button', { type: 'button', class: 'link-btn', text: t('sessions.agents_retry'), hidden: !registryFailed });
   retryAgents.addEventListener('click', () => doc.defaultView.location.reload());
   const groupsBox = h(doc, 'nav', { class: 'groups', 'aria-label': t('sessions.title') });
-  const listEmpty = h(doc, 'p', { class: 'empty', text: t('sessions.empty') });
+  const listEmpty = h(doc, 'p', { class: 'empty', text: t('sessions.empty'), hidden: true });
+  const loadingBox = h(doc, 'div', { class: 'list-loading', 'aria-live': 'polite', role: 'status' });
+  let loadingSig = '';
   const notFound = h(doc, 'p', { class: 'empty', text: t('sessions.not_found'), hidden: true });
 
   refs.side.replaceChildren(
     h(doc, 'div', { class: 'side-head' }, h(doc, 'h2', { text: t('sessions.title') }), h(doc, 'span', { class: 'side-head-tools' }, bellButton, soundButton, themeButton)),
     h(doc, 'div', { class: 'side-tools' },
       h(doc, 'label', { class: 'search' }, icon(doc, 'i-search'), search)),
-    agentNotice, retryAgents, groupsBox, listEmpty, notFound,
+    agentNotice, retryAgents, loadingBox, groupsBox, listEmpty, notFound,
   );
 
   themeButton.addEventListener('click', () => handlers.onTheme());
@@ -298,7 +300,9 @@ export function createView(doc, refs, deps) {
       }
       head.append(actions);
     }
-    const body = rows.length === 0
+    const body = rows.length === 0 && current.ui?.loading && current.ui.loading.sessions.phase !== 'ready'
+      ? h(doc, 'p', { class: 'group-empty', text: t('loading.sessions') })
+      : rows.length === 0
       ? h(doc, 'p', { class: 'group-empty', text: t('projects.group_empty') })
       : h(doc, 'ul', { class: 'group-list' }, ...rows.map((r) => sessionRow(r, ui, pins, gctx)));
     const active = Boolean(group) && activeProject !== null && group.id === activeProject;
@@ -312,6 +316,34 @@ export function createView(doc, refs, deps) {
   const projectsHead = h(doc, 'div', { class: 'projects-head' }, h(doc, 'h3', { text: t('projects.title') }), projectsHeadNew);
 
   function renderList(model, ui) {
+    const loading = ui.loading;
+    const loadSig = JSON.stringify(loading);
+    if (loadSig !== loadingSig) {
+      loadingSig = loadSig;
+      const nodes = [];
+      if (loading) {
+        const entries = [
+          ['projects', 'loading.projects', 'projects.load_failed', handlers.onRetryProjects],
+          ['sessions', 'loading.sessions', 'loading.sessions_error', handlers.onRetrySessions],
+        ];
+        for (const [key, label, errorLabel, retry] of entries) {
+          const source = loading[key];
+          if (source.phase === 'ready') continue;
+          const text = source.phase === 'error' ? t(errorLabel, { reason: t('projects.offline') }) : source.refreshing ? t('loading.refreshing') : t(label);
+          const row = h(doc, 'div', { class: 'load-source', 'data-source': key }, h(doc, 'p', { text }));
+          if (source.phase === 'error') {
+            const button = h(doc, 'button', { type: 'button', class: 'link-btn', text: t('loading.retry'), 'aria-label': `${t('loading.retry')}: ${t(label)}` });
+            button.addEventListener('click', () => retry?.()); row.append(button);
+          } else {
+            if (source.slow) row.append(h(doc, 'p', { text: t('loading.slow') }));
+            if (!source.refreshing) row.append(h(doc, 'div', { class: 'load-skeleton', 'aria-hidden': 'true' }), h(doc, 'div', { class: 'load-skeleton', 'aria-hidden': 'true' }));
+          }
+          nodes.push(row);
+        }
+      }
+      loadingBox.replaceChildren(...nodes);
+      loadingBox.hidden = nodes.length === 0;
+    }
     projectsList = ui.projects ?? null;
     const all = sessionList(model).filter((x) => !x.draft);
     const selectedSession = ui.selected ? model.sessions[ui.selected] : undefined;
@@ -320,10 +352,10 @@ export function createView(doc, refs, deps) {
     const filtered = filterSessions(all, query);
     const groups = groupSessions(filtered, { pinned: pins, projects: projectsList, includeEmpty: query.trim() === '', collapsed: foldedParents });
     const rowSig = (r) => [r.depth, r.kids, r.collapsed, r.session.parent, r.session.id, r.session.name, r.session.state, r.session.updatedAt, r.session.rank, r.session.projectId, (sessionTask(r.session) || {}).number, ui.unread ? ui.unread[r.session.id] : undefined, Boolean(r.session.pendingQuestion), (mergeLabel(r.session.routeState && r.session.routeState.task) || {}).text, (() => { const a = attention(r.session, { now: now(), silentMin: ui.silentMin ?? SILENT_DEFAULT_MIN, unread: Boolean(ui.unread && ui.unread[r.session.id] === true), acked: (ui.acked || {})[r.session.id] || '' }); return `${a.state}:${a.blink}:${a.minutes}`; })()];
-    const sig = JSON.stringify([ui.selected, activeProject, query, groupMenu, sideKit.sig(), groups.pinned.map(rowSig), groups.projects.map((p) => [p.project, p.id, p.rows.map(rowSig)])]);
+    const sig = JSON.stringify([loading?.sessions.phase, ui.selected, activeProject, query, groupMenu, sideKit.sig(), groups.pinned.map(rowSig), groups.projects.map((p) => [p.project, p.id, p.rows.map(rowSig)])]);
     const shown = groups.pinned.length + groups.projects.length;
-    listEmpty.hidden = all.length > 0 || (projectsList !== null && projectsList.length > 0);
-    notFound.hidden = !(all.length > 0 && shown === 0);
+    listEmpty.hidden = Boolean(loading && (loading.projects.phase !== 'ready' || loading.sessions.phase !== 'ready')) || all.length > 0 || (projectsList !== null && projectsList.length > 0);
+    notFound.hidden = Boolean(loading && (loading.sessions.phase !== 'ready' || loading.projects.phase !== 'ready')) || !(all.length > 0 && shown === 0);
     if (sig === listSig) return;
     if (sideKit.isDragging()) { sideKit.deferRender(); return; } // пока тащат, список не пересобирается
     listSig = sig;
@@ -2174,6 +2206,9 @@ export function createView(doc, refs, deps) {
 
   function statusText(status) {
     switch (status.state) {
+      case 'loading': return t('loading.all');
+      case 'refreshing': return t('loading.refreshing');
+      case 'load_error': return t('loading.error');
       case 'connected': return t('conn.connected');
       case 'mock': return t('conn.mock');
       case 'retry': return t('conn.retry', { seconds: status.seconds });
@@ -2183,7 +2218,12 @@ export function createView(doc, refs, deps) {
   }
 
   let statusSig = '';
-  function renderStatus(status, flash, tone) {
+  function renderStatus(status, flash, tone, loading) {
+    if (loading && status.state === 'connected') {
+      const sources = Object.values(loading);
+      if (sources.some((s) => s.phase === 'error')) status = { state: 'load_error' };
+      else if (sources.some((s) => s.phase !== 'ready')) status = { state: sources.some((s) => s.refreshing) ? 'refreshing' : 'loading' };
+    }
     const sig = JSON.stringify([status, flash, tone]);
     if (sig === statusSig) return;
     statusSig = sig;
@@ -2254,6 +2294,13 @@ export function createView(doc, refs, deps) {
   let formSig = '';
   return {
     tick,
+    setAgents(next, failed) {
+      agents.splice(0, agents.length, ...next);
+      agentNotice.textContent = t(failed ? 'sessions.agents_unavailable' : 'sessions.agents_none');
+      agentNotice.hidden = agents.length > 0;
+      retryAgents.hidden = !failed;
+      menuSig = ''; draftSig = '';
+    },
     /** Вернуть текст в поле ввода сессии (черновик не создался: сообщение не теряется). */
     putText(trace, text) {
       drafts.set(trace, text);
@@ -2274,7 +2321,7 @@ export function createView(doc, refs, deps) {
       renderRail(session);
       renderDialog(model, ui);
       renderAsk(model, ui);
-      renderStatus(status, ui.flash, ui.flashTone);
+      renderStatus(status, ui.flash, ui.flashTone, ui.loading);
       tick();
     },
   };

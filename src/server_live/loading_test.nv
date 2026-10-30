@@ -1,0 +1,31 @@
+// The attach completion is transport control, including for an empty hub.
+module crew_harness.server_live
+
+import crew_harness.server.{kit_files, rig_open, line_field}
+
+test "attach: an empty snapshot ends explicitly, only for the attached page" {
+    mut rig = rig_open(kit_files("loading-empty", 30000))
+    rig.attach(1)
+    ro first = rig.everything_for(1)
+    assert(first.len() == 1)
+    assert(line_field(first[0], "kind") == "sessions_ready")
+    assert(first[0].contains("\"sessions\":[]"))
+    rig.attach(2)
+    assert(rig.everything_for(1).len() == 1)
+    assert(rig.everything_for(2).len() == 1)
+    rig.shut()
+}
+
+test "attach: completion follows the session history and carries its ids" {
+    mut rig = rig_open(kit_files("loading-history", 30000))
+    rig.attach(1)
+    rig.page(1, "session_created", "loading-session", "{\"name\":\"Загрузка\",\"agent\":\"opencode\"}")
+    rig.attach(2)
+    ro lines = rig.everything_for(2)
+    assert(lines.len() >= 2)
+    assert(line_field(lines[0], "kind") == "session_created")
+    ro last = lines[lines.len() - 1]
+    assert(line_field(last, "kind") == "sessions_ready")
+    assert(last.contains("\"sessions\":[\"loading-session\"]"))
+    rig.shut()
+}

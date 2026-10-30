@@ -497,6 +497,11 @@ The page says what the owner did. It does not apply its own words: they appear o
 
 ### Server to page
 
+After every attach the hub sends a transport control message `{"kind":"sessions_ready","sessions":["id",...]}`,
+after the catalog, histories and auxiliary states, even when there are no sessions. It is not a journal event.
+An open WebSocket alone does not mean the snapshot is ready. On reconnect the page keeps its data until this marker;
+the ids let it discard sessions deleted while it was disconnected. A page waiting for this marker needs a hub built with this protocol.
+
 | `kind` | `input` | When |
 |---|---|---|
 | `session_created` | `{ name, agent, folder, project?, project_id? }` | a session exists (`folder` is where its agent works; `project_id` names the project it was made in) |

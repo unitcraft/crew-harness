@@ -19,6 +19,7 @@ import { chooseMode, createTransport, parseAgentRegistry } from './transport.js'
 import { createProjectsApi } from './projects-api.js';
 import { routeSignal, normalizeRoute } from './routes.js';
 import { crewSignal } from './crew-task.js';
+import { createLoading } from './loading.js';
 
 const FLASH_MS = 4000;
 const TICK_MS = 1000;
@@ -94,12 +95,15 @@ let presetInfo = null; // наборы с сервера (задача 192.12): 
 let agentList = []; // семьи агентов: нужны, чтобы выбрать первую для черновика новой сессии
 // fetch берётся при каждом вызове: в режиме ?mock=1 страница подменяет globalThis.fetch уже после старта
 const projectsApi = createProjectsApi(() => globalThis.fetch.bind(globalThis), t('projects.offline'));
+const loading = createLoading({ timers, projects: () => projectsApi.list(), changed() {
+  ui.loading = loading.state;
+  ui.projects = loading.state.projects.data;
+  if (view) render();
+} });
+ui.loading = loading.state;
 
 async function loadProjects() {
-  const r = await projectsApi.list();
-  if (r.ok) ui.projects = r.projects;
-  else if (ui.projects === null) flash(t('projects.load_failed', { reason: r.error }));
-  render();
+  await loading.loadProjects();
 }
 
 // Задача 192.6: сессия, созданная первым сообщением, должна появиться; если сервер молчит — красная строка, а сообщение возвращается в поле нового черновика
@@ -204,6 +208,8 @@ async function postImage(trace, item) {
 const signal = (trace, { kind, input }) => [kind, trace, nextStep(model, trace), input];
 
 const handlers = {
+  onRetryProjects() { loadProjects(); },
+  onRetrySessions() { transport?.retry(); },
   queued(trace) { return queue.count(trace); },
   onQueue(trace, text, images = []) {
     queue.push(trace, { text, images });
@@ -420,29 +426,26 @@ async function start() {
     mock = await import('./mock.js');
     agents = mock.AGENTS;
   }
-  let registryFailed = false;
+  const registryFailed = false;
   if (picked.mode === 'mock') globalThis.fetch = mock.mockFetch(globalThis.fetch.bind(globalThis));
-  if (picked.mode === 'ws') {
-    try {
-      const response = await fetch('/api/agents', { cache: 'no-store' });
-      if (!response.ok) throw new Error('agent registry unavailable');
-      agents = parseAgentRegistry(await response.json());
-    } catch {
-      agents = [];
-      registryFailed = true;
-    }
-  }
   agentList = agents;
   // задача 192.12: наборы «роль → семья, модель, усилие» (GET /api/presets); без ответа выбора набора нет
-  try {
-    const response = await fetch('/api/presets', { cache: 'no-store' });
-    if (response.ok) presetInfo = await response.json();
-  } catch { /* выбор набора просто не показывается */ }
+  // Эти справочники не задерживают ни каркас, ни загрузку проектов и сессий.
+  fetch('/api/presets', { cache: 'no-store' }).then(async (response) => {
+    if (response.ok) { presetInfo = await response.json(); render(); }
+  }).catch(() => { /* выбор набора просто не показывается */ });
   view = createView(document, {
     app: document.getElementById('app'), side: document.getElementById('side'),
     main: document.getElementById('main'), rail: document.getElementById('rail'),
     status: document.getElementById('status'), overlay: document.getElementById('overlay'),
-  }, { agents, now: ctx.now, handlers, registryFailed, imageSrc: mock ? mock.mockImageSrc : undefined, projectsApi, presets: () => presetInfo });
+  }, { agents, now: ctx.now, handlers, registryFailed, registryPending: picked.mode === 'ws', imageSrc: mock ? mock.mockImageSrc : undefined, projectsApi, presets: () => presetInfo });
+  if (picked.mode === 'ws') {
+    fetch('/api/agents', { cache: 'no-store' }).then(async (response) => {
+      if (!response.ok) throw new Error('agent registry unavailable');
+      const next = parseAgentRegistry(await response.json());
+      view.setAgents(next, false); agentList = next; render();
+    }).catch(() => { view.setAgents([], true); agentList = []; render(); });
+  }
   setInterval(() => view.tick(), TICK_MS);
   setInterval(() => render(), 30000); // «молчит N мин» в списке обновляется сам
   document.addEventListener('visibilitychange', () => { notifier.visibilityChanged(); render(); });
@@ -461,10 +464,26 @@ async function start() {
       }
     },
     onStatus(next) { status = next; render(); },
+    onSnapshot(phase, ids) {
+      if (phase === 'loading') {
+        if (loading.state.sessions.data !== null) loadProjects();
+        loading.sessionsStart();
+      }
+      else if (phase === 'error') loading.sessionsError();
+      else {
+        // Удалённые за время разрыва сессии исчезают только после полного снимка.
+        if (ids) {
+          const keep = new Set(ids);
+          model = { ...model, sessions: Object.fromEntries(Object.entries(model.sessions).filter(([id, s]) => s.draft || keep.has(id))) };
+        }
+        loading.sessionsReady();
+      }
+    },
   });
   transport.start();
   loadProjects();
   render();
+  globalThis.addEventListener('pagehide', () => { loading.stop(); transport.stop(); }, { once: true });
 }
 start().then(() => {
   // страж запуска (boot-guard.js) ждёт этот признак: нет его — показывает «Ошибка запуска», а не пустой экран

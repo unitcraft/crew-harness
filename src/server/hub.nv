@@ -504,6 +504,13 @@ export fn Hub mut @attach(conn int) -> () {
     @route_attach(conn)
     @machine_attach(conn)
     @req_attach(conn)
+    // Transport control message, not a session event: even an empty hub completes its snapshot.
+    mut ids = []JsonValue.new()
+    for s in @sessions { ids.push(JsonValue.str(s.id)) }
+    mut ready = JsonObject.new()
+    jput(ready, "kind", JsonValue.str("sessions_ready"))
+    jput(ready, "sessions", JsonValue.array(ids))
+    @send(conn, JsonValue.object(ready).to_str())
 }
 
 /// A page is gone (it is not told anything more).
