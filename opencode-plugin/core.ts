@@ -2657,7 +2657,7 @@ export function makeTools(host: CrewHost): CrewTool[] {
         "reassign - integrator - n, text? - hand the task to a new session under the same number with a summary of what was done (a task session: the same code, the next ordinal and a new launch number; the old one is marked handed). text = a refinement of the goal: it goes into the new session's first letter as a block before the old goal, wins where they differ and stays in the task history (show). Refine the goal with this same call, never with a second letter after the handover: the new session would start on the old goal and report twice.",
         "cancel - integrator - n, text? - cancel the task; text goes to the executor. Releases the merge lock if the task held it.",
         "priority - integrator - n, priority P0..P3 - change the priority.",
-        "route - integrator - n, route full|fast|small, text (the reason, required for full), route_word and route_word_date (fast: «заводи N»; small: the owner's entry phrase word for word — the plugin does not parse it) - change the route of an open task BY A RECORD (tasks 092, 191). To full: the reason becomes the basis, the word of the owner is emptied, the series of clean runs is zeroed, the trace stays. A new word (fast) renews a word marked route_word_stale and re-reads the brief. To small: the same conditions as the small crew_spawn. A line «маршрут: …» goes to log.md of the task.",
+        "route - integrator - n, route full|fast|small, text (the reason, for full), route_word and route_word_date (fast: «заводи N»; small: the owner's entry phrase word for word) - change the route of an open task BY A RECORD (tasks 092, 191, 264). To full: the reason becomes the basis, the word is emptied, the series is zeroed. A new word (fast) renews a marked word. To small: as the small crew_spawn; on an already-small record an omitted route_word reuses the recorded phrase with its time. To small under review: the review cycle is lifted by the record (the reviewer released, the locks freed, the task reads as submitted again) — not an acceptance. A line «маршрут: …» goes to log.md.",
         "target - integrator - n, dir, remote?, branch?, word - bind the explicit RESULT repository of the task (task 257): the result lands or is already published not in the repository the task was posted in. dir is its local clone (checked: a git repository, not the task's own one, the remote and the branch on it exist); word is the owner's word with its date. The landing loop (precheck, base freshness, the merge gate, accept) then works against the bound repository; an already published candidate (an ancestor of the remote branch tip) finishes the precheck as published - no merge, accept with commit fixes the record. dir: \"\" lifts the binding.",
         "contour - executor of a small-route task - n, link - record the mark «ссылка на контур выдана» (task 191): the test contour URL given to the owner goes to log.md of the task with the relation to the 10 minute norm from the owner's word (route_word_ts). The acceptance of a small task: the integrator calls accept with text = the owner's word word for word with its date — no reviewer, no merge lock, no check steps; the landing in the target branch is still required.",
         "migrate - integrator - n, message (exact saved sent-letter text), source_id, source_session, source_to, source_qid, source_sha256, route_word, route_word_date - migrate an open folderless legacy record in place. Accepts only a strictly matched historical task-letter envelope; archive identity and exact UTF-8 text digest are required, never reconstruct the letter. Requires matching project/number/title/branch and the owner's explicit «заводи <number>» word. Edits no archive or external project files; preserves sessions, rounds, branch/worktree, history, precheck and evidence. A second migration is refused.",
@@ -2822,10 +2822,44 @@ export function makeTools(host: CrewHost): CrewTool[] {
         if (!isOpen(t)) return { content: `Задача ${taskRef(t)} ${statusRu(t.status)}: маршрут закрытой задачи не меняют.` }
         const res = applyRouteChange(t, input, readTaskMessage(t), configFor(me).routeDefaults, me.session)
         if (!res.ok) return { content: res.refusal }
+        // Смена на малый маршрут снимает цикл приёмки записью (задача 264): приёмщика у малого нет (задача 191), поэтому
+        // полномочия приёмки снимаются штатно (замки этой задачи и сессии — releaseTaskLocks, как при rework/cancel;
+        // обязательство приёмки снято; отметка review на визитке убрана), а задача на приёмке читается снова сданной —
+        // отчёт исполнителя, история, отметки шагов и запись предпроверки сохранены. Активная сессия приёмки НЕ
+        // закрывается и не прерывается (у 260 она держит тестовый контур): смена маршрута не отменяет чужую работу.
+        // Смена маршрута — не принятие: дальше accept интегратора по слову владельца.
+        let lift = ""
+        if (t.route === "small" && (t.status === "reviewing" || (t.status === "submitted" && t.reviewer))) {
+          const rev = t.reviewer
+          if (rev) {
+            releaseTaskLocks(t, rev, t.n)
+            if (t.review_qid) settleObligation(rev, t.review_qid)
+            const rc = readJson<Card>(cardFile(rev))
+            if (rc && rc.review?.project === t.project && rc.review?.n === t.n) {
+              delete rc.review
+              saveCard(rc)
+            }
+            if (!(t.reviewers ?? []).includes(rev)) t.reviewers = [...(t.reviewers ?? []), rev]
+            t.reviewer = undefined
+            t.review_kind = undefined
+            t.review_letter = undefined
+            t.review_qid = undefined
+            postLetter(rev, { id: `review-lifted-${safeKey(project)}-${t.n}-${rounds(t)}`, from_role: keyOf(me), from_session: me.session, to: rev, time: Date.now(), wake: false, text: `Полномочия приёмки задачи ${taskNo(t)} «${t.title}» сняты: маршрут сменён на малый (фраза владельца ${t.route_word_date}), приёмщика у него нет — принимает интегратор по слову владельца на тестовом контуре. Твоя текущая работа (контур, проверки) не отменяется; дальше по задаче решает интегратор.` })
+          }
+          if (t.status === "reviewing") {
+            markPrecheckStale(t, "маршрут сменён на малый: цикл приёмки снят")
+            taskEvent(t, me.session, "submitted", `маршрут сменён на малый: цикл приёмки снят${rev ? `, приёмщик ${rev} освобождён` : ""}; отчёт исполнителя и история сохранены — задача снова «сдана», принятие — слово владельца (accept интегратора)`)
+            lift = ` Цикл приёмки снят${rev ? `, полномочия приёмщика ${rev} сняты (замки и обязательство — по штатным правилам, активная сессия не прерывается)` : ""}: задача снова «сдана», отчёт исполнителя и история сохранены.`
+          } else if (rev) {
+            taskEvent(t, me.session, undefined, `маршрут сменён на малый: полномочия приёмщика ${rev} сняты; статус не менялся (${statusRu(t.status)})`)
+            lift = ` Полномочия приёмщика ${rev} сняты; статус не менялся (${statusRu(t.status)}).`
+          }
+        }
         saveTask(t)
         const why = t.folder ? taskLog(t, "документ", res.line) : "у задачи нет папки"
         host.posted([])
-        return { content: `Маршрут задачи ${taskRef(t)} записан: ${res.line}.${why ? ` (В log.md задачи не записано: ${why}; запиши строку сам: log_line {kind: "документ", text: "${res.line.replace(/"/g, "'")}"}.)` : ""}` }
+        const smallNote = t.route === "small" ? " Смена маршрута — не принятие: принятие малого маршрута — accept интегратора по слову владельца." : ""
+        return { content: `Маршрут задачи ${taskRef(t)} записан: ${res.line}.${lift}${smallNote}${why ? ` (В log.md задачи не записано: ${why}; запиши строку сам: log_line {kind: "документ", text: "${res.line.replace(/"/g, "'")}"}.)` : ""}` }
       }
       // ПРИВЯЗКА ЦЕЛЕВОГО РЕПОЗИТОРИЯ РЕЗУЛЬТАТА (задача 257): результат вливается/опубликован не в репозитории постановки.
       // Только интегратор, по слову владельца с датой; каталог/remote/ветка проверяются в момент привязки (url — свидетельство);

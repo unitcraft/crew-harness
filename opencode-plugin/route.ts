@@ -470,12 +470,20 @@ export function applyRouteChange(t: RouteFields & { history?: { at: number; by: 
     return { ok: true, line: routeLogText(t) }
   }
   if (to === "small") {
-    const p = planRoute({ ...input, route: "small", route_source: input.route_source ?? "human" }, brief, settings, now)
-    if (!p.ok) return p
+    // уже переключённая запись (задача 264): фразу можно не повторять — берутся записанные фраза, дата, основа, источник
+    // и метка времени слова (норма контура не перевыпускается); записанное provenance не «human» или фраза без даты —
+    // отказ planRoute, недостающее слово не восполняется. Новое слово — как при постановке
     const was = routeView(t)
+    const wasSmall = was.route === "small"
+    const reuse = wasSmall && !String(input.route_word ?? "").trim() && !!t.route_word
+    const eff = reuse ? { ...input, route_word: t.route_word, route_word_date: input.route_word_date ?? t.route_word_date, route_basis: input.route_basis ?? t.route_basis, route_source: input.route_source ?? t.route_source } : input
+    const p = planRoute({ ...eff, route: "small", route_source: eff.route_source ?? "human" }, brief, settings, now)
+    if (!p.ok) return p
+    const sameWord = wasSmall && String(eff.route_word ?? "").trim() === String(t.route_word ?? "").trim()
+    const keepTs = sameWord && t.route_word_ts !== undefined ? { route_word_ts: t.route_word_ts, route_word_ts_kind: t.route_word_ts_kind ?? p.fields.route_word_ts_kind } : {}
     for (const k of ["route_message_hash", "route_word_stale", "route_stale_at"] as const) delete t[k]
-    Object.assign(t, p.fields, { clean_series: 0 })
-    ;(t.history ??= []).push({ at: now, by, note: `маршрут: ${ROUTE_RU[was.route]} → малый по фразе владельца ${p.fields.route_word_date}; серия чистых заходов обнулена` })
+    Object.assign(t, p.fields, keepTs, { clean_series: 0 })
+    ;(t.history ??= []).push({ at: now, by, note: wasSmall ? `${sameWord ? `малый маршрут подтверждён заново прежней фразой владельца ${p.fields.route_word_date}` : `фраза владельца малого маршрута обновлена (${p.fields.route_word_date})`}; серия чистых заходов обнулена` : `маршрут: ${ROUTE_RU[was.route]} → малый по фразе владельца ${p.fields.route_word_date}; серия чистых заходов обнулена` })
     return { ok: true, line: routeLogText(t) }
   }
   const p = planRoute({ ...input, route: "fast", route_source: input.route_source ?? "human" }, brief, settings)

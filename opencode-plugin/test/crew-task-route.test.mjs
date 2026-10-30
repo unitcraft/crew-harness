@@ -551,6 +551,90 @@ const tsmA = tasks.loadTask("proj", tsm.n)
 cell("T191-10 the integrator accepts the small task by the word of the owner: accepted; the word is in the history and in the journal", /принята словом владельца/.test(rA1) && tsmA.status === "accepted" && /принята словом владельца/.test(tsmA.history.at(-1)?.note ?? "") && /решение владельца: задача .* принята/.test(logNow(tsmA)), rA1 + " || " + logNow(tsmA))
 cell("T191-11 the README names the small route, the three lines and the contour mark", /малый|small/.test(readme) && /test-contour/.test(readme) && /contour/.test(readme), "")
 
+// ---- the route change full → small UNDER REVIEW (task 264): the review cycle is lifted by the record, the task reads
+// as submitted again (the executor's report stands); the acceptance stays the owner's word — the change is not an acceptance ----
+const rF264 = await spawn("Смена на малый в приёмке")
+const t264 = tasks.listTasks("proj").find((t) => t.title === "Смена на малый в приёмке")
+const rSub264 = await call("crew_task", t264.executor, { action: "submit", n: t264.n, text: "работа сдана: всё сделано" })
+cell("T264-1 a full task is submitted by its executor", /сдана/.test(rSub264) && tasks.loadTask("proj", t264.n).status === "submitted", rSub264)
+await hooks.context({ sessionID: "sesREV264", system: [], model: { id: "x", providerID: "y" } })
+await events["session.idle"]({ properties: { sessionID: "sesREV264" } })
+const rec264 = tasks.loadTask("proj", t264.n)
+rec264.reviewer = "sesREV264"
+rec264.review_kind = "tab"
+rec264.review_qid = `r${rec264.qid}`
+tasks.saveTask(rec264)
+const rc264 = core.readJson(core.cardFile("sesREV264")) ?? { session: "sesREV264", role: "worker", auto: false, title: "прм", directory: proj, repo: "proj", project: "proj", pid: 1, updated: Date.now() }
+rc264.review = { project: "proj", n: t264.n }
+core.saveCard(rc264)
+const rRev264 = await call("crew_task", "sesREV264", { action: "review", n: t264.n })
+cell("T264-1 the reviewer started the acceptance (reviewing)", /на приёмке/.test(rRev264) && tasks.loadTask("proj", t264.n).status === "reviewing", rRev264)
+const histBefore264 = tasks.loadTask("proj", t264.n).history.length
+const rR264 = await call("crew_task", "sesINTEG1", { action: "route", n: t264.n, route: "small", route_word: SWORD, route_word_date: "2026-10-25" })
+const a264 = tasks.loadTask("proj", t264.n)
+cell("T264-2 the change full → small under review: the review cycle is lifted, the task reads as submitted again (the blocked accept is unblocked)", /Маршрут задачи/.test(rR264) && a264.route === "small" && a264.status === "submitted", `${rR264} || status ${a264.status}`)
+cell("T264-2 the reviewer is released by the standard rules: the record cleared, the session kept in reviewers, the card has no review", !a264.reviewer && !a264.review_kind && !a264.review_letter && !a264.review_qid && (a264.reviewers ?? []).includes("sesREV264") && !core.readJson(core.cardFile("sesREV264"))?.review, JSON.stringify({ reviewer: a264.reviewer, reviewers: a264.reviewers, cardReview: core.readJson(core.cardFile("sesREV264"))?.review }))
+cell("T264-2 the history, the report and the phrase stay; the lift is an event, not a cancel and not an acceptance", a264.history.length >= histBefore264 + 2 && a264.report === "работа сдана: всё сделано" && a264.route_word === SWORD && a264.status !== "cancelled" && a264.history.some((h) => /цикл приёмки снят/.test(h.note ?? "")), JSON.stringify(a264.history.map((h) => h.note)))
+cell("T264-2 the journal of the task has the route line", /маршрут: малый/.test(logNow(a264)), logNow(a264))
+const rRevAfter264 = await call("crew_task", "sesREV264", { action: "review", n: t264.n })
+cell("T264-3 the released reviewer has no action on the small task (the small route names the way: the integrator's accept)", /малый маршрут/.test(rRevAfter264) && /интегратор/.test(rRevAfter264), rRevAfter264)
+const rReSub264 = await call("crew_task", t264.executor, { action: "submit", n: t264.n, text: "повторная сдача" })
+cell("T264-3 the executor does not submit twice (no lifecycle duplication)", /уже отправлен/.test(rReSub264), rReSub264)
+const rA264w = await call("crew_task", "sesINTEG1", { action: "accept", n: t264.n, text: "" })
+cell("T264-4 accept without the owner's word is refused (the change of the route is not an acceptance)", /Нужен text/.test(rA264w) && tasks.loadTask("proj", t264.n).status === "submitted", rA264w)
+const rA264m = await call("crew_task", "sesINTEG1", { action: "accept", n: t264.n, text: "«проверил на контуре, принимаю» (владелец, 2026-10-30, чат)" })
+cell("T264-4 accept without the landing is refused", /Не принято/.test(rA264m) && /не влита/.test(rA264m), rA264m)
+git(proj, "merge", "--ff", t264.branch)
+const rA264 = await call("crew_task", "sesINTEG1", { action: "accept", n: t264.n, text: "«проверил на контуре, принимаю» (владелец, 2026-10-30, чат)" })
+cell("T264-4 after the landing the integrator accepts by the owner's word: accepted; the word is in the history and the journal", /принята словом владельца/.test(rA264) && tasks.loadTask("proj", t264.n).status === "accepted" && /решение владельца: задача \d+ принята/.test(logNow(tasks.loadTask("proj", t264.n))), rA264)
+
+// ---- the record switched to small BEFORE the lift existed (task 264): the supported recovery — crew_task route small
+// without a new phrase reuses the recorded one (its time is kept), the stuck review state is lifted the same way ----
+const reviewMod = await import("../review.ts")
+const stuck264 = {
+  project: "proj", n: 882, title: "Уже переключённая", slug: "uzhe-perekluchennaya", goal: "g", criteria: "c", priority: "P1", tier: "light", role: "worker",
+  author: "sesINTEG1", author_role: "proj.integrator", qid: "q882", status: "reviewing", kind: "spawn", executor: "sesEX882", executors: [], attempt: 1, directory: proj,
+  branch: "task/882-stuck", route: "small", route_basis: "фраза владельца 2026-10-25", route_source: "human", route_word: SWORD, route_word_date: "2026-10-25",
+  route_word_ts: 1_700_000_000_000, route_word_ts_kind: "word", ceiling: 1, clean_runs: 1, probes: 3, delivery_compressed: false, clean_series: 0,
+  reviewer: "sesREV882", review_kind: "spawn", review_letter: "review-proj-882-1", review_qid: "rq882", report: "отчёт исполнителя 882",
+  history: [{ at: 1, by: "sesEX882", status: "submitted", note: "отчёт" }, { at: 2, by: "sesREV882", status: "reviewing", note: "приёмка начата" }], created: 1, updated: 1,
+}
+writeFileSync(path.join(store(), "882.json"), JSON.stringify(stuck264, null, 1))
+// активная сессия приёмки (spawn, running): она собирает и держит тестовый контур — смена маршрута не должна её прерывать
+core.saveCard({ session: "sesREV882", role: "worker", auto: false, title: "прм 882", directory: proj, repo: "proj", project: "proj", review: { project: "proj", n: 882 }, spawned: { by: "sesINTEG1", task: "приёмка 882", tier: "light", status: "running", at: Date.now(), qid: "rq882" }, pid: 1, updated: Date.now() })
+cell("T264-5 the old review lock of the stuck record is taken for the probe", reviewMod.takeMergeLock("proj", "sesREV882", 882, false).ok === true && reviewMod.mergeHolder("proj")?.session === "sesREV882", "")
+// чужие замки: публикация другой задачи и замок вливания другого проекта — съём цикла приёмки их не трогает
+const FOREIGN_PUB = "http://foreign.example/repo#main"
+reviewMod.takePubLock(FOREIGN_PUB, "proj", "sesOTHER9", 999)
+reviewMod.takeMergeLock("proj2", "sesOTHER9", 999, false)
+const rStuck = await call("crew_task", "sesINTEG1", { action: "route", n: 882, route: "small" })
+const s882 = tasks.loadTask("proj", 882)
+cell("T264-5 the recovery of an already-small record without a new phrase: the recorded word is reused, the review cycle is lifted", /Маршрут задачи/.test(rStuck) && s882.route === "small" && s882.status === "submitted", `${rStuck} || status ${s882.status}`)
+cell("T264-5 the recorded phrase and its time are preserved (the contour norm is not re-dated)", s882.route_word === SWORD && s882.route_word_ts === 1_700_000_000_000 && s882.route_word_ts_kind === "word" && s882.route_basis === "фраза владельца 2026-10-25", JSON.stringify({ w: s882.route_word, ts: s882.route_word_ts, k: s882.route_word_ts_kind, b: s882.route_basis }))
+cell("T264-5 the reviewer is released and the old merge lock is freed by the standard release", !s882.reviewer && (s882.reviewers ?? []).includes("sesREV882") && reviewMod.mergeHolder("proj") === undefined && !core.readJson(core.cardFile("sesREV882"))?.review, JSON.stringify({ holder: reviewMod.mergeHolder("proj") }))
+cell("T264-5 the foreign locks stay: the publication of another task and the merge lock of another project are not touched", reviewMod.pubHolder(FOREIGN_PUB)?.session === "sesOTHER9" && reviewMod.mergeHolder("proj2")?.session === "sesOTHER9", JSON.stringify({ pub: reviewMod.pubHolder(FOREIGN_PUB), proj2: reviewMod.mergeHolder("proj2") }))
+reviewMod.releasePubLock(FOREIGN_PUB, "proj", "sesOTHER9", 999)
+reviewMod.releaseMergeLock("proj2", "sesOTHER9", 999)
+cell("T264-5 the active review session is NOT interrupted (it keeps its contour): spawned stays running, only the review authority is lifted", core.readJson(core.cardFile("sesREV882"))?.spawned?.status === "running", JSON.stringify(core.readJson(core.cardFile("sesREV882"))?.spawned))
+cell("T264-5 the history and the report stay; the recovery is events, not a cancel and not an acceptance", s882.history.length === 4 && s882.report === "отчёт исполнителя 882" && s882.history[0].note === "отчёт" && s882.status !== "cancelled" && s882.status !== "accepted", JSON.stringify(s882.history.map((h) => h.note)))
+// запись малого маршрута без слова владельца: повтор без новой фразы её НЕ восполняет — отказ, запись не тронута
+const noWord264 = { ...stuck264, n: 883, branch: "task/883-noword", reviewer: undefined, review_kind: undefined, review_letter: undefined, review_qid: undefined }
+delete noWord264.route_word
+delete noWord264.route_word_date
+delete noWord264.route_word_ts
+delete noWord264.route_word_ts_kind
+writeFileSync(path.join(store(), "883.json"), JSON.stringify(noWord264, null, 1))
+const rNoWord264 = await call("crew_task", "sesINTEG1", { action: "route", n: 883, route: "small" })
+const s883 = tasks.loadTask("proj", 883)
+cell("T264-7 an already-small record without the owner's word: the repeat does not fill it in — refused, the record untouched (still reviewing)", /малый маршрут требует/.test(rNoWord264) && s883.status === "reviewing" && !s883.route_word && s883.history.length === 2, rNoWord264)
+const rBadSrc = await call("crew_task", "sesINTEG1", { action: "route", n: 883, route: "small", route_word: SWORD, route_word_date: "2026-10-25", route_source: "rule" })
+cell("T264-7 a word whose provenance is not human is refused on the recovery too", /фраза владельца|human|человек/.test(rBadSrc) && tasks.loadTask("proj", 883).status === "reviewing", rBadSrc)
+const rA882 = await call("crew_task", "sesINTEG1", { action: "accept", n: 882, text: "«принимаю» (владелец, 2026-10-30, чат)" })
+cell("T264-6 the recovered record: accept without the landing is refused", /Не принято/.test(rA882) && /не влита/.test(rA882), rA882)
+git(proj, "branch", "task/882-stuck")
+const rA882b = await call("crew_task", "sesINTEG1", { action: "accept", n: 882, text: "«принимаю» (владелец, 2026-10-30, чат)" })
+cell("T264-6 after the landing the recovered record is accepted by the owner's word", /принята словом владельца/.test(rA882b) && tasks.loadTask("proj", 882).status === "accepted", rA882b)
+
 stop?.()
 try {
   rmSync(tmp, { recursive: true, force: true })
