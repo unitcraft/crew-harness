@@ -396,6 +396,9 @@ test "page: chunk, done, refused, cancel" {
     ro cancel = page_of(stamped(EventKind.Input, "cancel", "x", ""), "t1")
     assert(str_at(cancel, "kind") == "cancel")
     assert(str_at(input_of(cancel), "turn") == "t1")
+    ro protocol_cancel = page_of(stamped(EventKind.Input, "cancel_request", "x", ""), "t1")
+    assert(str_at(protocol_cancel, "kind") == "cancel")
+    assert(str_at(input_of(protocol_cancel), "turn") == "t1")
 }
 
 test "page: timeout is a refusal Timeout" {

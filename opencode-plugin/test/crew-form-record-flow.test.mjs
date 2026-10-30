@@ -10,9 +10,11 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, 
 import os from "node:os"
 import path from "node:path"
 import { DatabaseSync } from "node:sqlite"
+import { legacyAnswerPass } from "./legacy-answer-fixture.mjs"
 
 const tmp = mkdtempSync(path.join(os.tmpdir(), "crew-form-record-flow-"))
 process.env.XDG_DATA_HOME = tmp
+process.env.XDG_STATE_HOME = tmp
 process.env.TEMP = process.env.TMP = process.env.TMPDIR = tmp
 process.env.CREW_HARNESS_POLL_MS = "100"
 process.env.CREW_HARNESS_STATUS_MS = "100"
@@ -116,6 +118,7 @@ cell("A: the record of the held form is made again from the marker (the call is 
 await until(() => stOf(A)?.state === "owner" && stOf(A)?.formId === "frm_FA")
 cell("A: the panel says owner, with the form and the age of the wait", stOf(A)?.state === "owner" && stOf(A)?.formId === "frm_FA" && stOf(A)?.since === T0, JSON.stringify(stOf(A)))
 put("fa1", { form: "frm_FA", session: A, option: "1", quote: "да, вливай" })
+await legacyAnswerPass(oa, core, ctx)
 await until(() => got("fa1")?.status)
 cell("A: crew-answer on the restored form is applied (interrupt, record closed, letter)", got("fa1")?.status === "applied" && interrupts.some((i) => i.sessionID === A) && !recOf(A).length && lettersTo(A).some((t) => /Ответ владельца на ваш вопрос/.test(t)), JSON.stringify({ a: got("fa1"), i: interrupts, r: recOf(A) }))
 

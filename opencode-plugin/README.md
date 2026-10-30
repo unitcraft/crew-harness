@@ -562,7 +562,7 @@ tool part of the tab: running, completed, error) and decides by it:
 - **Completed call**: you answered (the event may have been lost): the record is removed, as before.
 
 Answer from outside the window: `node scripts/crew-answer.mjs` lists such dialogs too (a dead one is labelled), and `node scripts/crew-answer.mjs <form id | session> --option 1 --quote "your word"`
-applies to a restored form like to any other (interrupt of the turn, a letter with the answer, the record closed). No new settings key.
+applies to a restored form like to any other (a reply of the service settles the call, the record closed). No new settings key.
 
 ### Your answer to a question from outside the window (task 059)
 
@@ -574,16 +574,21 @@ node scripts/crew-answer.mjs <form id | session | project.role> --option 2 --quo
 node scripts/crew-answer.mjs frm_123 --text "your own answer" --quote "your word"
 ```
 
-The script puts an answer file into `<mailbox>/answers/` and waits up to 30 s for the result. OpenCode 2.0.26 gives the plugin no
-way to reply to a form (no `form.reply` in the plugin context), so the plugin closes the question by an interrupt of the turn
-(`session.interrupt`, as on Esc) and sends the tab a letter «Ответ владельца на ваш вопрос «…»: <answer> (передан через
-оркестратора по слову владельца: «…»)». The record in `forms/` goes as answered (no repeat of task 040), the task of the tab gets
-the event «ответ владельца через оркестратора», the plugin log a line `owner answer <id> applied`. Not applied — no open question
-(or it is already answered), no such option, no quote, the interrupt failed (the question stays open): the reason is in the file
-(`status: refused`, `why`) and in the log. Only files in the local data folder of the service are read; whoever can write there
+The script puts an answer file into `<mailbox>/answers/` and waits up to 30 s for the result. Since task 263 the plugin settles the
+waiting `question` call by the reply of the OpenCode service itself (`POST /api/session/{sessionID}/form/{formID}/reply`,
+`form-reply.ts`; the service is found by its `service.json`, the same registration the CLI `opencode api` uses): the model gets the
+answer as the result of the tool and the turn goes on by itself — no interrupt, no detour letter. The service guarantees one answer
+(a repeat is 409). After a restart it retries the same form; 409 is refused as already settled, not claimed as applied: it does not
+prove which answer won in the window. A form with several questions is refused to the window (the reply answers one field). The record in
+`forms/` goes as answered (no repeat of task 040), the task of the tab gets the event «ответ владельца через оркестратора», the
+plugin log a line `owner answer <id> applied`. Not applied — no open question (or it is already answered), no such option, no
+quote, the reply failed (the question stays open): the reason is in the file (`status: refused`, `why`) and in the log. Without the
+service registration the reply is refused without interrupting the turn. Only automatic answers of task 096 (whose letter must say «not the owner's word») keep the old way:
+an interrupt of the turn (`session.interrupt`, as on Esc) and a letter «Ответ владельца на ваш вопрос «…»: <answer> (передан через
+оркестратора по слову владельца: «…»)». Only files in the local data folder of the service are read; whoever can write there
 can forge an answer, the same border as the mailbox — the log line and the task event are the signal.
-The record of the answer is made BEFORE the turn is interrupted (`status: applying`, with the form and the answer in the file); a restart between the steps
-finishes the answer: no second interrupt once it was made, no second letter (the id is stable), no lost answer.
+The record of the answer is made BEFORE the form is settled (`status: applying`, with the form and the answer in the file); a restart between the steps
+retries the answer without double settlement. If the service already settled it but the process died before recording success, the local result is uncertain/refused (409), not invented approval. A dead original call cannot be restored by this adapter.
 
 #### A tab that asks again after your answer (task 078)
 
@@ -641,6 +646,14 @@ One try per hang, at most 2 tries per session in an hour. When the plugin cannot
 `hung turn self-recovery: off` at start and `crew_doctor` say so; the interrupt found nothing to stop; the turn is still hung
 5 minutes after the try; the limit), the tab is shown as waiting for you with «ход завис с ЧЧ:ММ: нажмите Esc в окне и напишите
 «продолжай»» and the log says why (`hung turn not resumed`).
+
+### A hidden wait of a tab is named (task 263)
+
+«Busy» and «running» do not prove work (incident 258, 2026-10-30: a tab stood inside a `question` call for hours while the
+API said `running` and its letters waited unread). `crew_list` checks the blocker of a working tab (`blockingQuestion`,
+`form-wait.ts`): a live record of a question form, and without a record an open `question` call in the database (a dialog
+without a record, task 120). A tab blocked on a question is shown as waiting for you with the question and since when —
+not as a bare «working». The check only reads; it never interrupts, never answers for you and sends no letters by itself.
 
 ### Session status
 

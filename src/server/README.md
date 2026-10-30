@@ -255,7 +255,7 @@ The page protocol (the contract with the page of the control panel):
 |---|---|---|
 | server to page | `question_request` | `{ turn, request, tool_call, questions:[{ question, header, multiSelect, options:[{ label, description }] }] }`; `request` is the key of the call (the JSON-RPC id, or `mcp-<n>` for the MCP tool) |
 | page to server | `question_answer` | `{ request, skipped:false, answers:[{ index, selected:[label...], other }] }` or `{ request, skipped:true }`; `other` is the own text of the owner or an empty string |
-| server to page | `question_resolved` | `{ request }`: the question is settled (answered, skipped, withdrawn by the agent, its term passed, the turn was cancelled); the page takes the form away |
+| server to page | `question_resolved` | `{ request }`: the question is settled (answered, skipped, withdrawn by the agent, the turn was cancelled); the page takes the form away. A term passed (the MCP tool) does NOT settle it (task 263): the question waits on, marked `late` |
 
 A skip is `decline` (the agent goes on, told that the user skipped); a cancel of the turn answers `cancel` to the agent and tells the page `question_resolved` before the `cancel`; the request is in the journal (`question_request`
 as a progress of the turn, `question_answer` as the owner's event), so a reloaded page sees the form again if the question is still open and a settled one as settled. An answer nobody asked for changes nothing.
@@ -267,7 +267,11 @@ For an agent with no tool of its own (`ask: mcp` in its settings). The hub start
 - `127.0.0.1` and a port the system chooses (one for the hub; the log says which); `POST /mcp/<session>` with the header `Authorization: Bearer <token>` (a random token for the hub); a request with an `Origin` header is refused, a `GET` is `405`.
   Streamable HTTP of MCP as far as needed: `initialize`, `ping`, `tools/list`, `tools/call`, a notification is `202`. One JSON-RPC message per `POST`, one JSON answer, the connection closed.
 - The tool `ask_user_question`: `questions:[{ question, header, multiSelect, options:[{ label, description }] }]` (options may also be plain strings); the result is a text, `Вопрос: ... Ответ: ...` for each question, or
-  "Пользователь пропустил вопрос."; a call that is not answered in `ask_timeout_seconds` (30 minutes) gives "таймаут ожидания ответа" and the form is taken away.
+  "Пользователь пропустил вопрос."; a call that is not answered in `ask_timeout_seconds` (30 minutes) gives "таймаут ожидания ответа", but the form stays (task 263):
+  the question keeps waiting for the owner (the pending is marked `late`); his answer settles it and is saved as a non-waking stale recovery letter. A restart restores open questions from the journal.
+  The contract of the late answer: the HTTP request of the original call is answered already (the term text) or the connection died with the hub — **the original call_id cannot be given a tool result any more**, so the answer goes
+  as a crew letter marked `stale`, with session/question/opening/task identity and answer text. It never wakes the session and never authorizes an action: the owner must confirm the current gate anew. All late answers are conservatively stale, including after restart; missing legacy correlation is not evidence of freshness. The pending
+  is taken at the first answer: a repeated answer for the same key and an answer for an unknown key are refused (a line in the log, nothing shown, the form is settled at most once).
 - It is handed to the agent in `session/new` (`mcpServers`: an `http` server `crew` with the address of the session and the token in `headers`) **only when the agent said `mcpCapabilities.http`**; otherwise nothing is given
   and the log of the session gets a note (`acp_note`). The first prompt of the session (and of an agent after a change of the family) gets a short note before the text of the owner: "Если нужно что-то уточнить у пользователя или
   выбрать между вариантами - вызывай инструмент ask_user_question (сервер crew), не пиши вопрос текстом"; the note is not in the journal and not in the feed.
@@ -281,7 +285,11 @@ checked: its model answered "Free usage limit reached" (the quota of the account
 
 Tests: `src/acp/ask_test.nv` (the forms and the answers, pure), `src/acp_live/client_test.nv` (the fake agent asks, is answered, is skipped, is cancelled; the server goes to `session/new` only to an agent that takes HTTP),
 `src/server/ask_mcp_test.nv` (the messages), `src/server_live/mcp_test.nv` (the sockets: the token, the origin, a call that waits, a term), `src/server_live/hub_test.nv` (the scenarios `scenario_question`,
-`scenario_question_off`, `scenario_question_mcp`, `scenario_question_mcp_timeout`; the fake agent `src/acp/testdata/fake_agent.mjs` asks with `ask`, `ask2`, calls the tool with `askmcp`).
+`scenario_question_off`, `scenario_question_mcp`, `scenario_question_mcp_timeout`, `scenario_question_mcp_restart`; the fake agent `src/acp/testdata/fake_agent.mjs` asks with `ask`, `ask2`, calls the tool with `askmcp`).
+
+Task 263 has a separate executable test entry: `nova test src/server_hidden_wait --jobs 1 --timeout 180 -v`.
+It exercises the live MCP reply, foreign-session isolation, timeout recovery, restart, stale keys and duplicate answers.
+It does not replace the full `nova test src/server_live --jobs 1 --timeout 600` regression run.
 
 ### The tools of the hub in the four families (task 192.9)
 

@@ -1,13 +1,20 @@
 // ОТВЕТ ВЛАДЕЛЬЦА НА ВОПРОСНИК СНАРУЖИ ОКНА (задача 059; владелец, 2026-10-15: «заводи 059», путь 2 — «по рекомендации»).
-// OpenCode 2.0.26 не даёт плагину ответить на форму (в контексте плагина нет form.reply, см. analysis.md задачи 059), поэтому
-// вопросник закрывается не ответом, а прерыванием хода (ctx.session.interrupt, как в задаче 048), а ответ владельца приходит
-// вкладке письмом. Вход — файл в папке ANSWERS (кладёт scripts/crew-answer.mjs по слову владельца в чате оркестратора).
-// Плагин на проходе (answerTick): форма ещё открыта → снимает запись forms/ как отвеченную (повтор задачи 040 не сработает),
-// прерывает ход, кладёт письмо, пишет журнал и историю задачи; итог — в самом файле-ответе (status applied | refused, why).
+// Вход — файл в папке ANSWERS (кладёт scripts/crew-answer.mjs по слову владельца в чате оркестратора).
+//
+// ЗАДАЧА 263 (инцидент 258, 2026-10-30): ответ владельца завершает ожидающий вызов `question` ШТАТНЫМ ответом —
+// POST /api/session/{sid}/form/{fid}/reply службы OpenCode (form-reply.ts), модель получает ответ как результат
+// инструмента и ход продолжается сам, без прерывания и обходного письма. Однократность гарантирует сервер
+// (повтор — 409), поэтому достройка после перезапуска — тот же вызов; 409 не доказывает применение именно нашего ответа.
+// Запись forms/ снимается после ответа службы
+// (событие form.replied тоже её снимает); неудача — отказ с причиной, запись формы остаётся (владелец может
+// ответить в окне). Формы с несколькими вопросами (nq > 1) отказом идут в окно: ответить файлом можно только на
+// одно поле q0. Автоответы плагина (source: "plugin", задача 096) и среда без reply (старая проводка, тесты) —
+// прежний путь: прерывание хода (ctx.session.interrupt, задача 048) и письмо с рамкой «не слово владельца».
 import { existsSync, mkdirSync, readdirSync, renameSync, writeFileSync } from "node:fs"
 import path from "node:path"
-import { noteAnswered } from "./answer-loop.ts"
+import { noteAnswered, noteDelivered } from "./answer-loop.ts"
 import { type QuestionCall, readJson } from "./core.ts"
+import { type ReplyResult } from "./form-reply.ts"
 import { DEAD_WHY, FORMS, type PendingForm, addForm, allForms, removeForm, replacedForms, settleDuplicates } from "./form-wait.ts"
 import { closeDeadMark, deadDialogOf } from "./form-restore.ts"
 import { HELD_WHY, autoLetter, autoNote, guardAnswer } from "./form-auto.ts"
@@ -29,7 +36,7 @@ export type OwnerAnswer = {
   /** цитата слова владельца из чата оркестратора */
   quote: string
   /** applying — запись об ответе сделана и форма взята, но шаги доставки ещё не все выполнены (задача 096: после перезапуска они достраиваются) */
-  status?: "applying" | "applied" | "refused"
+   status?: "applying" | "applied" | "refused" | "unknown"
   why?: string
   done?: number
   /** что передано вкладке */
@@ -109,6 +116,8 @@ export type AnswerDeps = {
   say(line: string): void
   /** задача 120: последний вызов question вкладки по базе (core.ts questionCall); без него отказ «нет открытой формы» не уточняется */
   call?(session: string): Promise<QuestionCall>
+  /** задача 263: завершение формы штатным ответом службы (form-reply.ts). Есть — ответ владельца (не plugin) идёт ответом на форму, без прерывания и письма */
+  reply?(session: string, formId: string, answer: string): Promise<ReplyResult>
 }
 
 /** Один проход по папке входящих ответов: каждый новый файл — применён или отказан, итог в файле и в журнале. */
@@ -119,7 +128,7 @@ export async function answerTick(deps: AnswerDeps, now = Date.now(), dir = ANSWE
   // задача 071: накопленные дубли закрываются до разбора ответов — ответ на старую форму получит подсказку, а не уйдёт в никуда
   if (all.some((x) => x.a && !x.a.status)) for (const x of settleDuplicates(formsDir, now)) deps.say(`form ${x.id} of ${x.session}: replaced by ${x.by} (${x.reason ?? "the same question asked again"})`)
   for (const { file, a } of all) {
-    if (!a || a.status === "applied" || a.status === "refused") continue
+    if (!a || a.status === "applied" || a.status === "refused" || a.status === "unknown") continue
     a.id ??= path.basename(file, ".json")
     let session: string
     let form: PendingForm
@@ -169,11 +178,42 @@ export async function answerTick(deps: AnswerDeps, now = Date.now(), dir = ANSWE
           continue
         }
       }
-      // запись о взятии — до снятия записи формы и до прерывания (задача 096): умер процесс между шагами — файл помнит форму и ответ
+      // задача 263: reply-путь отвечает только на форму с одним вопросом (поле q0); форму с несколькими — владельцу в окно
+      if (a.source !== "plugin" && deps.reply && (form.nq ?? 1) > 1) {
+        finish(file, a, { status: "refused", why: `форма с ${form.nq} вопросами: ответом файла закрывается только один вопрос — ответьте в окне`, done: now })
+        a.status = "refused"
+        deps.say(`owner answer ${a.id} not applied: the form has ${form.nq} questions, the reply path answers one`)
+        continue
+      }
+      // запись о взятии — до ответа службы / снятия записи формы и прерывания (задача 096): умер процесс между шагами — файл помнит форму и ответ
       finish(file, a, { status: "applying", form: form.id, session, answer, snap: form })
       Object.assign(a, { status: "applying", form: form.id, session, answer, snap: form })
-      // запись снимается до прерывания: событие form.cancelled от прерывания не должно начать повтор (задача 040)
-      removeForm(session, form.id, formsDir)
+      // путь прерывания: запись снимается до прерывания — событие form.cancelled от прерывания не должно начать повтор (задача 040).
+      // Путь ответа службы снимает запись ПОСЛЕ ответа (ниже): неудача оставляет вопрос открытым.
+      if (!(a.source !== "plugin" && deps.reply)) removeForm(session, form.id, formsDir)
+    }
+    // задача 263: ответ владельца — штатным ответом на форму (form-reply.ts); однократность гарантирует сервер (повтор — 409),
+    // поэтому достройка после перезапуска — тот же вызов. Прерывания и обходного письма нет: модель получает ответ результатом
+    // инструмента и ход продолжается сам.
+    if (a.source !== "plugin" && !a.interrupted && deps.reply) {
+      const r = await deps.reply(session, form.id, answer)
+      if (r.ok) {
+        removeForm(session, form.id, formsDir)
+        noteAnswered(session, form, `owner-answer-${a.id}`, now, formsDir)
+        noteDelivered(session, `owner-answer-${a.id}`, now, formsDir)
+        deps.history(session, answerNote(form, answer, a.quote, a.id))
+        finish(file, a, { status: "applied", form: form.id, session, answer, done: now })
+        Object.assign(a, { status: "applied", form: form.id, session })
+        deps.say(`owner answer ${a.id} applied: form ${form.id} of ${session} settled by the service reply, the answer "${answer.slice(0, 80)}" returned to the waiting call (owner's word: "${a.quote.slice(0, 80)}")`)
+        continue
+      }
+      // 409 proves only settlement, not which answer won (it may be a different answer in the window).
+      // Never record our proposed answer as the owner's applied decision without that evidence.
+      if (r.missing || r.settled) removeForm(session, form.id, formsDir)
+      finish(file, a, { status: r.unknown ? "unknown" : "refused", why: r.why, done: now })
+      a.status = r.unknown ? "unknown" : "refused"
+      deps.say(`owner answer ${a.id} not applied: ${r.why}`)
+      continue
     }
     if (!a.interrupted) {
       const i = await deps.interrupt(session)

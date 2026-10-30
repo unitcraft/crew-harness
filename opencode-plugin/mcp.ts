@@ -14,8 +14,9 @@
 // ЗАПУСК: node mcp.ts (node >= 24 — снятие типов). Протокол — JSON-RPC 2.0 построчно в stdin/stdout.
 
 import { createInterface } from "node:readline"
-import { type Card, DEFAULT_ROLE, cardFile, log, loadProjects, makeTools, projectOf, readJson, repoLabel, saveCard, sessionFromDb } from "./core.ts"
+import { type Card, DEFAULT_ROLE, activityEvidence, cardFile, log, loadProjects, makeTools, projectOf, questionCall, readJson, repoLabel, saveCard, sessionFromDb } from "./core.ts"
 import { type Task, loadTask } from "./tasks.ts"
+import { blockingQuestion } from "./form-wait.ts"
 
 const SESSION = String(process.env.OPENCODE_CREW_SESSION ?? "").trim()
 const projects = loadProjects()
@@ -57,6 +58,9 @@ const tools = makeTools({
   roleTaken: () => {},
   startTask,
   doctor: async () => (SESSION ? [] : ["MCP-сервер запущен без OPENCODE_CREW_SESSION — не знает, за какую вкладку действует"]),
+  // задача 263: тот же блокер вопросника, что у плагина (та же база и тот же ящик)
+  blocker: (s) => blockingQuestion(s, Date.now(), (x) => questionCall(x, 1)),
+  activity: (s) => activityEvidence(s),
 })
 
 const INSTRUCTIONS =

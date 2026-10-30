@@ -37,6 +37,7 @@ import path from "node:path"
 import { overdueProblems } from "./open-questions.ts"
 import {
   type Card,
+  activityEvidence,
   type Letter,
   POLL_MS,
   QUEUE,
@@ -148,7 +149,7 @@ import { countedOpen, waitingCleanup, ACCEPTED_REMINDERS_MAX, acceptedReminderId
 import { EXECUTOR_CODE, sesLabel, sessionOf, sessionRef, taskNo } from "./tasks.ts"
 import { profileProblems, profileState, stateSignature, syncProjectFiles, syncSnapshot, syncTaskFile } from "./profile-layer.ts"
 import { cellOfState, clampTier, resolveStageProfile, splitLaunchModel, stageOfLaunch, tabFitsCell } from "./profiles.ts"
-import { cleanupForms, FORM_RESTART_GRACE_MS, formLookEvery, formReminders, formTick, pendingForms, settleOnRequest, shownForms, startFormWait, waitingForms } from "./form-wait.ts"
+import { cleanupForms, FORM_RESTART_GRACE_MS, blockingQuestion, formLookEvery, formReminders, formTick, pendingForms, settleOnRequest, shownForms, startFormWait, waitingForms } from "./form-wait.ts"
 import { restoreForms } from "./form-restore.ts"
 import { systemToast } from "./toast-win.ts"
 import { probeEnabled, startEventProbe } from "./event-probe.ts"
@@ -158,6 +159,7 @@ import { addSide, ensureWorktree, fileAtAsync, gitTraces, leftoversOf, mergeHold
 import { precheckLines, releaseLandedLock } from "./precheck.ts"
 import { isLauncherCard, noteLoopLag, registerJournalTools } from "./journal.ts"
 import { answerTick } from "./owner-answer.ts"
+import { replyForm } from "./form-reply.ts"
 import { autoNotes, autoTick } from "./form-auto.ts"
 import { clearLoop, loopLetter, loopOf, loopTick, noteDelivered } from "./answer-loop.ts"
 import { factsOf, isOwnerAnswer, nudgeHold, serviceKindOf, verdicts } from "./queue-gate.ts"
@@ -1493,9 +1495,11 @@ export default {
         },
         now(),
       )
-      // ОТВЕТ ВЛАДЕЛЬЦА СНАРУЖИ ОКНА (задача 059, owner-answer.ts): файл из scripts/crew-answer.mjs — прерывание хода и письмо с ответом
+      // ОТВЕТ ВЛАДЕЛЬЦА СНАРУЖИ ОКНА (задача 059, owner-answer.ts): файл из scripts/crew-answer.mjs — ответом на форму через
+      // API службы (задача 263, form-reply.ts), без reply — прежним путём (прерывание хода и письмо с ответом)
       await answerTick({
         call: (s) => questionCall(s),
+        reply: (s: string, fid: string, ans: string) => replyForm(s, fid, ans),
         interrupt: (s) => interruptTurn(ctx.session, s),
         letter: (s, text, id) => {
           if (!letterExistsFor(s, id)) postLetter(s, { id, from_role: PLUGIN_SENDER, from_session: PLUGIN_SENDER, to: s, time: now(), text })
@@ -2341,6 +2345,9 @@ export default {
       doctor,
       doctorNotes: () => autoNotes(now()),
       dirOf: dirOfSession,
+      // задача 263: блокирующее ожидание вопросника для crew_list — запись формы или открытый по базе вызов question
+      blocker: (s) => blockingQuestion(s, now(), (x) => questionCall(x, 1)),
+      activity: (s) => activityEvidence(s),
     })
     const toEditor = (t: (typeof tools)[number]) => ({ name: t.name, description: t.description, input: t.input, execute: (input: any, context: any) => t.execute(input, context?.sessionID) })
     await ctx.tool.transform((editor: any) => {

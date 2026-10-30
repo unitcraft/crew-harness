@@ -1,0 +1,20 @@
+// Task 263: a separate executable entry for MCP wait, correlation and restart scenarios.
+module crew_harness.server_hidden_wait
+
+import crew_harness.server.{kit_files_mcp, scenario_question_mcp, scenario_question_mcp_timeout, scenario_question_mcp_restart}
+
+fn clean(report str) -> () {
+    if report.byte_len() > 0 { panic("MCP WAIT: ${report}") }
+}
+
+test "MCP wait: live reply and foreign session isolation" {
+    clean(scenario_question_mcp(kit_files_mcp("hidden-live", 30000, 1800000)))
+}
+
+test "MCP wait: timeout and duplicate late reply" {
+    clean(scenario_question_mcp_timeout(kit_files_mcp("hidden-timeout", 30000, 700)))
+}
+
+test "MCP wait: restart, stale key and exactly one recovery letter" {
+    clean(scenario_question_mcp_restart(kit_files_mcp("hidden-restart", 30000, 700)))
+}

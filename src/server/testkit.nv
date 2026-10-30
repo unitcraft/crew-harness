@@ -656,6 +656,21 @@ export fn scenario_question_mcp(settings ServerSettings) Proc Detach Time Net Fs
     c.expect(request.starts_with("mcp-"), "the key of the question")
     c.expect(asked.contains("Какой формат?") && asked.contains("YAML"), "the question has its text and its options")
     c.expect(!rig.hub.takes_message("s-mcp"), "the turn waits for the owner")
+    // task 263: another session sees the blocker in crew_list (the session is not just «занята»)
+    rig.page(1, "session_created", "s-watch", "{\"name\":\"Наблюдатель\",\"agent\":\"opencode\"}")
+    c.expect(rig.until("\"trace\":\"s-watch\"", 5000), "the second session is shown")
+    rig.page(1, "user_message", "s-watch", "{\"turn\":\"w1\",\"text\":\"ctl crew_list {}\"}")
+    c.expect(rig.until(KIT_DONE, 20000), "the crew_list turn ends")
+    mut wturn = ""
+    for line in rig.lines_for(1) {
+        if line_field(line, "trace") == "s-watch" && line_field(line, "kind") == "user_message" { wturn = line_input(line, "turn") }
+    }
+    ro listed = answer_of(rig.lines_for(1), wturn)
+    c.expect(listed.contains("s-mcp") && listed.contains("ждёт ответа владельца") && listed.contains("Какой формат?"), "crew_list names the blocker: ${cut_text(listed, 300)}")
+    rig.page(1, "question_answer", "s-watch", "{\"request\":\"${request}\",\"skipped\":true}")
+    rig.run(150)
+    c.expect(rig.hub.mcp_waiting("s-mcp").contains("Какой формат?"), "a foreign session cannot consume the pending question")
+    c.expect(kit_with(rig.lines_for(1), "\"kind\":\"question_resolved\"") == 0, "a foreign answer has no settlement side effect")
     rig.page(1, "question_answer", "s-mcp", "{\"request\":\"${request}\",\"skipped\":false,\"answers\":[{\"index\":0,\"selected\":[\"YAML\"],\"other\":\"\"}]}")
     c.expect(rig.until(KIT_DONE, 20000), "the turn ends after the answer")
     ro lines = rig.lines_for(1)
@@ -684,15 +699,18 @@ export fn scenario_question_mcp(settings ServerSettings) Proc Detach Time Net Fs
     // a cancel takes the form away
     rig.page(1, "user_message", "s-mcp", "{\"turn\":\"t3\",\"text\":\"askmcp third\"}")
     c.expect(rig.until("\"kind\":\"question_request\"", 20000), "the third question is shown")
+    ro cancels = kit_with(rig.lines_for(1), "\"kind\":\"cancel\"")
     rig.page(1, "cancel", "s-mcp", "{}")
     c.expect(rig.until("\"kind\":\"question_resolved\"", 5000), "a cancelled turn settles the question")
-    c.expect(rig.until("\"kind\":\"cancel\"", 5000), "the cancel is shown")
+    // cancel may be emitted before question_resolved; until has already advanced past that line.
+    c.expect(kit_with(rig.lines_for(1), "\"kind\":\"cancel\"") == cancels + 1, "the cancel is shown exactly once")
     c.expect(rig.hub.takes_message("s-mcp"), "the session is open after the cancel")
     rig.shut()
     c.report()
 }
 
-/// A question of the tool that nobody answers in time: the agent is told the term passed and the page takes the form away.
+/// A question of the tool that nobody answers in time (task 263): the agent is told the term passed, but the form is NOT taken
+/// away — the question keeps waiting; a late answer is a stale non-waking recovery record, never permission for a new action.
 export fn scenario_question_mcp_timeout(settings ServerSettings) Proc Detach Time Net Fs Os -> str {
     mut c = kit_check()
     mut rig = rig_open(settings)
@@ -700,10 +718,118 @@ export fn scenario_question_mcp_timeout(settings ServerSettings) Proc Detach Tim
     rig.page(1, "session_created", "s-mcpt", "{\"name\":\"MCP term\",\"agent\":\"opencode\"}")
     rig.page(1, "user_message", "s-mcpt", "{\"turn\":\"t1\",\"text\":\"askmcp go\"}")
     c.expect(rig.until("\"kind\":\"question_request\"", 20000), "the question is shown")
-    c.expect(rig.until("\"kind\":\"question_resolved\"", 20000), "the term passed: the form is taken away")
+    ro request = line_input(first_of(rig.lines_for(1), "question_request", 0), "request")
+    c.expect(request.starts_with("mcp-"), "the key of the question")
     c.expect(rig.until(KIT_DONE, 20000), "the turn goes on and ends")
     c.expect(kit_with(rig.lines_for(1), "таймаут ожидания ответа") == 1, "the agent was told: the term passed")
+    rig.run(500)
+    c.expect(kit_with(rig.lines_for(1), "\"kind\":\"question_resolved\"") == 0, "the term does not take the form away: the owner can still answer")
+    c.expect(rig.hub.mcp_waiting("s-mcpt").contains("Какой формат?"), "the hub knows what the session waits for")
+    // A late answer is only a stale record: it cannot authorize a new turn or change the task.
+    ro before_turn = rig.hub.sessions[0].turn
+    ro before_task = rig.hub.sessions[0].rt.number
+    ro before_messages = kit_with(rig.lines_for(1), "\"kind\":\"user_message\"")
+    rig.page(1, "question_answer", "s-mcpt", "{\"request\":\"${request}\",\"skipped\":false,\"answers\":[{\"index\":0,\"selected\":[\"YAML\"],\"other\":\"\"}]}")
+    c.expect(rig.until("\"kind\":\"question_resolved\"", 5000), "the late answer settles the form")
+    c.expect(kit_with(rig.lines_for(1), "\"kind\":\"question_resolved\"") == 1, "the form is settled exactly once")
+    rig.run(300)
+    c.expect(rig.hub.ctl_letters.len() == 1, "one recovery record")
+    for l in rig.hub.ctl_letters {
+        c.expect(!l.wake && l.to == "s-mcpt" && l.text.contains("stale:") && l.text.contains("question=${request}") && l.text.contains("Ответ: YAML"), "the record is correlated, stale and never wakes the agent")
+    }
+    // an unknown key settles nothing, and a repeated answer is refused: the pending was taken at the first answer
+    rig.page(1, "question_answer", "s-mcpt", "{\"request\":\"mcp-999\",\"skipped\":true}")
+    rig.run(150)
+    c.expect(kit_with(rig.lines_for(1), "\"kind\":\"question_resolved\"") == 1, "an unknown key settles nothing")
+    rig.page(1, "question_answer", "s-mcpt", "{\"request\":\"${request}\",\"skipped\":false,\"answers\":[{\"index\":0,\"selected\":[\"JSON\"],\"other\":\"\"}]}")
+    rig.run(150)
+    c.expect(kit_with(rig.lines_for(1), "\"kind\":\"question_resolved\"") == 1, "a repeated answer is refused: the form was settled once")
+    c.expect(rig.hub.ctl_letters.len() == 1, "a duplicate adds no recovery record")
+    c.expect(rig.hub.sessions[0].turn == before_turn && rig.hub.sessions[0].rt.number == before_task, "stale and duplicate answers do not change the opening or task")
+    c.expect(kit_with(rig.lines_for(1), "\"kind\":\"user_message\"") == before_messages, "stale and duplicate answers start no agent turn")
+    c.expect(kit_with(rig.hub.take_log(), "an answer for s-mcpt to a question that nobody asked") >= 1, "the refusal of the repeated answer is in the log")
     rig.shut()
+    c.report()
+}
+
+/// A question of the tool whose term passed and the hub stopped before the owner answered (task 263): after the restart the
+/// question waits again (the form is back from the journal); recovery is stale and never starts a new turn.
+export fn scenario_question_mcp_restart(settings ServerSettings) Proc Detach Time Net Fs Os -> str {
+    mut c = kit_check()
+    mut rig = rig_open(settings)
+    rig.attach(1)
+    rig.page(1, "session_created", "s-mcpr", "{\"name\":\"MCP restart\",\"agent\":\"opencode\"}")
+    rig.page(1, "user_message", "s-mcpr", "{\"turn\":\"t1\",\"text\":\"askmcp go\"}")
+    c.expect(rig.until("\"kind\":\"question_request\"", 20000), "the question is shown")
+    ro request = line_input(first_of(rig.lines_for(1), "question_request", 0), "request")
+    c.expect(request.starts_with("mcp-"), "the key of the question")
+    c.expect(rig.until(KIT_DONE, 20000), "the term passed and the turn ended")
+    rig.run(300)
+    c.expect(kit_with(rig.lines_for(1), "\"kind\":\"question_resolved\"") == 0, "nobody answered: the form is still open")
+    rig.shut()
+    mut again = rig_open(settings)
+    again.attach(1)
+    ro restored = again.hub.page_lines("s-mcpr")
+    c.expect(kit_with(restored, "\"kind\":\"question_request\"") == 1 && kit_with(restored, request) >= 1, "the form is back from the journal after the restart")
+    c.expect(again.hub.mcp_waiting("s-mcpr").contains("Какой формат?"), "the hub knows again what the session waits for: «${again.hub.mcp_waiting("s-mcpr")}»")
+    // an unknown key after the restart settles nothing and the question still waits
+    again.page(1, "question_answer", "s-mcpr", "{\"request\":\"mcp-999\",\"skipped\":true}")
+    again.run(150)
+    c.expect(kit_with(again.lines_for(1), "\"kind\":\"question_resolved\"") == 0, "an unknown key settles nothing after the restart")
+    c.expect(again.hub.mcp_waiting("s-mcpr").contains("Какой формат?"), "the question still waits for the owner")
+    // A foreign session cannot consume the restored key or mutate either session.
+    again.page(1, "session_created", "s-foreign", "{\"name\":\"Foreign\",\"agent\":\"opencode\"}")
+    ro before_turn = again.hub.sessions[0].turn
+    ro before_task = again.hub.sessions[0].rt.number
+    ro foreign_turn = again.hub.sessions[1].turn
+    again.page(1, "question_answer", "s-foreign", "{\"request\":\"${request}\",\"skipped\":true}")
+    again.run(150)
+    c.expect(again.hub.mcp_waiting("s-mcpr").contains("Какой формат?") && again.hub.ctl_letters.len() == 0, "a foreign answer preserves the pending and creates no recovery")
+    c.expect(again.hub.sessions[0].turn == before_turn && again.hub.sessions[1].turn == foreign_turn, "a foreign answer changes neither opening")
+    again.page(1, "question_answer", "s-mcpr", "{\"request\":\"${request}\",\"skipped\":false,\"answers\":[{\"index\":0,\"selected\":[\"YAML\"],\"other\":\"\"}]}")
+    c.expect(again.until("\"kind\":\"question_resolved\"", 5000), "the answer after the restart settles the form")
+    again.run(300)
+    c.expect(again.hub.ctl_letters.len() == 1, "one stale recovery after restart")
+    for l in again.hub.ctl_letters {
+        c.expect(!l.wake && l.to == "s-mcpr" && l.text.contains("stale:") && l.text.contains("question=${request}") && l.text.contains("opening=") && l.text.contains("task=") && l.text.contains("Ответ: YAML"), "recovery preserves identity and requires a new owner confirmation")
+    }
+    again.page(1, "question_answer", "s-mcpr", "{\"request\":\"${request}\",\"skipped\":false,\"answers\":[{\"index\":0,\"selected\":[\"JSON\"],\"other\":\"\"}]}")
+    again.run(150)
+    c.expect(kit_with(again.lines_for(1), "\"kind\":\"question_resolved\"") == 1, "a repeated answer after the restart is refused: the form was settled once")
+    c.expect(again.hub.ctl_letters.len() == 1, "a duplicate creates no recovery")
+    c.expect(again.hub.sessions[0].turn == before_turn && again.hub.sessions[0].rt.number == before_task && again.hub.sessions[1].turn == foreign_turn, "stale and duplicate answers leave task and both openings unchanged")
+    c.expect(kit_with(again.hub.take_log(), "an answer for s-mcpr to a question that nobody asked") >= 1, "the refusal of the repeated answer is in the log")
+    again.shut()
+    // The durable answer is the outbox: a crash before inbox materialization cannot lose recovery.
+    mut materialized = rig_open(settings)
+    materialized.attach(1)
+    c.expect(materialized.hub.ctl_letters.len() == 1, "the settled late answer restores one unread recovery")
+    for l in materialized.hub.ctl_letters {
+        c.expect(l.qid == "recovery-${request}" && !l.wake && !l.taken, "recovery has a stable non-waking identity")
+    }
+    materialized.hub.ctl_letters = []CtlLetter.new()
+    materialized.shut()
+    mut recovered = rig_open(settings)
+    recovered.attach(1)
+    c.expect(recovered.hub.ctl_letters.len() == 1, "a second restart rematerializes exactly one recovery")
+    ro inbox = recovered.hub.ctl_inbox(recovered.hub.find("s-mcpr"), JsonObject.new())
+    c.expect(recovered.hub.ctl_letters.len() == 1 && recovered.hub.ctl_letters[0].taken, "reading acknowledges recovery")
+    recovered.shut()
+    // Restart once more with only settled questions in history. Their keys must not be reused.
+    mut last = rig_open(settings)
+    last.attach(1)
+    last.forget()
+    c.expect(last.hub.mcp_waiting("s-mcpr").byte_len() == 0, "a settled question is not restored")
+    c.expect(last.hub.ctl_letters.len() == 0, "an acknowledged recovery is not delivered again after restart")
+    last.page(1, "user_message", "s-mcpr", "{\"turn\":\"t2\",\"text\":\"askmcp go\"}")
+    c.expect(last.until("\"kind\":\"question_request\"", 20000), "a new question is shown after restart")
+    mut new_request = ""
+    for p in last.hub.mcp_pending { if p.session == "s-mcpr" { new_request = p.key } }
+    c.expect(new_request.starts_with("mcp-") && new_request != request, "a settled key is never reused after restart")
+    last.page(1, "question_answer", "s-mcpr", "{\"request\":\"${request}\",\"skipped\":true}")
+    last.run(150)
+    c.expect(last.hub.mcp_waiting("s-mcpr").contains("Какой формат?"), "a stale answer cannot consume the new question")
+    last.shut()
     c.report()
 }
 

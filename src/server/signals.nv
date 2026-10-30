@@ -22,6 +22,7 @@ export fn signals_given_by_code() -> []CodeSignal => [
     cs("cancel_request", "input", "src/server/hub.nv: Hub.cancel", "-", true),
     cs("permission_decision", "input", "src/server/hub.nv: Hub.decide", "request, decision (JSON text)", false),
     cs("question_answer", "input", "src/server/hub.nv: Hub.answer", "request, skipped, answers (JSON text)", false),
+    cs("mcp_recovery_read", "input", "src/server/crew_tools_hub.nv: Hub.ctl_take", "stable recovery qid", false),
     cs("session_created", "input", "src/server/hub.nv: Hub.create", "name, agent, folder, project, project_id (JSON text)", false),
     cs("session_renamed", "input", "src/server/hub.nv: Hub.rename", "name (JSON text)", false),
     cs("session_preset", "input", "src/server/hub.nv: Hub.set_preset (the owner chose the preset: the table role -> family, model, effort)", "preset (JSON text)", false),

@@ -791,6 +791,32 @@ export async function pendingTool(sessionID: string, since = PROCESS_START): Pro
   }
 }
 
+/** Read-only activity evidence, never inferred from busy/running. Missing tables/data stay unknown. */
+export async function activityEvidence(sessionID: string): Promise<string> {
+  let db: any
+  let active = "неизвестно", last = "неизвестно", queue = "неизвестно"
+  try {
+    if (existsSync(dbFile())) {
+      db = await openDb()
+      const idle = Number(db.prepare("select max(time_created) as at from session_message where session_id = ? and type = 'idle'").get(sessionID)?.at ?? 0)
+      const rows = db.prepare("select data, time_created from session_message where session_id = ? and type = 'assistant' order by seq desc limit 20").all(sessionID)
+      for (let i = 0; i < rows.length; i++) {
+        const r = rows[i], parts = JSON.parse(r.data)?.content
+        if (!Array.isArray(parts)) continue
+        for (const p of parts) {
+          if (p?.type !== "tool") continue
+          if (i === 0 && Number(r.time_created) > idle && ["running", "pending"].includes(p.state?.status)) active = `${p.name ?? "инструмент неизвестен"} с ${hhmm(p.time?.created ?? r.time_created)} [session_message]`
+          if (last === "неизвестно" && ["completed", "error"].includes(p.state?.status)) last = `${p.name ?? "инструмент"}:${p.state.status} [session_message]`
+        }
+      }
+      try { queue = `${Number(db.prepare("select count(*) as n from session_inbox where session_id = ?").get(sessionID)?.n ?? 0)} [session_inbox]` } catch {}
+    }
+  } catch {} finally { try { db?.close() } catch {} }
+  const ws = watchesOf(sessionID).filter((w) => w.status !== "done")
+  const watched = ws.length ? ws.map((w) => `${w.id}: ${w.status === "requested" ? "очередь машины" : "внешняя команда"} с ${hhmm(w.started ?? w.created)}, PID ${w.pid ?? "неизвестен"} [watch metadata; живость PID неизвестна]`).join("; ") : "нет активных записей [watch metadata]"
+  return `активный инструмент: ${active}; последнее завершённое действие: ${last}; очередь сервера: ${queue}; watch: ${watched}`
+}
+
 /**
  * ВЫЗОВ `question` СЕССИИ ПО БАЗЕ (задача 120). Последний вызов инструмента `question` в ответах сессии и его судьба:
  *   open     - running / pending, и строки idle новее него нет: диалог на экране, инструмент ждёт ответа;
@@ -1883,6 +1909,10 @@ export type CrewHost = {
   doctorNotes?(): string[]
   /** каталог сессии по session.get(...).location (задача 157): источник истины, карточка и ctx.location его не знают; нет — каталог карточки */
   dirOf?(sessionID: string): Promise<string | undefined>
+  /** блокирующее ожидание вкладки (задача 263): вопрос владельцу в вопроснике — живая запись формы или открытый по базе
+   *  вызов question (form-wait.ts blockingQuestion); нет — undefined. crew_list показывает его вместо голого «занята». */
+  blocker?(session: string): Promise<{ since: number; question?: string; formId?: string; rid?: string; options?: string[]; norecord?: boolean } | undefined>
+  activity?(session: string): Promise<string>
 }
 
 /** Зависимости контроля каталога и ветки окон (branch-guard.ts, задача 157): задачи, настройки и замок вливания плагина. */
@@ -1985,10 +2015,16 @@ export function makeTools(host: CrewHost): CrewTool[] {
           return ""
         }
       }
-      const rows = cards.map((c) => {
+      const rows: string[] = []
+      for (const c of cards) {
         const w = waiting(c)
-        return `${c.session === me?.session ? "* " : "  "}${keyOf(c)}${c.auto ? " (авто)" : ""} — ${tabStatus(c, windows)}, ${c.repo || "?"}, сессия ${c.session}, модель ${modelLabel(c, now)}${famOf(c)}${w ? `, ждут писем: ${w}` : ""}${c.title ? `, «${c.title}»` : ""}`
-      })
+        // задача 263: «занята» не доказывает работу — вкладка может ждать ответа владельца в вопроснике (инцидент 258);
+        // блокирующее ожидание называется явно: что, с какого времени, id формы
+        const b = host.blocker ? await host.blocker(c.session).catch(() => undefined) : undefined
+        const bw = b ? `, ждёт ответа владельца с ${hhmm(b.since)} (${Math.max(0, Math.floor((now - b.since) / 60_000))} мин)${b.norecord ? " (диалог без записи формы)" : b.formId ? ` (форма ${b.formId}, rid ${b.rid ?? b.formId})` : ""}${b.question ? `: ${short(b.question, 120)}` : ""}${b.options?.length ? `; варианты: ${b.options.map((o) => short(o, 80)).join(" | ")}` : ""}` : ""
+        const evidence = host.activity && (b || c.spawned || isBusy(c, windows)) ? `; ${await host.activity(c.session).catch(() => "источники активности недоступны: неизвестно")}` : ""
+        rows.push(`${c.session === me?.session ? "* " : "  "}${keyOf(c)}${c.auto ? " (авто)" : ""} — ${tabStatus(c, windows)}, ${c.repo || "?"}, сессия ${c.session}, модель ${modelLabel(c, now)}${famOf(c)}${w ? `, ждут писем: ${w}` : ""}${bw}${c.title ? `, «${c.title}»` : ""}${evidence}`)
+      }
       const others = input?.all || !home ? 0 : all.length - cards.length
       const openTasks = home ? listTasks(home).filter(isOpen).sort(byPriority) : []
       const tasksPart = openTasks.length ? `\nЗадачи (crew_task):\n${openTasks.map((t) => `  ${taskNo(t)} ${t.priority} ${statusRu(t.status)} «${t.title}»${t.executor ? ` — ${t.executor}` : ""}`).join("\n")}` : ""

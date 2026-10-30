@@ -157,8 +157,9 @@ const until = Date.now() + 30_000
 while (Date.now() < until) {
   await new Promise((r) => setTimeout(r, 500))
   const r = read(file)
-  if (r?.status === "applied") (console.log(`применён: «${r.answer}» — ход прерван, вкладке ушло письмо`), process.exit(0))
+  if (r?.status === "applied") (console.log(`применён: «${r.answer}»`), process.exit(0))
   if (r?.status === "refused") (console.log(`не применён: ${r.why}`), process.exit(1))
+  if (r?.status === "unknown") (console.log(`исход неизвестен: ${r.why}; не повторять автоматически, проверить форму`), process.exit(1))
 }
 console.log("плагин не ответил за 30 с (служба не работает?); файл остаётся и будет обработан на ближайшем проходе")
 process.exit(3)

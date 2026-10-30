@@ -15,9 +15,11 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:
 import os from "node:os"
 import path from "node:path"
 import { DatabaseSync } from "node:sqlite"
+import { legacyAnswerPass } from "./legacy-answer-fixture.mjs"
 
 const tmp = mkdtempSync(path.join(os.tmpdir(), "crew-no-queue-"))
 process.env.XDG_DATA_HOME = tmp
+process.env.XDG_STATE_HOME = tmp
 process.env.CREW_HARNESS_POLL_MS = "100"
 process.env.CREW_HARNESS_STATUS_MS = "200"
 process.env.CREW_HARNESS_FORM_MS = "100"
@@ -209,6 +211,7 @@ await safe("A", async () => {
   busyOf[A] = true // the turn with the question runs; the letters wait for its end
   beat()
   put("ans-A", { form: id, session: A, option: "1", quote: "по рекомендации (владелец, чат оркестратора, 2026-10-17)" })
+  await legacyAnswerPass(oa, core, ctx)
   cell("A: the answer is applied", await until(() => result("ans-A")?.status === "applied", 6000), JSON.stringify(result("ans-A")))
   busyOf[A] = false // the interrupt ended the turn
   beat()

@@ -13,9 +13,12 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import os from "node:os"
 import path from "node:path"
 import { DatabaseSync } from "node:sqlite"
+import { legacyAnswerPass } from "./legacy-answer-fixture.mjs"
 
 const tmp = mkdtempSync(path.join(os.tmpdir(), "crew-answer-loop-"))
 process.env.XDG_DATA_HOME = tmp
+// This suite covers legacy interrupt+mail delivery, not the service reply API. Never use the owner's registration.
+process.env.XDG_STATE_HOME = tmp
 process.env.CREW_HARNESS_POLL_MS = "100"
 process.env.CREW_HARNESS_STATUS_MS = "200"
 process.env.CREW_HARNESS_FORM_MS = "100"
@@ -162,6 +165,7 @@ async function ask(tab, [text, options], { work = false } = {}) {
 async function answer(tab, id, { delivery = true } = {}) {
   const name = `ans-${id}`
   put(name, { form: id, session: tab, option: "1", quote: "по рекомендации (владелец, чат оркестратора, 2026-10-17)" })
+  await legacyAnswerPass(oa, core, ctx)
   const ok = await until(() => result(name)?.status === "applied", 60_000)
   if (!ok) throw new Error(`answer ${name} not applied: ${JSON.stringify(result(name))}`)
   if (delivery && !(await until(() => existsSync(path.join(core.READ, core.safeKey(tab), `owner-answer-${name}.json`)), 60_000))) throw new Error(`the letter of ${name} was not delivered`)

@@ -8,6 +8,7 @@ module crew_harness.server
 
 import std.concurrency.nvchan.{Chan, ChanTx}
 import std.encoding.json.{Json, JsonValue, JsonObject}
+import alula.engine.{Incoming}
 
 const CTL_WAIT_DEFAULT_S = 120
 const CTL_WAIT_MAX_S = 300
@@ -87,10 +88,13 @@ fn Hub @ctl_addr(at int, to str) -> []int {
 }
 
 // The state of a session as the text of a result: the task, the state, the branch, the tree and the last words of the agent.
+// A session whose agent waits for the answer of the owner to a question of the tool says so (task 263): «занята» alone hides the blocker.
 fn Hub @ctl_session_text(i int) -> str {
     ro s = @sessions[i]
     mut parts = []str.new()
     parts.push("Сессия ${s.id} «${s.name}», роль ${@ctl_role(i)}, ${if @ctl_busy(i) { "занята" } else { "свободна" }}")
+    ro waiting = @mcp_waiting(s.id)
+    if waiting.byte_len() > 0 { parts.push("ждёт ответа владельца: ${cut_text(waiting, 140)}") }
     if s.rt.task_open && s.rt.number.byte_len() > 0 {
         parts.push("задача ${s.rt.number} «${s.rt.title}», состояние: ${@ctl_state_word(i)}")
         if s.rt.branch.byte_len() > 0 { parts.push("ветка ${s.rt.branch}") }
@@ -118,8 +122,16 @@ fn Hub mut @ctl_letter(from str, from_name str, to str, text str, wake bool, qid
     }
 }
 
-fn Hub mut @ctl_take(j int) -> () {
+fn Hub mut @ctl_take(j int) Proc Detach Time -> () {
     mut l = @ctl_letters[j]
+    if !l.taken && l.qid.starts_with("recovery-mcp-") {
+        ro at = @find(l.to)
+        if at >= 0 {
+            mut s = @sessions[at]
+            accept_in(@settings.store == "pg", @settings.data_dir, s, Incoming.signal("mcp_recovery_read", l.qid))
+            @drain(at)
+        }
+    }
     l.taken = true
     @ctl_letters[j] = l
 }
@@ -173,7 +185,7 @@ fn Hub @ctl_has_proposal(at int, tgt str) -> bool {
 }
 
 // What a wait is waiting for, if it has come: the text of the answer; the letters it takes are read.
-fn Hub mut @ctl_wait_got(at int, w CtlWait) -> Option[str] {
+fn Hub mut @ctl_wait_got(at int, w CtlWait) Proc Detach Time -> Option[str] {
     ro s = @sessions[at]
     if w.kind == "letter" {
         mut lines = []str.new()
@@ -323,6 +335,9 @@ fn Hub mut @ctl_list(at int, a JsonObject) -> CtlRes {
         ro s = @sessions[i]
         if every || s.project_id == me.project_id {
             mut line = "${if i == at { "* " } else { "  " }}${s.id} — «${s.name}», роль ${@ctl_role(i)}, ${if @ctl_busy(i) { "занята" } else { "свободна" }}, агент ${s.agent}"
+            // task 263: a session that waits for the answer of the owner to a question of the tool names the blocker
+            ro waiting = @mcp_waiting(s.id)
+            if waiting.byte_len() > 0 { line = "${line}, ждёт ответа владельца: ${cut_text(waiting, 100)}" }
             if s.rt.task_open && !s.rt.task_closed && s.rt.number.byte_len() > 0 { line = "${line}, задача ${s.rt.number} «${s.rt.title}»${if s.rt.epic { " (эпик)" } else { "" }}" }
             if s.rt.parent.byte_len() > 0 { line = "${line}, родитель ${s.rt.parent}" }
             rows.push(line)
@@ -386,7 +401,7 @@ fn Hub mut @ctl_send(at int, a JsonObject) Proc Detach Time -> CtlRes {
     ctl_ok("Отправлено: ${joined(named, "; ")}${if wake { "" } else { " (без пробуждения: письмо ждёт в crew_inbox получателя)" }}.${qid_tail}")
 }
 
-fn Hub mut @ctl_inbox(at int, a JsonObject) -> CtlRes {
+fn Hub mut @ctl_inbox(at int, a JsonObject) Proc Detach Time -> CtlRes {
     ro s = @sessions[at]
     mut limit = jint(a, "limit")
     if limit <= 0 { limit = 10 }

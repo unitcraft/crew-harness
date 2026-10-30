@@ -1,0 +1,21 @@
+{
+  "serviceVersion": "2.0.26",
+  "watch": "1793399667601-k9r0tw",
+  "session": "ses_e710ca658ffeJhUGW2PB35R5Kq",
+  "foreignSession": "ses_e710c64bdffeplCbCeBkW3Er3X",
+  "form": "frm_18ef6ebd5001GMGY10ZbY0upS5",
+  "originalCall": "call_38gyyR0lbcr77fET0W27XNZA",
+  "before": "running",
+  "field": "q0",
+  "fixtureAnswer": "263_TOKEN_A",
+  "foreignReply": "404 FormNotFoundError",
+  "nativeReply": "204",
+  "duplicateReply": "409 FormAlreadySettledError",
+  "after": "completed",
+  "toolResult": "User has answered your questions: 263 neutral transport fixture: choose a token = 263_TOKEN_A",
+  "modelOutput": "Q0_RESULT_263_TOKEN_A",
+  "otherTools": [],
+  "interruptUsed": false,
+  "detourLetterUsed": false,
+  "grantsPermission": false
+}

@@ -668,7 +668,7 @@ fn page_input_of(e Incoming, turn str) -> Option[PageInput] {
                 put(o, "text", JsonValue.str(text_field(value, "text") ?? ""))
                 return page_input("agent_chunk", JsonValue.object(o))
             }
-            if e.name == "cancel" { return turn_only("cancel", turn) }
+            if e.name == "cancel" || e.name == "cancel_request" { return turn_only("cancel", turn) }
             if e.name == "permission_decision" {
                 ro value = object_input(e)?
                 return page_input("permission_decision", value)

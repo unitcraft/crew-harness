@@ -173,6 +173,19 @@ export function shownForms(session: string, now = Date.now(), dir = FORMS): Pend
   return [...live.filter((f) => !f.dead), ...live.filter((f) => f.dead)]
 }
 
+/** ЗАДАЧА 263: блокирующее ожидание вкладки — вопрос владельцу во встроенном вопроснике. Сначала живая запись формы
+ *  (pendingForms: мёртвые и отработанные записи блокером не считаются), без неё — открытый по базе вызов `question`
+ *  (диалог без записи, задача 120). Ничего не найдено — undefined; без `call` вызов по базе не читается.
+ *  Только чтение: для crew_list и диагностики; «занята»/«running» сами по себе работу не доказывают (инцидент 258, 2026-10-30). */
+export type QuestionBlock = { since: number; question?: string; formId?: string; rid?: string; options?: string[]; norecord?: boolean }
+export async function blockingQuestion(session: string, now = Date.now(), call?: (session: string) => Promise<QuestionCall>, dir = FORMS): Promise<QuestionBlock | undefined> {
+  const f = pendingForms(session, now, dir)[0]
+  if (f) return { since: f.at, ...(f.question ?? f.title ? { question: f.question ?? f.title } : {}), formId: f.id, rid: f.rid ?? f.id, options: f.options }
+  if (!call) return undefined
+  const c = await call(session).catch(() => undefined)
+  return c?.state === "open" ? { since: c.at || now, ...(c.question ? { question: c.question } : {}), options: c.options, norecord: true } : undefined
+}
+
 /** Setup: drop wait files whose forms are all stale. */
 export function cleanupForms(now = Date.now(), dir = FORMS) {
   try {
