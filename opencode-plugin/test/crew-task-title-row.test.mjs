@@ -4,7 +4,8 @@
 // rows at most, then «…»; the role and the state on the row under it («↳ прм  ждёт указаний»); the question or the waiting phrase
 // and the steps under that, as before. The heading of a task with a folder takes the same shape. /crew shows the title in full.
 // Task 068 changed the drawing, not the content: no row starts with a space, the continuation of a title starts with «· », every row
-// under the task with «↳ » (the colours are in crew-sidebar-hierarchy).
+// under the task with «↳ » (the colours are in crew-sidebar-hierarchy). Task 262 added the status word to the heading
+// («▶ 085 нужен ответ · Accept…», «• 002 в работе · Short title») and the sections (the exact groups are in crew-sidebar-groups).
 import { mkdtempSync, rmSync } from "node:fs"
 import os from "node:os"
 import path from "node:path"
@@ -29,12 +30,12 @@ const list = [
 
 // the panel: a task without a folder
 const printed = sidebarLines(list, now, "nova").rows.map((r) => sideText(r))
-const i85 = printed.indexOf(`${WAIT_MARK} 085 Accept Oracle evaluation`)
-cell("the first row of a task tab: the mark, the number and the title", i85 >= 0, JSON.stringify(printed))
-cell("the title wraps by words onto a second row and ends with «…»", printed[i85 + 1] === "· repair after the second…", JSON.stringify(printed.slice(i85, i85 + 4)))
+const i85 = printed.indexOf(`${WAIT_MARK} 085 нужен ответ · Accept`)
+cell("the first row of a task tab: the mark, the number, the status word and the title", i85 >= 0, JSON.stringify(printed))
+cell("the title wraps by words onto a second row and ends with «…»", printed[i85 + 1] === "· Oracle evaluation repair…", JSON.stringify(printed.slice(i85, i85 + 4)))
 cell("the role and the state on the row under the title", printed[i85 + 2] === "↳ прм  ждёт указаний", JSON.stringify(printed.slice(i85, i85 + 4)))
 cell("the waiting phrase under the state, as before", printed[i85 + 3]?.startsWith("↳ Сообщил интегратору"), JSON.stringify(printed.slice(i85, i85 + 4)))
-const i2 = printed.indexOf("• 002 Short title")
+const i2 = printed.indexOf("• 002 в работе · Short title")
 cell("a short title takes one row, marks of markdown dropped", i2 >= 0 && printed[i2 + 1] === "↳ исп  работает 12 мин", JSON.stringify(printed))
 cell("no title sub-row at the end any more", !printed.some((l) => /↳ (Short|Accept)/.test(l)), JSON.stringify(printed))
 cell("every printed row fits the panel (32 columns)", printed.every((l) => l.length <= 32), JSON.stringify(printed.filter((l) => l.length > 32)))
@@ -50,8 +51,8 @@ const grp = [
   st("sA", "task", { project: "crew-harness", title: `045 С4-3 исп ${title}`, detail: "на доработке — стоит", task: g("executor", "rework", "С4-3") }),
 ]
 const gp = sidebarLines(grp, now, "crew-harness").rows.map((r) => sideText(r))
-const h = gp.indexOf("045 Реестры контрактов и")
-cell("the heading of a task with a folder: the number and the title, wrapped the same way", h >= 0 && gp[h + 1] === "· полный JSONC-регламент", JSON.stringify(gp))
+const h = gp.indexOf("045 нужен ответ · Реестры")
+cell("the heading of a task with a folder: the number, the status word and the title, wrapped the same way", h >= 0 && gp[h + 1] === "· контрактов и полный…", JSON.stringify(gp))
 cell("its sessions under the heading, as before", gp[h + 2] === "↳ ? прм  ждёт вас 00:10" && gp[h + 3] === "↳ С4-3  ↻ доработка", JSON.stringify(gp))
 cell("the heading rows fit the panel", gp.every((l) => l.length <= 32), JSON.stringify(gp))
 
@@ -101,10 +102,10 @@ const ex = st("e85", "question", { since: at(0, 5), question: "Базу опус
 const rw = st("p85", "task", { title: "085 прм", task: { n: 85, status: "rework", as: "reviewer", title: long }, detail: "приёмка: ждёт доработки" })
 const ap = sidebarLines([rw, ex, list[1]], now, "nova").rows.map((r) => sideText(r))
 cell("8a: the task's number and title once", ap.filter((l) => l.includes("085")).length === 1 && ap.filter((l) => l.includes("Accept")).length === 1, JSON.stringify(ap))
-const a85 = ap.indexOf("▶ 085 Accept Oracle evaluation")
-cell("8a: the heading has the mark of the most important tab", a85 >= 0 && ap[a85 + 1] === "· repair after the second…", JSON.stringify(ap))
+const a85 = ap.indexOf("▶ 085 нужен ответ · Accept")
+cell("8a: the heading has the mark of the most important tab", a85 >= 0 && ap[a85 + 1] === "· Oracle evaluation repair…", JSON.stringify(ap))
 cell("8a: its tabs under it - the executor with its question, then the reviewer", ap[a85 + 2] === "↳ исп  вопрос — ждёт ответа" && ap[a85 + 3] === "↳ Базу опустить?" && ap[a85 + 4] === "↳ прм  ↻ ждёт доработки", JSON.stringify(ap.slice(a85, a85 + 5)))
-cell("8a: another task keeps its own heading", ap.includes("• 002 Short title"), JSON.stringify(ap))
+cell("8a: another task keeps its own heading", ap.includes("• 002 в работе · Short title"), JSON.stringify(ap))
 const g8 = (status, label, extra = {}) => ({ n: 45, status, as: "executor", title: "Канон", ref: "045", group: true, label, ...extra })
 const live = st("sR8", "owner", { project: "crew-harness", since: at(0, 10), title: "045 прм", question: "вливать?", detail: "ждёт вас с 00:10: вливать?", task: { n: 45, status: "reviewing", as: "reviewer", title: "Канон", ref: "045", group: true } })
 const done = [
@@ -115,7 +116,7 @@ const done = [
 const others = Array.from({ length: 8 }, (_, i) => st(`i8${i}`, "idle", { project: "crew-harness" }))
 const bv = sidebarLines([live, ...done, ...others], now, "crew-harness")
 const bp = bv.rows.map((r) => sideText(r))
-const b45 = bp.indexOf("045 Канон")
+const b45 = bp.indexOf("045 нужен ответ · Канон")
 cell("8b: the live session under the heading, the finished ones on one row", b45 >= 0 && bp[b45 + 1] === "↳ ? прм  ждёт вас 00:10" && bp[b45 + 2] === "↳ ✓ сдано 3 сессии", JSON.stringify(bp))
 cell("8b: no row of a finished session", !bp.some((l) => /С1-1|С2-1|С3п-2/.test(l)), JSON.stringify(bp))
 cell("8b: the rows freed go to live tabs - nine live tabs, no «+N»", !/\+\d/.test(bv.foot) && bv.rows.filter((r) => r.who).length === 9, JSON.stringify({ foot: bv.foot, n: bv.rows.filter((r) => r.who).length }))

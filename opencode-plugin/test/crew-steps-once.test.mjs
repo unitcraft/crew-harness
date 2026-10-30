@@ -51,7 +51,7 @@ cell("3: a plain task with no reviewer - one line under the title, then the exec
 cell("3: its row is a muted «↳» row", sidebarLines(lone, now, "nova").rows.filter((r) => STEP.test(r.what)).every((r) => r.tone === "muted" && r.what.startsWith("↳ ")), JSON.stringify(sidebarLines(lone, now, "nova").rows))
 const cl = formatStatuses(lone, now, "nova")
 cell("3: /crew - the count once, the executor row has none", (cl.match(/1\/12/g) ?? []).length === 1, cl)
-cell("3: a task with a folder and no reviewer - one line under the title", count(panel(three), STEP) === 1 && panel(three)[0] !== undefined && STEP.test(panel(three)[1] ?? "") && !STEP.test(panel(three)[0]), JSON.stringify(panel(three)))
+cell("3: a task with a folder and no reviewer - one line under the title", count(panel(three), STEP) === 1 && STEP.test(panel(three)[panel(three).findIndex((l) => /^101 /.test(l)) + 1] ?? ""), JSON.stringify(panel(three)))
 
 // 4. a task with no steps is as before
 const bare = [st("e", "working", { task: { n: 7, status: "running", as: "executor", title: "x" } })]

@@ -538,6 +538,19 @@ export function stepSideRows(now: number, o: View = {}): Row[] {
   return rows
 }
 
+/** Открытые задачи под меткой HOLD/STOP (панель, задача 262): метка записи сторожа + открытая задача. Вкладки такой задачи
+ *  панель скрывает, а саму её показывает одной строкой блока «HOLD/STOP» и никогда — как работающую. */
+export function holdsOf(o: { project?: string; dir?: string; taskOf?: (project: string, n: number) => Task | undefined } = {}): { t: Task; kind: "HOLD" | "STOP" }[] {
+  const of = o.taskOf ?? loadTask
+  const out: { t: Task; kind: "HOLD" | "STOP" }[] = []
+  for (const rec of records(o.dir ?? WATCH_DIR, o.project)) {
+    if (!rec.hold) continue
+    const t = of(rec.project, rec.n)
+    if (t && isOpen(t)) out.push({ t, kind: rec.hold.kind })
+  }
+  return out
+}
+
 /** Строки /crew-progress: текст без значка, по одной на задачу с вышедшим сроком. */
 export function stepProgressLines(now: number, o: View = {}): string[] {
   return stepRows(now, o).filter((r) => r.tone !== "muted").map((r) => r.text)

@@ -115,7 +115,7 @@ check("TL-3 the waiting line names the tab as 022 исп", () => {
 check("TL-3 the side panel: a working row of a task without folder is 022 исп, the heading 022 ...", () => {
   const rows = S.sidebarLines([bare(s22)], now, OWN).rows
   const text = rows.map((r) => `${r.who} | ${S.sideText(r)}`).join("\n")
-  assert.ok(/022 исп/.test(text) && /022 task 22/.test(text), text)
+  assert.ok(/022 исп/.test(text) && /022 нужен ответ · task 22/.test(text), text)
   assert.ok(!text.includes("#"), text)
 })
 

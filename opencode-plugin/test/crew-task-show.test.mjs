@@ -33,12 +33,12 @@ const v = sidebarLines(list, now, "crew-harness")
 const printed = v.rows.map((r) => sideText(r))
 // task 064: the heading wraps by words onto two rows at most
 const head = printed.findIndex((l) => l.startsWith("045 "))
-cell("the panel: one task line «045 <title>» over its sessions", head >= 0 && printed.filter((l) => l.startsWith("045 ")).length === 1 && printed[head] === "045 Реестры контрактов и" && printed[head + 1] === "· полный JSONC-регламент", JSON.stringify(printed))
+cell("the panel: one task line «045 <title>» over its sessions", head >= 0 && printed.filter((l) => l.startsWith("045 ")).length === 1 && printed[head] === "045 нужен ответ · Реестры" && printed[head + 1] === "· контрактов и полный…", JSON.stringify(printed))
 cell("the panel: the sessions under it — «↳ прм», «↳ С4-3» with marks, the finished «С3п-2» folded (task 064)", printed[head + 2] === "↳ ? прм  ждёт вас 22:10" && printed[head + 3] === "↳ С4-3  ↻ доработка" && printed[head + 4] === "↳ ✓ сдано 1 сессия", JSON.stringify(printed.slice(head, head + 5)))
 cell("the panel: no «045» and no title sub-row under the sessions", !printed.some((l) => l.startsWith("↳") && l.includes("045")) && printed.filter((l) => l.includes("Реестры")).length === 1, JSON.stringify(printed))
 cell("the panel: every row fits 32 columns", printed.every((l) => l.length <= 32), JSON.stringify(printed.filter((l) => l.length > 32)))
 const nova = sidebarLines(list, now, "nova").rows.map((r) => sideText(r))
-cell("the panel of a project without folders: «• 088 план», then «исп  работает 12 мин» (task 064)", nova.indexOf("• 088 план") >= 0 && nova[nova.indexOf("• 088 план") + 1] === "↳ исп  работает 12 мин" && !nova.some((l) => l.includes("#")), JSON.stringify(nova))
+cell("the panel of a project without folders: «• 088 в работе · план», then «исп  работает 12 мин» (tasks 064, 262)", nova.indexOf("• 088 в работе · план") >= 0 && nova[nova.indexOf("• 088 в работе · план") + 1] === "↳ исп  работает 12 мин" && !nova.some((l) => l.includes("#")), JSON.stringify(nova))
 
 // the line "Ждут вас"
 cell("«Waiting for you» names the project and «045 rev»", waitingLine(list, now) === "Waiting for you: 1 · since 22:10 · crew-harness 045 rev", waitingLine(list, now))

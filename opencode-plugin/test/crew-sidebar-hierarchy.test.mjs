@@ -40,40 +40,45 @@ const shot = rows.map((r) => `${r.tone[0]} ${sideText(r)}`)
 if (process.env.SHOW) console.log(shot.join("\n"))
 const printed = rows.map((r) => sideText(r))
 
-// the snapshot: every row of the panel, its tone (a - accent, b - base, m - muted) and its text
+// the snapshot: every row of the panel, its tone (a - accent, b - base, m - muted) and its text; task 262 grouped the tasks into
+// the sections «В работе», «На приёмке», «Пауза» and added the status word to the heading of every task
 cell("the snapshot of the panel", JSON.stringify(shot) === JSON.stringify([
   "a Ждут вас: 3 · с 00:05",
   "a ⚠ nova 033 исп",
-  "a ⚠ 033 Выпустить Windows seed",
-  "a ↳ исп  ворота, вопроса нет",
-  "b 045 Канон и актуальная",
-  "b · методика",
-  "a ↳ ? С2-5 проверка спецификации",
-  "a ↳ ждёт вас 00:12",
-  "m ↳ ✓ сдано 2 сессии",
   "a ? интегр.   ждёт вас 00:10",
-  "b • 077 Починить сборку",
+  "a ◷ worker    простаивает 15м",
+  "m ↳ 061 между сессиями",
+  "b В работе · 2",
+  "b • 077 в работе · Починить сборку",
   "m ↳ исп  работает 5 мин",
   "a ⚠ застряла с 00:00",
-  "b • 098 Разобрать provenance",
-  "b · receipt Carina 0.2.0",
+  "b • 098 в работе · Разобрать",
+  "b · provenance receipt Carina…",
   "m ↳ исп  работает 12 мин",
   "m ↳ прм  проверка 3/12: sabotage —",
   "m ↳ подсунь негодное",
-  "b 091 Проверить контракты Oracle",
-  "b · release",
+  "b На приёмке · 1",
+  "b ✓ 091 на приёмке · Проверить",
+  "b · контракты Oracle release",
   "m ↳ прм  ⧗ ждать отдельный cleanup",
   "m ↳ plan 091 597м",
   "m ↳ исп  ✓ сдана",
-  "a ◷ worker    простаивает 15м",
-  "m ↳ 061 между сессиями",
+  "b Пауза · 2",
+  "a ⚠ 033 нужен ответ · Выпустить",
+  "a · Windows seed",
+  "a ↳ исп  ворота, вопроса нет",
+  "b 045 нужен ответ · Канон и",
+  "b · актуальная методика",
+  "a ↳ ? С2-5 проверка спецификации",
+  "a ↳ ждёт вас 00:12",
+  "m ↳ ✓ сдано 2 сессии",
 ]), JSON.stringify(shot, null, 1))
 // the rules, apart from the snapshot
 cell("no row of the panel starts with a space", printed.every((l) => l.length > 0 && !/^\s/.test(l)), JSON.stringify(printed.filter((l) => /^\s/.test(l))))
 cell("every row fits the panel", printed.every((l) => l.length <= SIDE_WIDTH), JSON.stringify(printed.filter((l) => l.length > SIDE_WIDTH)))
 cell("a row under a task starts with «↳» and is muted, or accent when the tab waits for the owner", rows.filter((r, i) => printed[i].startsWith("↳")).every((r) => r.tone === "muted" || r.tone === "accent") && rows.filter((r, i) => printed[i].startsWith("↳") && r.tone === "accent").length >= 2, JSON.stringify(shot))
 cell("the continuation of a title starts with «·» and has the tone of its heading", printed.some((l) => l.startsWith("· ")) && rows.every((r, i) => !printed[i].startsWith("·") || r.tone === rows[i - 1].tone), JSON.stringify(shot))
-cell("the title of a task is white: a heading row of a quiet task is base", rows.some((r, i) => /^091 /.test(printed[i]) && r.tone === "base") && rows.some((r, i) => /^• 098 /.test(printed[i]) && r.tone === "base"), JSON.stringify(shot))
+cell("the title of a task is white: a heading row of a quiet task is base", rows.some((r, i) => /^✓ 091 на приёмке · /.test(printed[i]) && r.tone === "base") && rows.some((r, i) => /^• 098 в работе · /.test(printed[i]) && r.tone === "base"), JSON.stringify(shot))
 cell("nine tab rows at most (SIDE_MAX), as before", rows.filter((r) => r.who).length <= 9, String(rows.filter((r) => r.who).length))
 
 // the lines of the panel that belong to no task (a lock wait, settings off the branch, the auto-answers) are rows of the same kind
