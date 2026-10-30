@@ -44,6 +44,90 @@ function setup({ answer = true } = {}) {
 const labels = (el) => el.querySelectorAll('.menu-item').map((n) => n.textContent.trim());
 const drag = (type, extra = {}) => event(type, { dataTransfer: { setData() {}, effectAllowed: '', dropEffect: '' }, clientY: 0, ...extra });
 
+// задача 261: показанная в чате сессия рисуется и в списке, и в шапке; меню должно быть одно — у нажатой кнопки
+function setupBoth() {
+  const doc = createFakeDocument();
+  const calls = [];
+  const rec = (name) => (...args) => calls.push([name, ...args]);
+  const handlers = {
+    onPin: rec('pin'), onUnread: rec('unread'), onRename: rec('rename'), onCopy: rec('copy'), onMoveSession: rec('move'),
+    onDeleteSession: rec('delete'), onReorderSessions: rec('reorder'), onReorderProjects: rec('projects'),
+  };
+  const box = h(doc, 'div', {});
+  const head = h(doc, 'span', { class: 'head-menu' });
+  doc.body.append(box, head);
+  const s = { id: 'a', name: 'Привет', projectId: 'p1' };
+  const projects = [{ id: 'p1', name: 'Один' }, { id: 'p2', name: 'Два' }];
+  let kit = null;
+  const draw = () => {
+    const li = h(doc, 'li', { class: 'session' }, h(doc, 'button', { class: 'session-item', text: s.name }), kit.moreButton(s), kit.menuFor(s, { pinned: false, unread: false }, 'row') || false);
+    kit.rebuild(() => box.replaceChildren(li));
+    const open = kit.menuFor(s, { pinned: false, unread: false, rename: () => {} }, 'head');
+    head.replaceChildren(...[kit.headButton(s), open].filter(Boolean));
+  };
+  kit = createSideKit(doc, {
+    handlers, projects: () => projects, confirm: async () => true,
+    linkFor: (id) => `http://x/#s=${id}`, render: draw,
+  });
+  draw();
+  return { doc, kit, calls, head, row: () => box.children[0] };
+}
+
+test('задача 261: клик «⋯» строки выбранной сессии показывает ровно одно меню — у строки, не в шапке', () => {
+  const s = setupBoth();
+  s.row().querySelector('.more-btn').click();
+  const menus = s.doc.body.querySelectorAll('.session-menu');
+  assert.equal(menus.length, 1, 'ровно одно меню на странице');
+  assert.ok(s.row().contains(menus[0]), 'меню привязано к строке');
+  assert.equal(s.head.querySelector('.session-menu'), null, 'в шапке меню нет');
+  assert.equal(s.row().querySelector('.more-btn').getAttribute('aria-expanded'), 'true');
+  assert.equal(s.head.querySelector('.head-menu-btn').getAttribute('aria-expanded'), 'false');
+});
+
+test('задача 261: кнопка шапки открывает одно меню у шапки; переключение между кнопками закрывает прежнее', () => {
+  const s = setupBoth();
+  s.head.querySelector('.head-menu-btn').click();
+  assert.equal(s.doc.body.querySelectorAll('.session-menu').length, 1, 'ровно одно меню');
+  assert.ok(s.head.querySelector('.session-menu'), 'меню у шапки');
+  assert.equal(s.row().querySelector('.session-menu'), null, 'в строке меню нет');
+  assert.equal(s.head.querySelector('.head-menu-btn').getAttribute('aria-expanded'), 'true');
+  assert.equal(s.row().querySelector('.more-btn').getAttribute('aria-expanded'), 'false');
+  s.row().querySelector('.more-btn').click();
+  assert.equal(s.doc.body.querySelectorAll('.session-menu').length, 1, 'переключение не плодит меню');
+  assert.ok(s.row().querySelector('.session-menu'), 'меню переехало к строке');
+  assert.equal(s.head.querySelector('.session-menu'), null, 'прежнее у шапки закрыто');
+  s.head.querySelector('.head-menu-btn').click();
+  assert.ok(s.head.querySelector('.session-menu'), 'и обратно к шапке');
+  assert.equal(s.row().querySelector('.session-menu'), null);
+});
+
+test('задача 261: повторный клик, Esc и клик снаружи закрывают меню шапки; submenu «Переместить» остаётся у шапки', () => {
+  const s = setupBoth();
+  const open = () => s.head.querySelector('.head-menu-btn').click();
+  open();
+  s.head.querySelector('.head-menu-btn').click();
+  assert.equal(s.doc.body.querySelectorAll('.session-menu').length, 0, 'повторный клик закрывает');
+  open();
+  s.doc.dispatchEvent(key('Escape'));
+  assert.equal(s.doc.body.querySelectorAll('.session-menu').length, 0, 'Esc закрывает');
+  open();
+  s.doc.body.dispatchEvent(event('click'));
+  assert.equal(s.doc.body.querySelectorAll('.session-menu').length, 0, 'клик снаружи закрывает');
+  open();
+  const move = [...s.head.querySelectorAll('.menu-item')].find((r) => r.textContent.trim() === 'Переместить в проект');
+  move.click();
+  assert.equal(s.doc.body.querySelectorAll('.session-menu').length, 1, 'submenu — то же одно меню, не дубликат');
+  assert.equal(s.row().querySelector('.session-menu'), null, 'submenu не появляется у строки');
+  assert.deepEqual(labels(s.head.querySelector('.session-menu')), ['Назад', 'Один', 'Два', 'Без проекта']);
+  s.head.querySelectorAll('.menu-item')[0].click();
+  assert.deepEqual(labels(s.head.querySelector('.session-menu')), ['Закрепить', 'Отметить непрочитанной', 'Переименовать', 'Скопировать ссылку', 'Переместить в проект', 'Удалить'], '«Назад» вернуло корневое меню у шапки');
+  const to = [...s.head.querySelectorAll('.menu-item')].find((r) => r.textContent.trim() === 'Переместить в проект');
+  to.click();
+  s.head.querySelectorAll('.menu-item')[2].click();
+  assert.deepEqual(s.calls, [['move', 'a', 'p2']], 'действие один раз над той сессией');
+  assert.equal(s.doc.body.querySelectorAll('.session-menu').length, 0, 'после выбора меню закрыто');
+});
+
 test('меню «⋯»: закрепить, непрочитанной, переименовать, ссылка, переместить, удалить (красный)', () => {
   const s = setup();
   assert.equal(s.row('a').querySelector('.session-menu'), null);

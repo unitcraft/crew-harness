@@ -429,7 +429,7 @@ export function createView(doc, refs, deps) {
   let headCtx = null; // { session, pinned, unread } показанной сессии
   function syncHeadMenu() {
     if (!headCtx) { headMenu.replaceChildren(); return; }
-    const open = sideKit.menuFor(headCtx.session, { pinned: headCtx.pinned, unread: headCtx.unread, rename: startRename });
+    const open = sideKit.menuFor(headCtx.session, { pinned: headCtx.pinned, unread: headCtx.unread, rename: startRename }, 'head');
     headMenu.replaceChildren(...[sideKit.headButton(headCtx.session), open].filter(Boolean));
   }
   const titleBlock = h(doc, 'div', { class: 'title-block', hidden: true }, title, headMenu);

@@ -20,7 +20,7 @@ import { commitsText } from './routes.js';
  */
 export function createSideKit(doc, deps) {
   const { handlers, projects, confirm, linkFor, render } = deps;
-  let menu = null; // { id, sub: '' | 'move' }
+  let menu = null; // { id, sub: '' | 'move', at: 'row' | 'head' } — привязка к нажатой кнопке: строка списка или шапка чата (задача 261)
   let renaming = null; // { id, draft, fresh }
   let drag = null; // { kind: 'session' | 'project', id, group, project, el }
   let marked = null; // { el, cls }
@@ -79,13 +79,13 @@ export function createSideKit(doc, deps) {
     });
   }
 
-  /** Меню открытой сессии (или null, если открыто не у неё). ctx: { pinned, unread }. */
-  function menuFor(session, ctx) {
-    if (!menu || menu.id !== session.id) return null;
+  /** Меню открытой сессии у своей кнопки (или null): at — где открыто, 'row' (строка списка) или 'head' (шапка чата). ctx: { pinned, unread }. */
+  function menuFor(session, ctx, at = 'row') {
+    if (!menu || menu.id !== session.id || menu.at !== at) return null;
     if (menu.sub === 'move') {
       const list = projects() ?? [];
       const rows = [
-        menuRow({ label: t('menu.back'), iconId: 'i-back', onPick: () => { menu = { id: session.id, sub: '' }; render(); } }),
+        menuRow({ label: t('menu.back'), iconId: 'i-back', onPick: () => { menu = { ...menu, sub: '' }; render(); } }),
         separator(),
         ...list.map((p) => menuRow({
           label: p.name, iconId: 'i-folder', checked: p.id === session.projectId,
@@ -113,36 +113,31 @@ export function createSideKit(doc, deps) {
         label: t('session.menu_link'), iconId: 'i-copy',
         onPick: () => { menu = null; render(); handlers.onCopy(linkFor(session.id)); },
       }),
-      menuRow({ label: t('session.menu_move'), iconId: 'i-folder', arrow: true, onPick: () => { menu = { id: session.id, sub: 'move' }; render(); } }),
+      menuRow({ label: t('session.menu_move'), iconId: 'i-folder', arrow: true, onPick: () => { menu = { ...menu, sub: 'move' }; render(); } }),
       separator(),
       menuRow({ label: t('session.menu_delete'), iconId: 'i-trash', danger: true, onPick: () => askDelete(session) }));
   }
 
   /** Шеврон ⌄ в шапке чата (задача 192.6): открывает то же меню действий сессии. */
   function headButton(session) {
-    const label = t('session.menu', { name: session.name });
-    const open = menu !== null && menu.id === session.id;
-    const button = h(doc, 'button', {
-      type: 'button', class: 'icon-btn small head-menu-btn', 'aria-label': label, title: label, 'aria-haspopup': 'menu', 'aria-expanded': String(open),
-    }, icon(doc, 'i-chevron-down'));
-    button.addEventListener('click', (e) => {
-      e.stopPropagation();
-      menu = open ? null : { id: session.id, sub: '' };
-      render();
-    });
-    return button;
+    return menuButton(session, 'head', 'icon-btn small head-menu-btn', icon(doc, 'i-chevron-down'));
   }
 
   /** Кнопка «⋯» у строки сессии. */
   function moreButton(session) {
+    return menuButton(session, 'row', 'more-btn', icon(doc, 'i-more'));
+  }
+
+  /** Кнопка, открывающая меню сессии в своём месте (at): повторный клик закрывает, другая кнопка переносит меню к себе. */
+  function menuButton(session, at, cls, glyph) {
     const label = t('session.menu', { name: session.name });
-    const open = menu !== null && menu.id === session.id;
+    const open = menu !== null && menu.id === session.id && menu.at === at;
     const button = h(doc, 'button', {
-      type: 'button', class: 'more-btn', 'aria-label': label, title: label, 'aria-haspopup': 'menu', 'aria-expanded': String(open),
-    }, icon(doc, 'i-more'));
+      type: 'button', class: cls, 'aria-label': label, title: label, 'aria-haspopup': 'menu', 'aria-expanded': String(open),
+    }, glyph);
     button.addEventListener('click', (e) => {
       e.stopPropagation();
-      menu = open ? null : { id: session.id, sub: '' };
+      menu = open ? null : { id: session.id, sub: '', at };
       render();
     });
     return button;
