@@ -1,0 +1,43 @@
+{
+  "baseline": "19485e136b35085117801d9579e1df438d184b48",
+  "candidate": "55c0b80342892e6e9abceb1a98d1e7db3dae2f9b",
+  "baselineTests": 35,
+  "baselinePass": 18,
+  "candidateTests": 36,
+  "candidatePass": 22,
+  "newFailures": [],
+  "fixed": [
+    "files: a question with a choice is asked, answered, skipped, withdrawn",
+    "files: the tool ask_user_question of the hub: asked, answered, skipped, withdrawn",
+    "files: the debug state of the machine is told on a change, on attach and on request, cut when big"
+  ],
+  "remainingFailures": [
+    "files: two turns of a chat",
+    "files: a cancel keeps the session open",
+    "files: the texts of the hub come from the files of the layers",
+    "files: the preset of a session is chosen and kept",
+    "files: the family changes in the window",
+    "files: restart between turns",
+    "files: an older data folder with flat files is moved into the folders of the sessions",
+    "files: restart in the middle of a turn",
+    "files: the agent dies",
+    "files: several sessions",
+    "files: the table with other names of the states",
+    "files: pictures in a message",
+    "files: a session of a project works in its folder, its agent gets the variables, the journal holds the id only",
+    "files: the request of each turn is told to the pages, kept in memory, never in the journal"
+  ],
+  "newPassingTest": "files: the tool ask_user_question of the hub: the term passed and the hub restarted before the answer",
+  "nameNormalization": "Only the suffix ', the late answer still arrives' is removed from the renamed timeout test; statuses are not altered.",
+  "sha256": {
+    "baselineExe": "dab29f281ceb14d7b06c38e23f68b207348a05a07557e6724073a935cfec60ca",
+    "candidateExe": "743341f68c289eeaaf3fe01aba1c0feda17b15992cc67c8421e7b3f8f011e121",
+    "baselineRawOut": "9168ea61873f3e9161f803c78fe8d2241ab3f69a1f0619da80c67ef3f9420bca",
+    "candidateRawOut": "a78d9ace96d58713e906b00422e011d7e4f6a65e687d078585b546ac85d587ab",
+    "baselineRawErr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "candidateRawErr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "baselineWatch": "1793403449080-9175cs",
+  "candidateWatch": "1793403635229-dt5r3t",
+  "fullGreen": false
+}

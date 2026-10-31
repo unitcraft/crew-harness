@@ -11,7 +11,7 @@ $null = $compiler.Handle
 $compiler.WaitForExit()
 $temp = Join-Path $env:TEMP "nova_tests-$($compiler.Id)"
 $executables = @(Get-ChildItem $temp -Recurse -Filter 'hub_test.exe' -ErrorAction SilentlyContinue)
-if ($executables.Count -ne 1) { throw "Expected one retained hub_test.exe; found $($executables.Count); see target/263-live/nova.*" }
+if ($executables.Count -ne 1) { throw "Expected one retained hub_test.exe; found $($executables.Count); see $out/nova.*" }
 Write-Output "Retained executable: $($executables[0].FullName)"
 Get-FileHash $executables[0].FullName -Algorithm SHA256 | Format-List
 $runner = Start-Process -FilePath $executables[0].FullName -WorkingDirectory $projectRoot -NoNewWindow -PassThru -RedirectStandardOutput (Join-Path $out 'raw.out') -RedirectStandardError (Join-Path $out 'raw.err')
@@ -21,6 +21,6 @@ if (-not $runner.WaitForExit(900000)) {
     throw 'Own test executable timed out'
 }
 $runner.WaitForExit()
-Write-Output "Nova exit: $($compiler.ExitCode); raw exit: $($runner.ExitCode); logs: target/263-live"
+Write-Output "Nova exit: $($compiler.ExitCode); raw exit: $($runner.ExitCode); logs: $out"
 Get-Content (Join-Path $out 'raw.out') | Select-String -Pattern 'ask_user_question|FAIL|passed|failed'
 exit $runner.ExitCode

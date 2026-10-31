@@ -343,7 +343,7 @@ Every call is written to the journal of the session (a line `▸ crew_…` in th
 | `crew_help` | this table, shortened | |
 | `crew_config` | **not here**: the structure of the configs is being discussed with the owner; the call answers «not available yet», no settings file is read or written | postponed |
 
-The letters, the waits, the timers and the watches live in the memory of the hub (a restart forgets them); the records of the calls stay in the journal. Dangerous things go the existing way: a new worker only
+The ordinary letters, waits, timers and watches live in the memory of the hub (a restart forgets them); the records of the calls stay in the journal. The exception is stale MCP recovery (task 263): the late answer and its recovery marker are one journal input, unread recovery is materialized once by stable session/question identity after restart, and a journaled read marker prevents redelivery after reading. This never wakes the agent or restores the expired HTTP call. Dangerous things go the existing way: a new worker only
 by the card of the owner and under the limit; nothing changes the settings. The tools come with every set of the MCP tools but the old «question only» one (`ask_user_question`); which agent family sees them is task 192.9.
 Tests: `src/server/crew_tools_test.nv` (the definitions, the checks, the roles, the letters), `src/server/crew_task_test.nv` (the sets), the scenario `scenario_crew_tools` (`crew_tools_kit.nv`, run by `src/server_crew_live/crew_tools_live_test.nv`;
 the fake agent calls any tool with the word `ctl <tool> <json>`).
